@@ -1,0 +1,147 @@
+import Foundation
+import MLX
+import TORAX
+
+/// Ion-electron collisional heat exchange model
+///
+/// Computes power density transferred from electrons to ions (or vice versa)
+/// through Coulomb collisions.
+///
+/// Physical equation:
+/// Q_ie = (3/2) * (m_e/m_i) * n_e * ν_ei * (T_e - T_i)
+///
+/// Where collision frequency:
+/// ν_ei = 2.91 × 10⁻⁶ * n_e * Z_eff * ln(Λ) / T_e^(3/2)
+///
+/// Coulomb logarithm:
+/// ln(Λ) = 24 - ln(√(n_e[m⁻³]/10⁶) / T_e[eV])
+///
+/// Units:
+/// - Input: n_e [m⁻³], T_e [eV], T_i [eV]
+/// - Output: Q_ie [W/m³] (positive = heating ions)
+public struct IonElectronExchange: Sendable {
+
+    /// Effective charge number
+    public let Zeff: Float
+
+    /// Ion mass in atomic mass units
+    public let ionMass: Float
+
+    /// Physical constants
+    private let kB: Float = PhysicsConstants.eV           // eV to Joules
+    private let me: Float = PhysicsConstants.electronMass  // electron mass [kg]
+    private let mp: Float = PhysicsConstants.protonMass   // proton mass [kg]
+
+    /// Create ion-electron exchange model
+    ///
+    /// - Parameters:
+    ///   - Zeff: Effective charge number (default: 1.5)
+    ///   - ionMass: Ion mass in amu (default: 2.014 for deuterium)
+    public init(Zeff: Float = 1.5, ionMass: Float = 2.014) {
+        self.Zeff = Zeff
+        self.ionMass = ionMass
+    }
+
+    /// Compute ion-electron heat exchange power density
+    ///
+    /// - Parameters:
+    ///   - ne: Electron density [m⁻³], shape [nCells]
+    ///   - Te: Electron temperature [eV], shape [nCells]
+    ///   - Ti: Ion temperature [eV], shape [nCells]
+    /// - Returns: Heat exchange power [W/m³], shape [nCells]
+    ///            Positive = heating ions, Negative = heating electrons
+    /// - Throws: PhysicsError if inputs are invalid
+    public func compute(
+        ne: MLXArray,
+        Te: MLXArray,
+        Ti: MLXArray
+    ) throws -> MLXArray {
+
+        // Validate inputs (CRITICAL FIX #3)
+        try PhysicsValidation.validateDensity(ne, name: "ne")
+        try PhysicsValidation.validateTemperature(Te, name: "Te")
+        try PhysicsValidation.validateTemperature(Ti, name: "Ti")
+        try PhysicsValidation.validateShapes([ne, Te, Ti], names: ["ne", "Te", "Ti"])
+
+        // Coulomb logarithm with bounds (MEDIUM FIX #1)
+        // ln(Λ) = 24 - ln(√(n_e/10⁶) / T_e)
+        let lnLambda_raw = Float(24.0) - log(sqrt(ne / Float(1e6)) / Te)
+        let lnLambda = PhysicsValidation.clampCoulombLog(lnLambda_raw)
+
+        // Electron-ion collision frequency [Hz]
+        // ν_ei = 2.91 × 10⁻⁶ * n_e * Z_eff * ln(Λ) / T_e^(3/2)
+        let nu_ei = PhysicsConstants.collisionFrequencyPrefactor * ne * Zeff * lnLambda / pow(Te, Float(1.5))
+
+        // Ion mass [kg]
+        let mi = PhysicsConstants.amuToKg(ionMass)
+
+        // Exchange power density [W/m³]
+        // Q_ie = (3/2) * (m_e/m_i) * n_e * ν_ei * k_B * (T_e - T_i)
+        let Q_ie_watts = (Float(3.0)/Float(2.0)) * (me/mi) * ne * nu_ei * kB * (Te - Ti)
+
+        eval(Q_ie_watts)  // Evaluate computation graph before returning
+        return Q_ie_watts
+    }
+
+    /// Compute Coulomb logarithm
+    ///
+    /// - Parameters:
+    ///   - ne: Electron density [m⁻³]
+    ///   - Te: Electron temperature [eV]
+    /// - Returns: Coulomb logarithm (dimensionless)
+    public func computeCoulombLogarithm(ne: MLXArray, Te: MLXArray) -> MLXArray {
+        return Float(24.0) - log(sqrt(ne / Float(1e6)) / Te)
+    }
+
+    /// Compute electron-ion collision frequency
+    ///
+    /// - Parameters:
+    ///   - ne: Electron density [m⁻³]
+    ///   - Te: Electron temperature [eV]
+    /// - Returns: Collision frequency [Hz]
+    public func computeCollisionFrequency(ne: MLXArray, Te: MLXArray) -> MLXArray {
+        let lnLambda = computeCoulombLogarithm(ne: ne, Te: Te)
+        return PhysicsConstants.collisionFrequencyPrefactor * ne * Zeff * lnLambda / pow(Te, Float(1.5))
+    }
+}
+
+// MARK: - Source Model Protocol Conformance
+
+extension IonElectronExchange {
+
+    /// Apply heat exchange to source terms
+    ///
+    /// Updates ion and electron heating sources with collisional energy exchange.
+    /// Energy is conserved: Q_ion = -Q_electron
+    ///
+    /// - Parameters:
+    ///   - sources: Source terms to modify
+    ///   - profiles: Current plasma profiles
+    /// - Returns: Modified source terms with heat exchange
+    public func applyToSources(
+        _ sources: SourceTerms,
+        profiles: CoreProfiles
+    ) throws -> SourceTerms {
+
+        let Q_ie_watts = try compute(
+            ne: profiles.electronDensity.value,
+            Te: profiles.electronTemperature.value,
+            Ti: profiles.ionTemperature.value
+        )
+
+        // Convert to MW/m³ for SourceTerms
+        let Q_ie = PhysicsConstants.wattsToMegawatts(Q_ie_watts)
+
+        // Create new SourceTerms with updated heating
+        return SourceTerms(
+            ionHeating: EvaluatedArray(
+                evaluating: sources.ionHeating.value + Q_ie
+            ),
+            electronHeating: EvaluatedArray(
+                evaluating: sources.electronHeating.value - Q_ie
+            ),
+            particleSource: sources.particleSource,
+            currentSource: sources.currentSource
+        )
+    }
+}

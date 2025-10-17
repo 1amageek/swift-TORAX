@@ -47,10 +47,10 @@ struct ConstantTransportModelTests {
         )
 
         let profiles = CoreProfiles(
-            ionTemperature: .full([10], value: 5.0),
-            electronTemperature: .full([10], value: 4.0),
-            electronDensity: .full([10], value: 3.0),
-            poloidalFlux: .full([10], value: 0.5)
+            ionTemperature: .full([10], value: Float(5.0)),
+            electronTemperature: .full([10], value: Float(4.0)),
+            electronDensity: .full([10], value: Float(3.0)),
+            poloidalFlux: .full([10], value: Float(0.5))
         )
 
         let mesh = MeshConfig(
@@ -107,10 +107,10 @@ struct BohmGyroBohmTransportModelTests {
         )
 
         let profiles = CoreProfiles(
-            ionTemperature: .full([10], value: 5.0),
-            electronTemperature: .full([10], value: 4.0),
-            electronDensity: .full([10], value: 3.0),
-            poloidalFlux: .full([10], value: 0.5)
+            ionTemperature: .full([10], value: Float(5.0)),
+            electronTemperature: .full([10], value: Float(4.0)),
+            electronDensity: .full([10], value: Float(3.0)),
+            poloidalFlux: .full([10], value: Float(0.5))
         )
 
         let mesh = MeshConfig(

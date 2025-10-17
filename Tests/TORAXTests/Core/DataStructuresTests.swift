@@ -10,7 +10,7 @@ struct EvaluatedArrayTests {
     @Test("EvaluatedArray forces evaluation at construction")
     func testEvaluationAtConstruction() {
         // Create lazy computation
-        let lazy = MLXArray([1.0, 2.0, 3.0]) + MLXArray([4.0, 5.0, 6.0])
+        let lazy = MLXArray([Float(1.0), Float(2.0), Float(3.0)]) + MLXArray([Float(4.0), Float(5.0), Float(6.0)])
 
         // Wrap in EvaluatedArray
         let evaluated = EvaluatedArray(evaluating: lazy)
@@ -24,9 +24,9 @@ struct EvaluatedArrayTests {
     @Test("EvaluatedArray batch evaluation")
     func testBatchEvaluation() {
         let arrays = [
-            MLXArray([1.0, 2.0]),
-            MLXArray([3.0, 4.0]),
-            MLXArray([5.0, 6.0])
+            MLXArray([Float(1.0), Float(2.0)]),
+            MLXArray([Float(3.0), Float(4.0)]),
+            MLXArray([Float(5.0), Float(6.0)])
         ]
 
         let evaluated = EvaluatedArray.evaluatingBatch(arrays)
@@ -50,16 +50,16 @@ struct EvaluatedArrayTests {
         #expect(allClose(ones.value, MLXArray.ones([3])).item(Bool.self))
 
         // Full
-        let full = EvaluatedArray.full([3], value: 5.0)
+        let full = EvaluatedArray.full([3], value: Float(5.0))
         #expect(full.shape == [3])
-        #expect(allClose(full.value, MLXArray.full([3], values: MLXArray(5.0))).item(Bool.self))
+        #expect(allClose(full.value, MLXArray.full([3], values: MLXArray(Float(5.0)))).item(Bool.self))
     }
 
     @Test("EvaluatedArray equality")
     func testEquality() {
-        let array1 = EvaluatedArray(evaluating: MLXArray([1.0, 2.0, 3.0]))
-        let array2 = EvaluatedArray(evaluating: MLXArray([1.0, 2.0, 3.0]))
-        let array3 = EvaluatedArray(evaluating: MLXArray([1.0, 2.0, 4.0]))
+        let array1 = EvaluatedArray(evaluating: MLXArray([Float(1.0), Float(2.0), Float(3.0)]))
+        let array2 = EvaluatedArray(evaluating: MLXArray([Float(1.0), Float(2.0), Float(3.0)]))
+        let array3 = EvaluatedArray(evaluating: MLXArray([Float(1.0), Float(2.0), Float(4.0)]))
 
         #expect(array1 == array2)
         #expect(array1 != array3)
@@ -73,10 +73,10 @@ struct CoreProfilesTests {
 
     @Test("CoreProfiles construction")
     func testConstruction() {
-        let ti = EvaluatedArray.full([10], value: 5.0)
-        let te = EvaluatedArray.full([10], value: 4.0)
-        let ne = EvaluatedArray.full([10], value: 3.0)
-        let psi = EvaluatedArray.full([10], value: 0.5)
+        let ti = EvaluatedArray.full([10], value: Float(5.0))
+        let te = EvaluatedArray.full([10], value: Float(4.0))
+        let ne = EvaluatedArray.full([10], value: Float(3.0))
+        let psi = EvaluatedArray.full([10], value: Float(0.5))
 
         let profiles = CoreProfiles(
             ionTemperature: ti,
@@ -94,17 +94,17 @@ struct CoreProfilesTests {
     @Test("CoreProfiles equality")
     func testEquality() {
         let profiles1 = CoreProfiles(
-            ionTemperature: .full([10], value: 5.0),
-            electronTemperature: .full([10], value: 4.0),
-            electronDensity: .full([10], value: 3.0),
-            poloidalFlux: .full([10], value: 0.5)
+            ionTemperature: .full([10], value: Float(5.0)),
+            electronTemperature: .full([10], value: Float(4.0)),
+            electronDensity: .full([10], value: Float(3.0)),
+            poloidalFlux: .full([10], value: Float(0.5))
         )
 
         let profiles2 = CoreProfiles(
-            ionTemperature: .full([10], value: 5.0),
-            electronTemperature: .full([10], value: 4.0),
-            electronDensity: .full([10], value: 3.0),
-            poloidalFlux: .full([10], value: 0.5)
+            ionTemperature: .full([10], value: Float(5.0)),
+            electronTemperature: .full([10], value: Float(4.0)),
+            electronDensity: .full([10], value: Float(3.0)),
+            poloidalFlux: .full([10], value: Float(0.5))
         )
 
         #expect(profiles1 == profiles2)
@@ -161,9 +161,9 @@ struct TransportCoefficientsTests {
     @Test("TransportCoefficients construction")
     func testConstruction() {
         let coeffs = TransportCoefficients(
-            chiIon: .full([10], value: 1.0),
-            chiElectron: .full([10], value: 1.5),
-            particleDiffusivity: .full([10], value: 0.5),
+            chiIon: .full([10], value: Float(1.0)),
+            chiElectron: .full([10], value: Float(1.5)),
+            particleDiffusivity: .full([10], value: Float(0.5)),
             convectionVelocity: .zeros([10])
         )
 

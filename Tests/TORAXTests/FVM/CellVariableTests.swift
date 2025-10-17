@@ -8,14 +8,14 @@ struct CellVariableTests {
 
     @Test("CellVariable initialization with valid parameters")
     func testInitialization() throws {
-        let values = MLXArray([1.0, 2.0, 3.0, 4.0, 5.0])
+        let values = MLXArray([Float(1.0), Float(2.0), Float(3.0), Float(4.0), Float(5.0)])
         let dr: Float = 0.1
 
         let cellVar = CellVariable(
             value: values,
             dr: dr,
-            leftFaceConstraint: 0.5,
-            rightFaceConstraint: 5.5
+            leftFaceConstraint: Float(0.5),
+            rightFaceConstraint: Float(5.5)
         )
 
         #expect(cellVar.nCells == 5)
@@ -40,23 +40,23 @@ struct CellVariableTests {
 
     @Test("CellVariable requires exactly one left boundary condition")
     func testRequiresOneLeftBC() {
-        let values = MLXArray([1.0, 2.0, 3.0])
+        let values = MLXArray([Float(1.0), Float(2.0), Float(3.0)])
         let dr: Float = 0.1
 
         // Valid: value constraint only
         let _ = CellVariable(
             value: values,
             dr: dr,
-            leftFaceConstraint: 0.5,
-            rightFaceConstraint: 3.5
+            leftFaceConstraint: Float(0.5),
+            rightFaceConstraint: Float(3.5)
         )
 
         // Valid: gradient constraint only
         let _ = CellVariable(
             value: values,
             dr: dr,
-            leftFaceGradConstraint: 1.0,
-            rightFaceConstraint: 3.5
+            leftFaceGradConstraint: Float(1.0),
+            rightFaceConstraint: Float(3.5)
         )
 
         // Invalid cases would trigger precondition failures
@@ -67,14 +67,14 @@ struct CellVariableTests {
     @Test("Face values with value constraints on both boundaries")
     func testFaceValueWithValueConstraints() {
         // Create a simple linear profile: [1, 2, 3, 4, 5]
-        let values = MLXArray([1.0, 2.0, 3.0, 4.0, 5.0])
+        let values = MLXArray([Float(1.0), Float(2.0), Float(3.0), Float(4.0), Float(5.0)])
         let dr: Float = 0.1
 
         let cellVar = CellVariable(
             value: values,
             dr: dr,
-            leftFaceConstraint: 0.5,  // Left boundary
-            rightFaceConstraint: 5.5   // Right boundary
+            leftFaceConstraint: Float(0.5),  // Left boundary
+            rightFaceConstraint: Float(5.5)   // Right boundary
         )
 
         let faceVals = cellVar.faceValue()
@@ -87,7 +87,7 @@ struct CellVariableTests {
 
         #expect(faceVals.shape == [6])
 
-        let expected = MLXArray([0.5, 1.5, 2.5, 3.5, 4.5, 5.5])
+        let expected = MLXArray([Float(0.5), Float(1.5), Float(2.5), Float(3.5), Float(4.5), Float(5.5)])
         let diff = abs(faceVals - expected)
         let maxDiff = diff.max().item(Float.self)
         #expect(maxDiff < 1e-5)
@@ -95,14 +95,14 @@ struct CellVariableTests {
 
     @Test("Face values with gradient constraint on right boundary")
     func testFaceValueWithGradConstraint() {
-        let values = MLXArray([1.0, 2.0, 3.0])
+        let values = MLXArray([Float(1.0), Float(2.0), Float(3.0)])
         let dr: Float = 0.2
 
         let cellVar = CellVariable(
             value: values,
             dr: dr,
-            leftFaceConstraint: 0.5,
-            rightFaceGradConstraint: 10.0  // Gradient constraint
+            leftFaceConstraint: Float(0.5),
+            rightFaceGradConstraint: Float(10.0)  // Gradient constraint
         )
 
         let faceVals = cellVar.faceValue()
@@ -124,20 +124,20 @@ struct CellVariableTests {
     @Test("Face values for uniform profile")
     func testFaceValueUniform() {
         // Uniform profile should have uniform face values
-        let values = MLXArray([2.0, 2.0, 2.0, 2.0])
+        let values = MLXArray([Float(2.0), Float(2.0), Float(2.0), Float(2.0)])
         let dr: Float = 0.1
 
         let cellVar = CellVariable(
             value: values,
             dr: dr,
-            leftFaceConstraint: 2.0,
-            rightFaceConstraint: 2.0
+            leftFaceConstraint: Float(2.0),
+            rightFaceConstraint: Float(2.0)
         )
 
         let faceVals = cellVar.faceValue()
         eval(faceVals)
 
-        let expected = MLXArray([2.0, 2.0, 2.0, 2.0, 2.0])
+        let expected = MLXArray([Float(2.0), Float(2.0), Float(2.0), Float(2.0), Float(2.0)])
         let diff = abs(faceVals - expected)
         let maxDiff = diff.max().item(Float.self)
         #expect(maxDiff < 1e-5)
@@ -148,14 +148,14 @@ struct CellVariableTests {
     @Test("Face gradients with gradient constraints")
     func testFaceGradWithGradConstraints() {
         // Linear profile: gradient should be constant
-        let values = MLXArray([1.0, 2.0, 3.0, 4.0, 5.0])
+        let values = MLXArray([Float(1.0), Float(2.0), Float(3.0), Float(4.0), Float(5.0)])
         let dr: Float = 0.1
 
         let cellVar = CellVariable(
             value: values,
             dr: dr,
-            leftFaceGradConstraint: 10.0,   // 1.0 / 0.1 = 10
-            rightFaceGradConstraint: 10.0
+            leftFaceGradConstraint: Float(10.0),   // 1.0 / 0.1 = 10
+            rightFaceGradConstraint: Float(10.0)
         )
 
         let faceGrads = cellVar.faceGrad()
@@ -164,7 +164,7 @@ struct CellVariableTests {
         #expect(faceGrads.shape == [6])
 
         // All gradients should be 10.0 for this linear profile
-        let expected = MLXArray([10.0, 10.0, 10.0, 10.0, 10.0, 10.0])
+        let expected = MLXArray([Float(10.0), Float(10.0), Float(10.0), Float(10.0), Float(10.0), Float(10.0)])
         let diff = abs(faceGrads - expected)
         let maxDiff = diff.max().item(Float.self)
         #expect(maxDiff < 1e-4)
@@ -172,14 +172,14 @@ struct CellVariableTests {
 
     @Test("Face gradients with value constraints")
     func testFaceGradWithValueConstraints() {
-        let values = MLXArray([2.0, 3.0, 4.0])
+        let values = MLXArray([Float(2.0), Float(3.0), Float(4.0)])
         let dr: Float = 0.2
 
         let cellVar = CellVariable(
             value: values,
             dr: dr,
-            leftFaceConstraint: 1.5,
-            rightFaceConstraint: 4.5
+            leftFaceConstraint: Float(1.5),
+            rightFaceConstraint: Float(4.5)
         )
 
         let faceGrads = cellVar.faceGrad()
@@ -200,14 +200,14 @@ struct CellVariableTests {
     @Test("Face gradients for constant profile")
     func testFaceGradConstantProfile() {
         // Constant profile should have zero gradients
-        let values = MLXArray([3.0, 3.0, 3.0, 3.0])
+        let values = MLXArray([Float(3.0), Float(3.0), Float(3.0), Float(3.0)])
         let dr: Float = 0.1
 
         let cellVar = CellVariable(
             value: values,
             dr: dr,
-            leftFaceGradConstraint: 0.0,
-            rightFaceGradConstraint: 0.0
+            leftFaceGradConstraint: Float(0.0),
+            rightFaceGradConstraint: Float(0.0)
         )
 
         let faceGrads = cellVar.faceGrad()
@@ -221,14 +221,14 @@ struct CellVariableTests {
 
     @Test("Cell gradients from face values")
     func testCellGrad() {
-        let values = MLXArray([1.0, 2.0, 3.0, 4.0, 5.0])
+        let values = MLXArray([Float(1.0), Float(2.0), Float(3.0), Float(4.0), Float(5.0)])
         let dr: Float = 0.1
 
         let cellVar = CellVariable(
             value: values,
             dr: dr,
-            leftFaceConstraint: 0.5,
-            rightFaceConstraint: 5.5
+            leftFaceConstraint: Float(0.5),
+            rightFaceConstraint: Float(5.5)
         )
 
         let cellGrads = cellVar.grad()
@@ -239,7 +239,7 @@ struct CellVariableTests {
         // Face values: [0.5, 1.5, 2.5, 3.5, 4.5, 5.5]
         // Cell gradients: diff / dr = [1.0, 1.0, 1.0, 1.0, 1.0] / 0.1 = [10, 10, 10, 10, 10]
 
-        let expected = MLXArray([10.0, 10.0, 10.0, 10.0, 10.0])
+        let expected = MLXArray([Float(10.0), Float(10.0), Float(10.0), Float(10.0), Float(10.0)])
         let diff = abs(cellGrads - expected)
         let maxDiff = diff.max().item(Float.self)
         #expect(maxDiff < 1e-4)
@@ -250,7 +250,7 @@ struct CellVariableTests {
     @Test("Round-trip: construct profile from boundary conditions")
     func testBoundaryConditionIntegration() {
         // Test that boundary conditions are properly enforced
-        let values = MLXArray([1.0, 2.0, 3.0])
+        let values = MLXArray([Float(1.0), Float(2.0), Float(3.0)])
         let dr: Float = 0.1
         let leftBC: Float = 0.0
         let rightBC: Float = 4.0
@@ -285,8 +285,8 @@ struct CellVariableTests {
         let cellVar = CellVariable(
             value: temperatures,
             dr: dr,
-            leftFaceGradConstraint: 0.0,     // Zero gradient at center (symmetry)
-            rightFaceConstraint: 0.1         // Edge temperature (boundary)
+            leftFaceGradConstraint: Float(0.0),     // Zero gradient at center (symmetry)
+            rightFaceConstraint: Float(0.1)         // Edge temperature (boundary)
         )
 
         let faceVals = cellVar.faceValue()

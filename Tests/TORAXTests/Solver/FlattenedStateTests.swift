@@ -8,10 +8,10 @@ struct FlattenedStateTests {
     @Test("FlattenedState construction from CoreProfiles")
     func testConstructionFromProfiles() throws {
         let profiles = CoreProfiles(
-            ionTemperature: .full([5], value: 1.0),
-            electronTemperature: .full([5], value: 2.0),
-            electronDensity: .full([5], value: 3.0),
-            poloidalFlux: .full([5], value: 4.0)
+            ionTemperature: .full([5], value: Float(1.0)),
+            electronTemperature: .full([5], value: Float(2.0)),
+            electronDensity: .full([5], value: Float(3.0)),
+            poloidalFlux: .full([5], value: Float(4.0))
         )
 
         let flattened = try FlattenedState(profiles: profiles)
@@ -39,10 +39,10 @@ struct FlattenedStateTests {
     @Test("FlattenedState round-trip conversion")
     func testRoundTripConversion() throws {
         let originalProfiles = CoreProfiles(
-            ionTemperature: .full([5], value: 1.0),
-            electronTemperature: .full([5], value: 2.0),
-            electronDensity: .full([5], value: 3.0),
-            poloidalFlux: .full([5], value: 4.0)
+            ionTemperature: .full([5], value: Float(1.0)),
+            electronTemperature: .full([5], value: Float(2.0)),
+            electronDensity: .full([5], value: Float(3.0)),
+            poloidalFlux: .full([5], value: Float(4.0))
         )
 
         let flattened = try FlattenedState(profiles: originalProfiles)
@@ -55,10 +55,10 @@ struct FlattenedStateTests {
     func testShapeMismatchError() throws {
         // Create profiles with inconsistent shapes (should fail)
         let inconsistentProfiles = CoreProfiles(
-            ionTemperature: .full([5], value: 1.0),
-            electronTemperature: .full([10], value: 2.0),  // Different shape!
-            electronDensity: .full([5], value: 3.0),
-            poloidalFlux: .full([5], value: 4.0)
+            ionTemperature: .full([5], value: Float(1.0)),
+            electronTemperature: .full([10], value: Float(2.0)),  // Different shape!
+            electronDensity: .full([5], value: Float(3.0)),
+            poloidalFlux: .full([5], value: Float(4.0))
         )
 
         #expect(throws: FlattenedState.FlattenedStateError.self) {

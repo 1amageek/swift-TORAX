@@ -1,0 +1,135 @@
+import Testing
+import MLX
+@testable import TORAX
+@testable import TORAXPhysics
+
+@Test("Bremsstrahlung is always negative")
+func testRadiationIsLoss() {
+    let brems = Bremsstrahlung()
+
+    let ne = MLXArray([Float(1e20)])
+    let Te = MLXArray([Float(10000.0)])
+
+    let P = try! brems.compute(ne: ne, Te: Te)
+
+    #expect(P.item(Float.self) < 0, "Bremsstrahlung should always be a loss (negative power)")
+}
+
+@Test("Bremsstrahlung scaling with density")
+func testDensityScaling() {
+    let brems = Bremsstrahlung()
+
+    // P_brems ∝ n²
+    let ne1 = MLXArray([Float(1e20)])
+    let ne2 = MLXArray([Float(2e20)])
+    let Te = MLXArray([Float(10000.0)])
+
+    let P1 = try! brems.compute(ne: ne1, Te: Te)
+    let P2 = try! brems.compute(ne: ne2, Te: Te)
+
+    let ratio = abs((P2 / P1).item(Float.self))
+
+    // Should scale as n²
+    #expect(abs(ratio - 4.0) < 0.1, "Bremsstrahlung should scale as n²: got ratio \(ratio)")
+}
+
+@Test("Bremsstrahlung scaling with temperature")
+func testTemperatureScaling() {
+    let brems = Bremsstrahlung(includeRelativistic: false)  // Use classical only
+
+    // P_brems ∝ √T
+    let ne = MLXArray([Float(1e20)])
+    let Te1 = MLXArray([Float(10000.0)])
+    let Te2 = MLXArray([Float(40000.0)])
+
+    let P1 = try! brems.compute(ne: ne, Te: Te1)
+    let P2 = try! brems.compute(ne: ne, Te: Te2)
+
+    let ratio = abs((P2 / P1).item(Float.self))
+    let expected: Float = 2.0  // sqrt(40000/10000) = sqrt(4) = 2.0
+
+    #expect(abs(ratio - expected) < 0.1, "Bremsstrahlung should scale as √T: got ratio \(ratio)")
+}
+
+@Test("Relativistic correction at high temperature")
+func testRelativisticCorrection() {
+    let brems_classical = Bremsstrahlung(includeRelativistic: false)
+    let brems_relativistic = Bremsstrahlung(includeRelativistic: true)
+
+    let ne = MLXArray([Float(1e20)])
+    let Te = MLXArray([Float(100000.0)])  // 100 keV - relativistic effects matter
+
+    let P_classical = try! brems_classical.compute(ne: ne, Te: Te)
+    let P_relativistic = try! brems_relativistic.compute(ne: ne, Te: Te)
+
+    // Relativistic correction should increase radiation
+    #expect(abs(P_relativistic.item(Float.self)) > abs(P_classical.item(Float.self)),
+            "Relativistic correction should increase radiation at high T")
+}
+
+@Test("Negligible relativistic correction at low temperature")
+func testLowTemperatureRelativistic() {
+    let brems_classical = Bremsstrahlung(includeRelativistic: false)
+    let brems_relativistic = Bremsstrahlung(includeRelativistic: true)
+
+    let ne = MLXArray([Float(1e20)])
+    let Te = MLXArray([Float(1000.0)])  // 1 keV - relativistic effects negligible
+
+    let P_classical = try! brems_classical.compute(ne: ne, Te: Te)
+    let P_relativistic = try! brems_relativistic.compute(ne: ne, Te: Te)
+
+    let ratio = abs(P_relativistic.item(Float.self) / P_classical.item(Float.self))
+
+    // Should be nearly identical at low temperature
+    #expect(abs(ratio - 1.0) < 0.01,
+            "Relativistic correction should be negligible at 1 keV: ratio = \(ratio)")
+}
+
+@Test("Radiation increases with Zeff")
+func testZeffScaling() {
+    let brems_low = Bremsstrahlung(Zeff: 1.0)
+    let brems_high = Bremsstrahlung(Zeff: 2.0)
+
+    let ne = MLXArray([Float(1e20)])
+    let Te = MLXArray([Float(10000.0)])
+
+    let P_low = try! brems_low.compute(ne: ne, Te: Te)
+    let P_high = try! brems_high.compute(ne: ne, Te: Te)
+
+    let ratio = abs(P_high.item(Float.self) / P_low.item(Float.self))
+
+    // Should scale linearly with Zeff
+    #expect(abs(ratio - 2.0) < 0.01, "Bremsstrahlung should scale linearly with Zeff")
+}
+
+@Test("Relativistic correction factor")
+func testRelativisticFactor() {
+    let brems = Bremsstrahlung()
+
+    // At low temperature, f_rel should be ~0
+    let Te_low = MLXArray([Float(1000.0)])
+    let f_rel_low = brems.computeRelativisticCorrection(Te: Te_low)
+    #expect(f_rel_low.item(Float.self) < 0.001, "Relativistic correction should be tiny at 1 keV")
+
+    // At high temperature, f_rel should be significant
+    let Te_high = MLXArray([Float(100000.0)])
+    let f_rel_high = brems.computeRelativisticCorrection(Te: Te_high)
+    #expect(f_rel_high.item(Float.self) > 0.01, "Relativistic correction should be significant at 100 keV")
+}
+
+@Test("Radiation power units")
+func testUnits() {
+    let brems = Bremsstrahlung()
+
+    let ne = MLXArray([Float(1e20)])  // m⁻³
+    let Te = MLXArray([Float(10000.0)])  // eV
+
+    let P = try! brems.compute(ne: ne, Te: Te)
+
+    // Power density should be in W/m³
+    // Typical values: -1e5 to -1e7 W/m³
+    let value = abs(P.item(Float.self))
+
+    #expect(value > 1e4 && value < 1e8,
+            "Bremsstrahlung power density should be reasonable: \(value) W/m³")
+}

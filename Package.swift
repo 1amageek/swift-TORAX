@@ -16,6 +16,10 @@ let package = Package(
             name: "TORAX",
             targets: ["TORAX"]
         ),
+        .library(
+            name: "TORAXPhysics",
+            targets: ["TORAXPhysics"]
+        ),
     ],
     dependencies: [
         // MLX-Swift: Array framework for machine learning on Apple Silicon
@@ -43,11 +47,28 @@ let package = Package(
                 .product(name: "Numerics", package: "swift-numerics"),
             ]
         ),
+
+        // Physics models target (depends on TORAX core)
+        .target(
+            name: "TORAXPhysics",
+            dependencies: [
+                "TORAX",
+                .product(name: "MLX", package: "mlx-swift"),
+            ]
+        ),
+
         .testTarget(
             name: "TORAXTests",
             dependencies: [
                 "TORAX",
                 .product(name: "ConfigurationTesting", package: "swift-configuration"),
+            ]
+        ),
+        .testTarget(
+            name: "TORAXPhysicsTests",
+            dependencies: [
+                "TORAX",
+                "TORAXPhysics",
             ]
         ),
     ]
