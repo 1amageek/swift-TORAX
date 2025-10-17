@@ -51,6 +51,9 @@ public struct OhmicHeating: Sendable {
     ///   - geometry: Tokamak geometry
     /// - Returns: Heating power [W/m³], shape [nCells]
     /// - Throws: PhysicsError if inputs are invalid
+    ///
+    /// - Note: Returns a lazy MLXArray. Call `eval()` before using `.item()` to extract values.
+    ///   When used with `EvaluatedArray(evaluating:)`, evaluation is automatic.
     public func compute(
         Te: MLXArray,
         jParallel: MLXArray,
@@ -83,7 +86,7 @@ public struct OhmicHeating: Sendable {
         // Q_ohm = η * j_∥²
         let Q_ohm_watts = eta * jParallel * jParallel
 
-        eval(Q_ohm_watts)  // Evaluate computation graph before returning
+        // Return lazy MLXArray - caller will eval() when needed
         return Q_ohm_watts
     }
 
@@ -94,6 +97,9 @@ public struct OhmicHeating: Sendable {
     ///   - Zeff: Effective charge (optional override)
     ///   - lnLambda: Coulomb logarithm (optional override)
     /// - Returns: Resistivity [Ω·m]
+    ///
+    /// - Note: Returns a lazy MLXArray. Call `eval()` before using `.item()` to extract values.
+    ///   When used with `EvaluatedArray(evaluating:)`, evaluation is automatic.
     public func computeSpitzerResistivity(
         Te: MLXArray,
         Zeff: Float? = nil,
@@ -111,6 +117,9 @@ public struct OhmicHeating: Sendable {
     ///   - Te: Electron temperature [eV]
     ///   - geometry: Tokamak geometry
     /// - Returns: Resistivity [Ω·m]
+    ///
+    /// - Note: Returns a lazy MLXArray. Call `eval()` before using `.item()` to extract values.
+    ///   When used with `EvaluatedArray(evaluating:)`, evaluation is automatic.
     public func computeNeoclassicalResistivity(
         Te: MLXArray,
         geometry: Geometry

@@ -11,6 +11,7 @@ func testRadiationIsLoss() {
     let Te = MLXArray([Float(10000.0)])
 
     let P = try! brems.compute(ne: ne, Te: Te)
+    eval(P)  // Evaluate before calling .item()
 
     #expect(P.item(Float.self) < 0, "Bremsstrahlung should always be a loss (negative power)")
 }
@@ -27,7 +28,9 @@ func testDensityScaling() {
     let P1 = try! brems.compute(ne: ne1, Te: Te)
     let P2 = try! brems.compute(ne: ne2, Te: Te)
 
-    let ratio = abs((P2 / P1).item(Float.self))
+    let ratio_array = abs(P2 / P1)
+    eval(ratio_array)  // Evaluate before calling .item()
+    let ratio = ratio_array.item(Float.self)
 
     // Should scale as n²
     #expect(abs(ratio - 4.0) < 0.1, "Bremsstrahlung should scale as n²: got ratio \(ratio)")
@@ -45,7 +48,9 @@ func testTemperatureScaling() {
     let P1 = try! brems.compute(ne: ne, Te: Te1)
     let P2 = try! brems.compute(ne: ne, Te: Te2)
 
-    let ratio = abs((P2 / P1).item(Float.self))
+    let ratio_array = abs(P2 / P1)
+    eval(ratio_array)  // Evaluate before calling .item()
+    let ratio = ratio_array.item(Float.self)
     let expected: Float = 2.0  // sqrt(40000/10000) = sqrt(4) = 2.0
 
     #expect(abs(ratio - expected) < 0.1, "Bremsstrahlung should scale as √T: got ratio \(ratio)")
@@ -60,7 +65,10 @@ func testRelativisticCorrection() {
     let Te = MLXArray([Float(100000.0)])  // 100 keV - relativistic effects matter
 
     let P_classical = try! brems_classical.compute(ne: ne, Te: Te)
+    eval(P_classical)  // Evaluate before calling .item()
+
     let P_relativistic = try! brems_relativistic.compute(ne: ne, Te: Te)
+    eval(P_relativistic)  // Evaluate before calling .item()
 
     // Relativistic correction should increase radiation
     #expect(abs(P_relativistic.item(Float.self)) > abs(P_classical.item(Float.self)),
@@ -76,7 +84,10 @@ func testLowTemperatureRelativistic() {
     let Te = MLXArray([Float(1000.0)])  // 1 keV - relativistic effects negligible
 
     let P_classical = try! brems_classical.compute(ne: ne, Te: Te)
+    eval(P_classical)  // Evaluate before calling .item()
+
     let P_relativistic = try! brems_relativistic.compute(ne: ne, Te: Te)
+    eval(P_relativistic)  // Evaluate before calling .item()
 
     let ratio = abs(P_relativistic.item(Float.self) / P_classical.item(Float.self))
 
@@ -94,7 +105,10 @@ func testZeffScaling() {
     let Te = MLXArray([Float(10000.0)])
 
     let P_low = try! brems_low.compute(ne: ne, Te: Te)
+    eval(P_low)  // Evaluate before calling .item()
+
     let P_high = try! brems_high.compute(ne: ne, Te: Te)
+    eval(P_high)  // Evaluate before calling .item()
 
     let ratio = abs(P_high.item(Float.self) / P_low.item(Float.self))
 
@@ -109,11 +123,13 @@ func testRelativisticFactor() {
     // At low temperature, f_rel should be ~0
     let Te_low = MLXArray([Float(1000.0)])
     let f_rel_low = brems.computeRelativisticCorrection(Te: Te_low)
+    eval(f_rel_low)  // Evaluate before calling .item()
     #expect(f_rel_low.item(Float.self) < 0.001, "Relativistic correction should be tiny at 1 keV")
 
     // At high temperature, f_rel should be significant
     let Te_high = MLXArray([Float(100000.0)])
     let f_rel_high = brems.computeRelativisticCorrection(Te: Te_high)
+    eval(f_rel_high)  // Evaluate before calling .item()
     #expect(f_rel_high.item(Float.self) > 0.01, "Relativistic correction should be significant at 100 keV")
 }
 
@@ -125,6 +141,7 @@ func testUnits() {
     let Te = MLXArray([Float(10000.0)])  // eV
 
     let P = try! brems.compute(ne: ne, Te: Te)
+    eval(P)  // Evaluate before calling .item()
 
     // Power density should be in W/m³
     // Typical values: -1e5 to -1e7 W/m³

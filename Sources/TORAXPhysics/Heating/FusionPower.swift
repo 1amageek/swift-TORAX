@@ -35,8 +35,10 @@ public struct FusionPower: Sendable {
 
     // MARK: - Bosch-Hale Coefficients for D-T
 
-    /// Bosch-Hale coefficient C1
-    private let C1: Float = 1.17302e-9
+    /// Bosch-Hale coefficient C1 [m³/s]
+    /// Original value from paper: 1.17302e-9 [cm³/s]
+    /// Converted to m³/s: 1.17302e-9 * 10^-6 = 1.17302e-15 [m³/s]
+    private let C1: Float = 1.17302e-15
 
     /// Bosch-Hale coefficient C2
     private let C2: Float = 1.51361e-2
@@ -113,6 +115,9 @@ public struct FusionPower: Sendable {
     ///   - Ti: Ion temperature [eV], shape [nCells]
     /// - Returns: Fusion power [W/m³], shape [nCells]
     /// - Throws: PhysicsError if inputs are invalid
+    ///
+    /// - Note: Returns a lazy MLXArray. Call `eval()` before using `.item()` to extract values.
+    ///   When used with `EvaluatedArray(evaluating:)`, evaluation is automatic.
     public func compute(ne: MLXArray, Ti: MLXArray) throws -> MLXArray {
 
         // Validate inputs (CRITICAL FIX #3)
@@ -131,10 +136,13 @@ public struct FusionPower: Sendable {
 
         // Fusion power [W/m³]
         // P_fusion = n_D * n_T * ⟨σv⟩ * E_alpha
+        // CRITICAL: Multiply small values first to prevent Float32 overflow
+        // nD ≈ 10^20, nT ≈ 10^20, sigma_v ≈ 10^-22, E_alpha_J ≈ 5.6e-13
+        // Order: (nD * sigma_v) * nT * E_alpha_J avoids 10^40 overflow
         let E_alpha_J = PhysicsConstants.MeVToJoules(alphaEnergy)
-        let P_fusion_watts = nD * nT * sigma_v * E_alpha_J
+        let P_fusion_watts = nD * sigma_v * nT * E_alpha_J
 
-        eval(P_fusion_watts)  // Evaluate computation graph before returning
+        // Return lazy MLXArray - caller will eval() when needed
         return P_fusion_watts
     }
 
@@ -142,6 +150,9 @@ public struct FusionPower: Sendable {
     ///
     /// - Parameter Ti_keV: Ion temperature [keV]
     /// - Returns: Reactivity ⟨σv⟩ [m³/s]
+    ///
+    /// - Note: Returns a lazy MLXArray. Call `eval()` before using `.item()` to extract values.
+    ///   When used with `EvaluatedArray(evaluating:)`, evaluation is automatic.
     public func computeReactivity(Ti_keV: MLXArray) -> MLXArray {
 
         // Bosch-Hale formula:
@@ -156,14 +167,19 @@ public struct FusionPower: Sendable {
         let numerator = T * (C2 + T * (C4 + T * C6))
         let denominator = Float(1.0) + T * (C3 + T * (C5 + T * C7))
 
-        // Prevent division issues
-        let ratio = MLX.clip(numerator / denominator, min: Float(-0.99), max: Float(0.99))
-        let theta = T / (Float(1.0) - ratio)
+        // Compute ratio without clipping to preserve Bosch-Hale fit accuracy
+        // At the D-T peak (~70 keV), (1 - ratio) can be as small as 10^-8 to 10^-10
+        // Add tiny epsilon to prevent division by zero while preserving the real value
+        let ratio = numerator / denominator
+        let denom = (Float(1.0) - ratio) + Float(1e-12)
+        let theta = T / denom
 
         let xi = pow(BG * BG / (Float(4.0) * theta), Float(1.0)/Float(3.0))
 
-        let sigma_v = C1 * theta * sqrt(xi / (mrc2 * T)) * exp(Float(-3.0) * xi)
+        // sqrt(xi / (mrc2 * T^3)) = sqrt(xi) / sqrt(mrc2 * T^3)
+        let sigma_v = C1 * theta * sqrt(xi / (mrc2 * T * T * T)) * exp(Float(-3.0) * xi)
 
+        // Return lazy MLXArray - caller will eval() when needed
         return sigma_v
     }
 
@@ -223,6 +239,9 @@ public struct FusionPower: Sendable {
     ///   - Ti: Ion temperature [eV]
     ///   - tauE: Energy confinement time [s]
     /// - Returns: Triple product [m⁻³ · eV · s]
+    ///
+    /// - Note: Returns a lazy MLXArray. Call `eval()` before using `.item()` to extract values.
+    ///   When used with `EvaluatedArray(evaluating:)`, evaluation is automatic.
     public func computeTripleProduct(
         ne: MLXArray,
         Ti: MLXArray,
@@ -245,6 +264,9 @@ public struct FusionPower: Sendable {
     ///
     /// - Parameter Te: Electron temperature [eV]
     /// - Returns: Fraction of alpha power to ions [0, 1]
+    ///
+    /// - Note: Returns a lazy MLXArray. Call `eval()` before using `.item()` to extract values.
+    ///   When used with `EvaluatedArray(evaluating:)`, evaluation is automatic.
     public func computeAlphaIonFraction(Te: MLXArray) -> MLXArray {
         // Convert Te to keV
         let Te_keV = Te / Float(1000.0)
@@ -263,7 +285,9 @@ public struct FusionPower: Sendable {
 
         // Clamp to reasonable range [0.05, 0.5]
         // (alphas can't deposit >50% to ions in realistic conditions)
-        return MLX.clip(f_i, min: Float(0.05), max: Float(0.5))
+        let result = MLX.clip(f_i, min: Float(0.05), max: Float(0.5))
+        // Return lazy MLXArray - caller will eval() when needed
+        return result
     }
 }
 

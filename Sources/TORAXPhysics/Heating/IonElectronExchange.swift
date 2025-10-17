@@ -51,6 +51,9 @@ public struct IonElectronExchange: Sendable {
     /// - Returns: Heat exchange power [W/m³], shape [nCells]
     ///            Positive = heating ions, Negative = heating electrons
     /// - Throws: PhysicsError if inputs are invalid
+    ///
+    /// - Note: Returns a lazy MLXArray. Call `eval()` before using `.item()` to extract values.
+    ///   When used with `EvaluatedArray(evaluating:)`, evaluation is automatic.
     public func compute(
         ne: MLXArray,
         Te: MLXArray,
@@ -79,7 +82,7 @@ public struct IonElectronExchange: Sendable {
         // Q_ie = (3/2) * (m_e/m_i) * n_e * ν_ei * k_B * (T_e - T_i)
         let Q_ie_watts = (Float(3.0)/Float(2.0)) * (me/mi) * ne * nu_ei * kB * (Te - Ti)
 
-        eval(Q_ie_watts)  // Evaluate computation graph before returning
+        // Return lazy MLXArray - caller will eval() when needed
         return Q_ie_watts
     }
 
@@ -89,6 +92,9 @@ public struct IonElectronExchange: Sendable {
     ///   - ne: Electron density [m⁻³]
     ///   - Te: Electron temperature [eV]
     /// - Returns: Coulomb logarithm (dimensionless)
+    ///
+    /// - Note: Returns a lazy MLXArray. Call `eval()` before using `.item()` to extract values.
+    ///   When used with `EvaluatedArray(evaluating:)`, evaluation is automatic.
     public func computeCoulombLogarithm(ne: MLXArray, Te: MLXArray) -> MLXArray {
         return Float(24.0) - log(sqrt(ne / Float(1e6)) / Te)
     }
@@ -99,6 +105,9 @@ public struct IonElectronExchange: Sendable {
     ///   - ne: Electron density [m⁻³]
     ///   - Te: Electron temperature [eV]
     /// - Returns: Collision frequency [Hz]
+    ///
+    /// - Note: Returns a lazy MLXArray. Call `eval()` before using `.item()` to extract values.
+    ///   When used with `EvaluatedArray(evaluating:)`, evaluation is automatic.
     public func computeCollisionFrequency(ne: MLXArray, Te: MLXArray) -> MLXArray {
         let lnLambda = computeCoulombLogarithm(ne: ne, Te: Te)
         return PhysicsConstants.collisionFrequencyPrefactor * ne * Zeff * lnLambda / pow(Te, Float(1.5))

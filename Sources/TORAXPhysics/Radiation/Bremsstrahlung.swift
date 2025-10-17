@@ -48,6 +48,9 @@ public struct Bremsstrahlung: Sendable {
     ///   - Te: Electron temperature [eV], shape [nCells]
     /// - Returns: Radiation power [W/m³] (negative = loss), shape [nCells]
     /// - Throws: PhysicsError if inputs are invalid
+    ///
+    /// - Note: Returns a lazy MLXArray. Call `eval()` before using `.item()` to extract values.
+    ///   When used with `EvaluatedArray(evaluating:)`, evaluation is automatic.
     public func compute(ne: MLXArray, Te: MLXArray) throws -> MLXArray {
 
         // Validate inputs (CRITICAL FIX #3)
@@ -69,9 +72,12 @@ public struct Bremsstrahlung: Sendable {
 
         // Bremsstrahlung power (negative = energy loss) [W/m³]
         // P_brems = -C * n_e² * Z_eff * √T_e * (1 + f_rel)
-        let P_brems_watts = -C_brems * ne * ne * Zeff * sqrt(Te) * (Float(1.0) + f_rel)
+        // CRITICAL: Multiply small values first to prevent Float32 overflow
+        // ne ≈ 10^20, C_brems ≈ 5.35e-37, sqrt(Te) ≈ 100
+        // Order: (-C_brems * ne) * sqrt(Te) * ne * Zeff avoids 10^40 overflow
+        let P_brems_watts = -C_brems * ne * sqrt(Te) * ne * Zeff * (Float(1.0) + f_rel)
 
-        eval(P_brems_watts)  // Evaluate computation graph before returning
+        // Return lazy MLXArray - caller will eval() when needed
         return P_brems_watts
     }
 
@@ -81,20 +87,28 @@ public struct Bremsstrahlung: Sendable {
     ///   - ne: Electron density [m⁻³]
     ///   - Te: Electron temperature [eV]
     /// - Returns: Classical Bremsstrahlung power [W/m³]
+    ///
+    /// - Note: Returns a lazy MLXArray. Call `eval()` before using `.item()` to extract values.
+    ///   When used with `EvaluatedArray(evaluating:)`, evaluation is automatic.
     public func computeClassical(ne: MLXArray, Te: MLXArray) -> MLXArray {
-        return -C_brems * ne * ne * Zeff * sqrt(Te)
+        // CRITICAL: Multiply small values first to prevent Float32 overflow
+        // Order: (-C_brems * ne) * sqrt(Te) * ne * Zeff avoids 10^40 overflow
+        return -C_brems * ne * sqrt(Te) * ne * Zeff
     }
 
     /// Compute relativistic correction factor
     ///
     /// - Parameter Te: Electron temperature [eV]
     /// - Returns: Relativistic correction factor f_rel (dimensionless)
+    ///
+    /// - Note: Returns a lazy MLXArray. Call `eval()` before using `.item()` to extract values.
+    ///   When used with `EvaluatedArray(evaluating:)`, evaluation is automatic.
     public func computeRelativisticCorrection(Te: MLXArray) -> MLXArray {
         let mask = MLX.greater(Te, Float(1000.0))
         let mask_float = mask.asType(.float32)  // Convert Bool to 0/1
         let factor = (Te / m_e_c2) * (Float(4.0) * sqrt(Float(2.0)) - Float(1.0)) / Float.pi
         let result = mask_float * factor
-        eval(result)  // Evaluate before returning
+        // Return lazy MLXArray - caller will eval() when needed
         return result
     }
 
@@ -102,10 +116,13 @@ public struct Bremsstrahlung: Sendable {
     ///
     /// - Parameter Te: Electron temperature [eV]
     /// - Returns: True if relativistic correction > 1%
+    ///
+    /// - Note: Returns a lazy MLXArray. Call `eval()` before using `.item()` to extract values.
+    ///   When used with `EvaluatedArray(evaluating:)`, evaluation is automatic.
     public func isRelativisticSignificant(Te: MLXArray) -> MLXArray {
         let f_rel = computeRelativisticCorrection(Te: Te)
         let result = MLX.greater(f_rel, Float(0.01))
-        eval(result)  // Evaluate before returning
+        // Return lazy MLXArray - caller will eval() when needed
         return result
     }
 }

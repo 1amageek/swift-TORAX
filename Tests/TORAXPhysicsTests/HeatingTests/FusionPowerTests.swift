@@ -15,6 +15,7 @@ func testFusionPeak() {
     var powers: [Float] = []
     for Ti in temperatures {
         let P = try! fusion.compute(ne: ne, Ti: MLXArray([Ti]))
+        eval(P)  // Evaluate before calling .item()
         powers.append(P.item(Float.self))
     }
 
@@ -38,7 +39,9 @@ func testFusionScaling() {
     let P1 = try! fusion.compute(ne: ne1, Ti: Ti)
     let P2 = try! fusion.compute(ne: ne2, Ti: Ti)
 
-    let ratio = (P2 / P1).item(Float.self)
+    let ratio_array = P2 / P1
+    eval(ratio_array)  // Evaluate before calling .item()
+    let ratio = ratio_array.item(Float.self)
 
     // Should scale as n²
     #expect(abs(ratio - 4.0) < 0.5, "Fusion power should scale as n²: got ratio \(ratio)")
@@ -52,6 +55,7 @@ func testLowTemperature() {
     let Ti = MLXArray([Float(100.0)])  // 100 eV - too cold for fusion
 
     let P = try! fusion.compute(ne: ne, Ti: Ti)
+    eval(P)  // Evaluate before calling .item()
 
     #expect(P.item(Float.self) < 1e6, "Fusion power should be negligible at 100 eV")
 }
@@ -64,7 +68,10 @@ func testReactivityMonotonic() {
     let Ti2_keV = MLXArray([Float(20.0)])
 
     let sigma_v1 = fusion.computeReactivity(Ti_keV: Ti1_keV)
+    eval(sigma_v1)  // Evaluate before calling .item()
+
     let sigma_v2 = fusion.computeReactivity(Ti_keV: Ti2_keV)
+    eval(sigma_v2)  // Evaluate before calling .item()
 
     #expect(sigma_v2.item(Float.self) > sigma_v1.item(Float.self),
             "Reactivity should increase with temperature below peak")
@@ -79,10 +86,12 @@ func testFuelMixture() {
     let Ti = MLXArray([Float(70000.0)])
 
     let P_equal = try! fusionEqual.compute(ne: ne, Ti: Ti)
+    eval(P_equal)  // Evaluate before calling .item()
 
     // Custom mixture (25-75)
     let fusionCustom = try! FusionPower(fuelMix: .custom(nD_frac: 0.25, nT_frac: 0.75))
     let P_custom = try! fusionCustom.compute(ne: ne, Ti: Ti)
+    eval(P_custom)  // Evaluate before calling .item()
 
     // Equal mixture should give more power (optimal is 50-50)
     #expect(P_equal.item(Float.self) > P_custom.item(Float.self),
@@ -98,6 +107,7 @@ func testTripleProduct() {
     let tauE: Float = 1.0  // 1 second
 
     let nTtau = fusion.computeTripleProduct(ne: ne, Ti: Ti, tauE: tauE)
+    eval(nTtau)  // Evaluate before calling .item()
 
     let expected: Float = 1e20 * 10000.0 * 1.0  // 1e24
     let value = nTtau.item(Float.self)
@@ -113,6 +123,7 @@ func testFusionPowerMagnitude() {
     let Ti = MLXArray([Float(70000.0)])  // eV
 
     let P = try! fusion.compute(ne: ne, Ti: Ti)
+    eval(P)  // Evaluate before calling .item()
 
     // Power density should be in W/m³
     // Typical values at n=1e20, T=70keV: ~1×10⁶ W/m³ (= 1 MW/m³)
