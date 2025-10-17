@@ -140,6 +140,6 @@ public enum PhysicsValidation {
     /// - Returns: Bounded Coulomb logarithm [5, 25]
     public static func clampCoulombLog(_ lnLambda: MLXArray) -> MLXArray {
         // Physical bounds: ln(Λ) ∈ [5, 25] for most plasmas
-        return MLX.clip(lnLambda, min: 5.0, max: 25.0)
+        return MLX.clip(lnLambda, min: Float(5.0), max: Float(25.0))
     }
 }
