@@ -194,31 +194,30 @@ public struct LinearSolver: PDESolver {
         coeffs: Block1DCoeffs,
         dr: Float
     ) -> (MLXArray, MLXArray, MLXArray, MLXArray) {
-        // For simplicity, apply same operator to all variables
-        // In full implementation, each variable would have specific operators
+        // Apply per-equation operators
 
         let fTi = applyOperatorToVariable(
             x: profiles.ionTemperature.value,
-            coeffs: coeffs,
-            dr: dr
+            eqCoeffs: coeffs.ionCoeffs,
+            geometry: coeffs.geometry
         )
 
         let fTe = applyOperatorToVariable(
             x: profiles.electronTemperature.value,
-            coeffs: coeffs,
-            dr: dr
+            eqCoeffs: coeffs.electronCoeffs,
+            geometry: coeffs.geometry
         )
 
         let fNe = applyOperatorToVariable(
             x: profiles.electronDensity.value,
-            coeffs: coeffs,
-            dr: dr
+            eqCoeffs: coeffs.densityCoeffs,
+            geometry: coeffs.geometry
         )
 
         let fPsi = applyOperatorToVariable(
             x: profiles.poloidalFlux.value,
-            coeffs: coeffs,
-            dr: dr
+            eqCoeffs: coeffs.fluxCoeffs,
+            geometry: coeffs.geometry
         )
 
         return (fTi, fTe, fNe, fPsi)
@@ -227,23 +226,28 @@ public struct LinearSolver: PDESolver {
     /// Apply operator to single variable: ∇·(D ∇x) + v·∇x + S
     private func applyOperatorToVariable(
         x: MLXArray,
-        coeffs: Block1DCoeffs,
-        dr: Float
+        eqCoeffs: EquationCoeffs,
+        geometry: GeometricFactors
     ) -> MLXArray {
         let nCells = x.shape[0]
 
         // Extract coefficients
-        let dFace = coeffs.dFace.value
-        let vFace = coeffs.vFace.value
-        let sourceCell = coeffs.sourceCell.value
+        let dFace = eqCoeffs.dFace.value
+        let vFace = eqCoeffs.vFace.value
+        let sourceCell = eqCoeffs.sourceCell.value
 
-        // Compute gradients at faces
-        var gradFace = MLXArray.zeros([nCells + 1])
-        for i in 0..<nCells {
-            if i < nCells - 1 {
-                gradFace[i] = (x[i + 1] - x[i]) / dr
-            }
-        }
+        // Get cell distance (assume uniform grid)
+        let dx = geometry.cellDistances.value
+
+        // Compute gradients at interior faces (vectorized)
+        let x_right = x[1..<nCells]
+        let x_left = x[0..<(nCells-1)]
+        let gradFace_interior = (x_right - x_left) / (dx + 1e-10)
+
+        // Boundary gradients
+        let gradFace_left = gradFace_interior[0..<1]
+        let gradFace_right = gradFace_interior[(nCells-2)..<(nCells-1)]
+        let gradFace = concatenated([gradFace_left, gradFace_interior, gradFace_right], axis: 0)
 
         // Diffusion flux
         let diffFlux = -dFace * gradFace
@@ -255,27 +259,29 @@ public struct LinearSolver: PDESolver {
         // Total flux
         let totalFlux = diffFlux + convFlux
 
-        // Divergence
-        var divergence = MLXArray.zeros([nCells])
-        for i in 0..<nCells {
-            divergence[i] = (totalFlux[i + 1] - totalFlux[i]) / dr
-        }
+        // Divergence (vectorized)
+        let flux_right = totalFlux[1..<(nCells + 1)]
+        let flux_left = totalFlux[0..<nCells]
+        let cellVolumes = geometry.cellVolumes.value
+        let divergence = (flux_right - flux_left) / (cellVolumes + 1e-10)
 
         return divergence + sourceCell
     }
 
-    /// Interpolate cell values to faces
+    /// Interpolate cell values to faces (vectorized)
     private func interpolateToFaces(_ cellValues: MLXArray) -> MLXArray {
         let nCells = cellValues.shape[0]
-        var faceValues = MLXArray.zeros([nCells + 1])
 
-        faceValues[0] = cellValues[0]
-        for i in 0..<(nCells - 1) {
-            faceValues[i + 1] = (cellValues[i] + cellValues[i + 1]) / 2.0
-        }
-        faceValues[nCells] = cellValues[nCells - 1]
+        // Interior faces (central difference)
+        let left = cellValues[0..<(nCells-1)]
+        let right = cellValues[1..<nCells]
+        let interior = 0.5 * (left + right)
 
-        return faceValues
+        // Boundary faces
+        let leftBoundary = cellValues[0..<1]
+        let rightBoundary = cellValues[(nCells-1)..<nCells]
+
+        return concatenated([leftBoundary, interior, rightBoundary], axis: 0)
     }
 
     // MARK: - Convergence Check

@@ -210,7 +210,8 @@ public actor SimulationOrchestrator {
                 transport: transportCoeffs,
                 sources: sourceTerms,
                 geometry: geo,
-                staticParams: staticParams
+                staticParams: staticParams,
+                profiles: profiles
             )
         }
 

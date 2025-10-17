@@ -9,8 +9,11 @@ import Foundation
 /// Solves: R(x^{n+1}) = 0
 /// where R is the residual function from theta-method time discretization.
 ///
-/// Performance: Uses FlattenedState and vjp() for 3-4x faster Jacobian computation
-/// compared to naive approach with separate grad() calls per variable.
+/// Key features:
+/// - Vectorized spatial operators (NO loops)
+/// - Per-equation coefficient handling (4 coupled equations)
+/// - Hybrid linear solver (direct + iterative fallback)
+/// - Efficient Jacobian via vjp() (3-4x faster than separate grad() calls)
 public struct NewtonRaphsonSolver: PDESolver {
     // MARK: - Properties
 
@@ -25,13 +28,22 @@ public struct NewtonRaphsonSolver: PDESolver {
     /// Theta parameter for time discretization (0: explicit, 0.5: Crank-Nicolson, 1: implicit)
     public let theta: Float
 
+    /// Hybrid linear solver
+    private let linearSolver: HybridLinearSolver
+
     // MARK: - Initialization
 
-    public init(tolerance: Float = 1e-6, maxIterations: Int = 30, theta: Float = 1.0) {
+    public init(
+        tolerance: Float = 1e-6,
+        maxIterations: Int = 30,
+        theta: Float = 1.0,
+        linearSolver: HybridLinearSolver = HybridLinearSolver()
+    ) {
         precondition(theta >= 0.0 && theta <= 1.0, "Theta must be in [0, 1]")
         self.tolerance = tolerance
         self.maxIterations = maxIterations
         self.theta = theta
+        self.linearSolver = linearSolver
     }
 
     // MARK: - PDESolver Protocol
@@ -56,6 +68,9 @@ public struct NewtonRaphsonSolver: PDESolver {
         // Get coefficients at old time
         let coeffsOld = coeffsCallback(coreProfilesT, geometryT)
 
+        // Extract boundary conditions
+        let boundaryConditions = dynamicParamsTplusDt.boundaryConditions
+
         // Residual function: R(x^{n+1}) = (x^{n+1} - x^n) / dt - θ*A(x^{n+1}) - (1-θ)*A(x^n) - b
         let residualFn: (MLXArray) -> MLXArray = { xNewFlat in
             // Unflatten to CoreProfiles
@@ -66,15 +81,15 @@ public struct NewtonRaphsonSolver: PDESolver {
             let coeffsNew = coeffsCallback(profilesNew, geometryTplusDt)
 
             // Compute residual for theta-method
-            // R = (x^{n+1} - x^n) / dt - θ*f(x^{n+1}) - (1-θ)*f(x^n)
-            let residual = computeThetaMethodResidual(
+            let residual = self.computeThetaMethodResidual(
                 xOld: xOldFlat.values.value,
                 xNew: xNewFlat,
                 coeffsOld: coeffsOld,
                 coeffsNew: coeffsNew,
                 dt: dt,
-                theta: theta,
-                dr: staticParams.mesh.dr
+                theta: self.theta,
+                geometry: geometryTplusDt,
+                boundaryConditions: boundaryConditions
             )
 
             return residual
@@ -102,13 +117,18 @@ public struct NewtonRaphsonSolver: PDESolver {
             }
 
             // Compute Jacobian via vjp() (efficient!)
-            // This is 3-4x faster than separate grad() calls per variable
             let jacobian = computeJacobianViaVJP(residualFn, xFlat.values.value)
             eval(jacobian)
 
-            // Solve linear system: J * Δx = -R
-            // Note: MLX doesn't have direct linear solve, use iterative method
-            let delta = solveLinearSystem(jacobian, -residual)
+            // Solve linear system: J * Δx = -R using hybrid solver
+            let delta: MLXArray
+            do {
+                delta = try linearSolver.solve(jacobian, -residual)
+            } catch {
+                print("[NewtonRaphsonSolver] Linear solver failed: \(error)")
+                // Return partial solution
+                break
+            }
             eval(delta)
 
             // Update solution with line search (damping factor)
@@ -141,7 +161,7 @@ public struct NewtonRaphsonSolver: PDESolver {
 
     // MARK: - Residual Computation
 
-    /// Compute residual for theta-method time discretization
+    /// Compute residual for theta-method time discretization (VECTORIZED)
     ///
     /// Theta-method: (x^{n+1} - x^n) / dt = θ*f(x^{n+1}) + (1-θ)*f(x^n)
     /// Residual: R = (x^{n+1} - x^n) / dt - θ*f(x^{n+1}) - (1-θ)*f(x^n)
@@ -152,123 +172,204 @@ public struct NewtonRaphsonSolver: PDESolver {
         coeffsNew: Block1DCoeffs,
         dt: Float,
         theta: Float,
-        dr: Float
+        geometry: Geometry,
+        boundaryConditions: BoundaryConditions
     ) -> MLXArray {
-        // Time derivative term: (x^{n+1} - x^n) / dt
-        let timeDeriv = (xNew - xOld) / dt
+        let nCells = geometry.nCells
+        let layout = StateLayout(nCells: nCells)
 
-        // Spatial operator at new time: f(x^{n+1})
-        let fNew = applySpatialOperator(x: xNew, coeffs: coeffsNew, dr: dr)
+        // Unflatten state vectors
+        let Ti_old = xOld[layout.tiRange]
+        let Te_old = xOld[layout.teRange]
+        let ne_old = xOld[layout.neRange]
+        let psi_old = xOld[layout.psiRange]
 
-        // Spatial operator at old time: f(x^n)
-        let fOld = applySpatialOperator(x: xOld, coeffs: coeffsOld, dr: dr)
+        let Ti_new = xNew[layout.tiRange]
+        let Te_new = xNew[layout.teRange]
+        let ne_new = xNew[layout.neRange]
+        let psi_new = xNew[layout.psiRange]
 
-        // Residual: R = time_deriv - θ*f_new - (1-θ)*f_old
-        let residual = timeDeriv - theta * fNew - (1.0 - theta) * fOld
+        // Get transient coefficients (CRITICAL FIX #1)
+        // These multiply the time derivative term: transientCoeff * ∂u/∂t
+        let transientCoeff_Ti = coeffsNew.ionCoeffs.transientCoeff.value        // n_e for Ti
+        let transientCoeff_Te = coeffsNew.electronCoeffs.transientCoeff.value   // n_e for Te
+        let transientCoeff_ne = coeffsNew.densityCoeffs.transientCoeff.value    // 1.0 for ne
+        let transientCoeff_psi = coeffsNew.fluxCoeffs.transientCoeff.value      // L_p for psi
 
-        return residual
+        // Time derivative terms WITH transient coefficients
+        // Correct form: transientCoeff * (u_new - u_old) / dt
+        let dTi_dt = transientCoeff_Ti * (Ti_new - Ti_old) / dt
+        let dTe_dt = transientCoeff_Te * (Te_new - Te_old) / dt
+        let dne_dt = transientCoeff_ne * (ne_new - ne_old) / dt
+        let dpsi_dt = transientCoeff_psi * (psi_new - psi_old) / dt
+
+        // Spatial operators at new time (VECTORIZED) - with boundary conditions
+        let f_Ti_new = applySpatialOperatorVectorized(
+            u: Ti_new,
+            coeffs: coeffsNew.ionCoeffs,
+            geometry: coeffsNew.geometry,
+            boundaryCondition: boundaryConditions.ionTemperature
+        )
+
+        let f_Te_new = applySpatialOperatorVectorized(
+            u: Te_new,
+            coeffs: coeffsNew.electronCoeffs,
+            geometry: coeffsNew.geometry,
+            boundaryCondition: boundaryConditions.electronTemperature
+        )
+
+        let f_ne_new = applySpatialOperatorVectorized(
+            u: ne_new,
+            coeffs: coeffsNew.densityCoeffs,
+            geometry: coeffsNew.geometry,
+            boundaryCondition: boundaryConditions.electronDensity
+        )
+
+        let f_psi_new = applySpatialOperatorVectorized(
+            u: psi_new,
+            coeffs: coeffsNew.fluxCoeffs,
+            geometry: coeffsNew.geometry,
+            boundaryCondition: boundaryConditions.poloidalFlux
+        )
+
+        // Spatial operators at old time - with boundary conditions
+        let f_Ti_old = applySpatialOperatorVectorized(
+            u: Ti_old,
+            coeffs: coeffsOld.ionCoeffs,
+            geometry: coeffsOld.geometry,
+            boundaryCondition: boundaryConditions.ionTemperature
+        )
+
+        let f_Te_old = applySpatialOperatorVectorized(
+            u: Te_old,
+            coeffs: coeffsOld.electronCoeffs,
+            geometry: coeffsOld.geometry,
+            boundaryCondition: boundaryConditions.electronTemperature
+        )
+
+        let f_ne_old = applySpatialOperatorVectorized(
+            u: ne_old,
+            coeffs: coeffsOld.densityCoeffs,
+            geometry: coeffsOld.geometry,
+            boundaryCondition: boundaryConditions.electronDensity
+        )
+
+        let f_psi_old = applySpatialOperatorVectorized(
+            u: psi_old,
+            coeffs: coeffsOld.fluxCoeffs,
+            geometry: coeffsOld.geometry,
+            boundaryCondition: boundaryConditions.poloidalFlux
+        )
+
+        // Residuals: R = dψ/dt - θ*f(ψ_new) - (1-θ)*f(ψ_old)
+        let R_Ti = dTi_dt - theta * f_Ti_new - (1.0 - theta) * f_Ti_old
+        let R_Te = dTe_dt - theta * f_Te_new - (1.0 - theta) * f_Te_old
+        let R_ne = dne_dt - theta * f_ne_new - (1.0 - theta) * f_ne_old
+        let R_psi = dpsi_dt - theta * f_psi_new - (1.0 - theta) * f_psi_old
+
+        // Flatten residuals
+        return concatenated([R_Ti, R_Te, R_ne, R_psi], axis: 0)
     }
 
-    /// Apply spatial operator: f(x) = ∇·(D ∇x) + v·∇x + S
-    private func applySpatialOperator(
-        x: MLXArray,
-        coeffs: Block1DCoeffs,
-        dr: Float
-    ) -> MLXArray {
-        let nCells = x.shape[0]
-
-        // Extract coefficients
-        let dFace = coeffs.dFace.value
-        let vFace = coeffs.vFace.value
-        let sourceCell = coeffs.sourceCell.value
-
-        // Compute gradients at faces: (x[i+1] - x[i]) / dr
-        let gradFace = MLXArray.zeros([nCells + 1])
-        for i in 0..<nCells {
-            if i < nCells - 1 {
-                gradFace[i] = (x[i + 1] - x[i]) / dr
-            } else {
-                gradFace[i] = MLXArray(0.0)  // Boundary
-            }
-        }
-
-        // Diffusion flux: -D * ∇x
-        let diffFlux = -dFace * gradFace
-
-        // Convection flux: v * x
-        let xFace = interpolateToFaces(x)
-        let convFlux = vFace * xFace
-
-        // Total flux
-        let totalFlux = diffFlux + convFlux
-
-        // Divergence: (flux[i+1] - flux[i]) / dr
-        let divergence = MLXArray.zeros([nCells])
-        for i in 0..<nCells {
-            divergence[i] = (totalFlux[i + 1] - totalFlux[i]) / dr
-        }
-
-        // f(x) = divergence + source
-        return divergence + sourceCell
-    }
-
-    /// Interpolate cell values to faces (simple averaging)
-    private func interpolateToFaces(_ cellValues: MLXArray) -> MLXArray {
-        let nCells = cellValues.shape[0]
-        var faceValues = MLXArray.zeros([nCells + 1])
-
-        // Left boundary
-        faceValues[0] = cellValues[0]
-
-        // Inner faces
-        for i in 0..<(nCells - 1) {
-            faceValues[i + 1] = (cellValues[i] + cellValues[i + 1]) / 2.0
-        }
-
-        // Right boundary
-        faceValues[nCells] = cellValues[nCells - 1]
-
-        return faceValues
-    }
-
-    // MARK: - Linear System Solver
-
-    /// Solve linear system J * x = b using iterative method
+    /// Apply spatial operator F(u) = ∇·(d∇u) + ∇·(vu) + s + s_mat·u (VECTORIZED - NO LOOPS)
     ///
-    /// Note: MLX doesn't have direct linear solve, so we use Conjugate Gradient
-    private func solveLinearSystem(_ A: MLXArray, _ b: MLXArray) -> MLXArray {
-        // For now, use simple Gauss-Seidel iteration
-        // TODO: Replace with more robust solver (CG, GMRES, or MLX.Linalg.solve when available)
+    /// - Parameters:
+    ///   - u: Variable on cells [nCells]
+    ///   - coeffs: Equation coefficients
+    ///   - geometry: Geometric factors
+    ///   - boundaryCondition: Boundary conditions for this variable
+    /// - Returns: F(u) on cells [nCells]
+    private func applySpatialOperatorVectorized(
+        u: MLXArray,
+        coeffs: EquationCoeffs,
+        geometry: GeometricFactors,
+        boundaryCondition: BoundaryCondition
+    ) -> MLXArray {
+        let nCells = u.shape[0]
 
-        let n = b.shape[0]
-        var x = MLXArray.zeros([n])
+        // 1. Compute gradient at faces: ∇u = (u[i+1] - u[i]) / dx (VECTORIZED)
+        let u_right = u[1..<nCells]           // [nCells-1]
+        let u_left = u[0..<(nCells-1)]        // [nCells-1]
+        let dx = geometry.cellDistances.value // [nCells-1]
 
-        // Gauss-Seidel iteration
-        let maxIter = 100
-        for _ in 0..<maxIter {
-            var xNew = x
+        let gradFace_interior = (u_right - u_left) / (dx + 1e-10)  // [nCells-1]
 
-            for i in 0..<n {
-                var sum = b[i]
-                for j in 0..<n {
-                    if j != i {
-                        sum = sum - A[i, j] * xNew[j]
-                    }
-                }
-                xNew[i] = sum / A[i, i]
-            }
-
-            x = xNew
-
-            // Check convergence
-            let residual = matmul(A, x) - b
-            let resNorm = sqrt((residual * residual).mean()).item(Float.self)
-            if resNorm < 1e-8 {
-                break
-            }
+        // HIGH #5 FIX: Apply boundary conditions correctly
+        let gradFace_left: MLXArray  // [1]
+        switch boundaryCondition.left {
+        case .value(let val):
+            // Dirichlet: compute gradient from boundary value
+            let u_boundary = MLXArray(val)
+            let dx_left = dx[0..<1]  // First cell distance
+            gradFace_left = (u[0..<1] - u_boundary) / (dx_left + 1e-10)
+        case .gradient(let grad):
+            // Neumann: use specified gradient directly
+            gradFace_left = MLXArray([grad])
         }
 
-        return x
+        let gradFace_right: MLXArray  // [1]
+        switch boundaryCondition.right {
+        case .value(let val):
+            // Dirichlet: compute gradient from boundary value
+            let u_boundary = MLXArray(val)
+            let dx_right = dx[(nCells-2)..<(nCells-1)]  // Last cell distance
+            gradFace_right = (u_boundary - u[(nCells-1)..<nCells]) / (dx_right + 1e-10)
+        case .gradient(let grad):
+            // Neumann: use specified gradient directly
+            gradFace_right = MLXArray([grad])
+        }
+
+        let gradFace = concatenated([gradFace_left, gradFace_interior, gradFace_right], axis: 0)  // [nFaces]
+
+        // 2. Diffusive flux: F_diff = -d * ∇u (VECTORIZED)
+        let dFace = coeffs.dFace.value         // [nFaces]
+        let diffusiveFlux = -dFace * gradFace  // [nFaces]
+
+        // 3. Convective flux: F_conv = v * u_face (VECTORIZED)
+        let vFace = coeffs.vFace.value         // [nFaces]
+        let u_face = interpolateToFacesVectorized(u)  // [nFaces]
+        let convectiveFlux = vFace * u_face    // [nFaces]
+
+        // 4. Total flux at faces
+        let totalFlux = diffusiveFlux + convectiveFlux  // [nFaces]
+
+        // 5. Flux divergence: ∇·F = (F[i+1] - F[i]) / V_cell (VECTORIZED)
+        let flux_right = totalFlux[1..<(nCells + 1)]  // [nCells]
+        let flux_left = totalFlux[0..<nCells]         // [nCells]
+        let cellVolumes = geometry.cellVolumes.value  // [nCells]
+
+        let fluxDivergence = (flux_right - flux_left) / (cellVolumes + 1e-10)  // [nCells]
+
+        // 6. Source terms (VECTORIZED)
+        let source = coeffs.sourceCell.value           // [nCells]
+        let sourceMatrix = coeffs.sourceMatCell.value  // [nCells]
+
+        // 7. Total spatial operator
+        let F = fluxDivergence + source + sourceMatrix * u  // [nCells]
+
+        return F
+    }
+
+    /// Interpolate cell values to faces (VECTORIZED - NO LOOPS)
+    ///
+    /// Uses central difference for interior faces, adjacent values for boundaries.
+    ///
+    /// - Parameter u: Cell values [nCells]
+    /// - Returns: Face values [nFaces]
+    private func interpolateToFacesVectorized(_ u: MLXArray) -> MLXArray {
+        let nCells = u.shape[0]
+
+        // Central difference for interior faces
+        let u_left = u[0..<(nCells-1)]    // [nCells-1]
+        let u_right = u[1..<nCells]       // [nCells-1]
+        let u_interior = 0.5 * (u_left + u_right)  // [nCells-1]
+
+        // Boundary faces: use adjacent cell value
+        let u_leftBoundary = u[0..<1]                  // [1]
+        let u_rightBoundary = u[(nCells-1)..<nCells]  // [1]
+
+        // Concatenate: [left_boundary, interior_faces, right_boundary]
+        return concatenated([u_leftBoundary, u_interior, u_rightBoundary], axis: 0)  // [nFaces]
     }
 
     // MARK: - Line Search
@@ -305,5 +406,24 @@ public struct NewtonRaphsonSolver: PDESolver {
 
         // If line search fails, return small step
         return 0.1
+    }
+}
+
+// MARK: - State Layout Helper
+
+/// Layout for flattened state vector
+private struct StateLayout {
+    let nCells: Int
+    let tiRange: Range<Int>
+    let teRange: Range<Int>
+    let neRange: Range<Int>
+    let psiRange: Range<Int>
+
+    init(nCells: Int) {
+        self.nCells = nCells
+        self.tiRange = 0..<nCells
+        self.teRange = nCells..<(2 * nCells)
+        self.neRange = (2 * nCells)..<(3 * nCells)
+        self.psiRange = (3 * nCells)..<(4 * nCells)
     }
 }
