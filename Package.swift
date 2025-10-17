@@ -20,6 +20,10 @@ let package = Package(
             name: "TORAXPhysics",
             targets: ["TORAXPhysics"]
         ),
+        .executable(
+            name: "torax",
+            targets: ["torax-cli"]
+        ),
     ],
     dependencies: [
         // MLX-Swift: Array framework for machine learning on Apple Silicon
@@ -30,6 +34,9 @@ let package = Package(
 
         // Swift Numerics: Numerical computing (special functions, complex numbers, high-precision arithmetic)
         .package(url: "https://github.com/apple/swift-numerics", from: "1.1.1"),
+
+        // Swift Argument Parser: Type-safe command-line argument parsing
+        .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
@@ -55,6 +62,17 @@ let package = Package(
                 "TORAX",
                 .product(name: "MLX", package: "mlx-swift"),
             ]
+        ),
+
+        // CLI executable target
+        .executableTarget(
+            name: "torax-cli",
+            dependencies: [
+                "TORAX",
+                "TORAXPhysics",
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            ],
+            path: "Sources/torax-cli"
         ),
 
         .testTarget(

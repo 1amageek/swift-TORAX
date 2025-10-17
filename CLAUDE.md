@@ -743,8 +743,14 @@ let coeffs = cache.getOrCompute(
 
 ### Build and Test
 ```bash
-# Build the package
+# Build the package (library + CLI)
 swift build
+
+# Build only the library
+swift build --product TORAX
+
+# Build only the CLI
+swift build --product torax-cli
 
 # Run all tests
 swift test
@@ -756,6 +762,23 @@ swift test --filter <TestName>
 swift build -c release
 ```
 
+### CLI Development and Testing
+```bash
+# Run CLI during development
+.build/debug/torax-cli run --config examples/test.json
+
+# Install CLI locally for testing
+swift build -c release
+sudo cp .build/release/torax-cli /usr/local/bin/torax
+
+# Or use Swift Package Manager experimental install
+swift package experimental-install -c release
+
+# Test CLI commands
+torax run --config examples/basic_config.json --quit
+torax plot test_results/*.json
+```
+
 ### Package Management
 ```bash
 # Update dependencies
@@ -763,6 +786,9 @@ swift package update
 
 # Resolve dependencies
 swift package resolve
+
+# Show dependency tree
+swift package show-dependencies
 
 # Generate Xcode project (if needed)
 swift package generate-xcodeproj
@@ -1048,6 +1074,94 @@ The architecture is designed for extensibility to support planned enhancements f
 - All configuration types must be Codable and Sendable
 - Custom interpolation via protocol, not function pointers
 
+## Command-Line Interface
+
+swift-TORAX provides a comprehensive CLI built with [swift-argument-parser](https://github.com/apple/swift-argument-parser). See [CLI.md](CLI.md) for complete documentation.
+
+### Architecture
+
+The CLI is implemented as a separate executable target (`torax-cli`) that depends on the core TORAX library:
+
+```
+Sources/
+├── TORAX/           # Core library (reusable)
+└── torax-cli/       # CLI executable
+    ├── main.swift
+    ├── Commands/
+    │   ├── RunCommand.swift
+    │   ├── PlotCommand.swift
+    │   └── InteractiveMenu.swift
+    └── Output/
+        ├── OutputWriter.swift
+        └── ProgressLogger.swift
+```
+
+This separation allows the core library to be used independently in other Swift projects.
+
+### Main Commands
+
+**`torax run`** - Execute simulations
+```bash
+torax run --config examples/basic_config.json --log-progress
+```
+
+**`torax plot`** - Visualize results
+```bash
+torax plot results/state_history_*.json
+```
+
+### Key Features
+
+1. **Interactive Menu**: Post-simulation actions without recompilation
+   - Rerun with modified parameters
+   - Plot results
+   - Compare with reference runs
+
+2. **Type-Safe Configuration**: JSON/TOML configs with full validation
+
+3. **Progress Logging**: Real-time monitoring of simulation progress
+   ```
+   t=1.2345s, dt=0.001s, iter=12
+   ```
+
+4. **Debug Support**:
+   - `--no-compile`: Disable MLX JIT compilation
+   - `--enable-errors`: Additional error checking
+   - `--log-output`: Detailed state logging
+
+5. **Batch Processing**: `--quit` flag for scripts and automation
+
+### Environment Variables
+
+- `TORAX_COMPILATION_ENABLED`: Enable/disable MLX JIT (default: `true`)
+- `TORAX_ERRORS_ENABLED`: Additional error checking (default: `false`)
+- `TORAX_GPU_CACHE_LIMIT`: MLX GPU cache limit in bytes
+
+### Output Formats
+
+- **JSON** (current): Human-readable, universal support
+- **HDF5** (planned): Binary format, fast I/O, compression
+- **NetCDF** (planned): Self-describing, CF conventions, wide adoption
+
+### Example Workflow
+
+```bash
+# 1. Run simulation with progress logging
+torax run \
+  --config iter_hybrid.json \
+  --output-dir ~/simulations/run_001 \
+  --log-progress
+
+# 2. Plot results
+torax plot ~/simulations/run_001/state_history_*.json
+
+# 3. Compare with reference
+torax plot \
+  ~/simulations/run_001/state_history_*.json \
+  reference_data/iter_baseline.json \
+  --format pdf
+```
+
 ## Project Status
 
 This is an early-stage project. The architecture has been designed to align with:
@@ -1062,6 +1176,7 @@ The immediate implementation priorities are:
 4. Geometry system with time-dependence support
 5. Transport models (starting with simple constant model, then QLKNN)
 6. Configuration system with Swift Configuration
+7. **CLI executable with ArgumentParser** (designed, ready for implementation)
 
 ## References
 
@@ -1069,5 +1184,6 @@ The immediate implementation priorities are:
 - TORAX Documentation: https://deepwiki.com/google-deepmind/torax
 - MLX-Swift: https://github.com/ml-explore/mlx-swift
 - MLX-Swift Documentation: https://deepwiki.com/ml-explore/mlx-swift
-- swift-numerics : https://github.com/apple/swift-numerics
+- swift-numerics: https://github.com/apple/swift-numerics
 - swift-numerics Documentation: https://deepwiki.com/apple/swift-numerics
+- swift-argument-parser: https://github.com/apple/swift-argument-parser
