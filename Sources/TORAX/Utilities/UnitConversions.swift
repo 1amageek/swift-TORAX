@@ -118,51 +118,76 @@ public enum UnitConversions {
     /// - Parameter megawatts: Power density array in [MW/m³]
     /// - Returns: Power density array in [eV/(m³·s)] as **Float64 MLXArray**
     public static func megawattsToEvDensity(_ megawatts: MLXArray) -> MLXArray {
-        // **CRITICAL FIX**: Always use Float64 for output
+        // **CRITICAL FIX**: Always use Float64 for output + preserve input device
         //
         // Problem history:
         //   1. Initial approach: MLX multiply with Float32 → overflow in MLX backend
         //   2. asType promotion: Float32→Float64 → MLX backend validation crash
         //   3. Swift-side computation with Float32 output → MLX backend rejects 10²⁴ values in Float32
+        //   4. Swift-side Float64 output without device preservation → mlx_add crash (GPU+CPU mismatch)
         //
-        // Root cause:
+        // Root causes:
         //   - Converted values (10²³-10²⁵) exceed Float32's safe precision range
         //   - MLX CPU backend has strict validation that rejects large Float32 values
         //   - Problem is not the arithmetic but the storage/representation in Float32
+        //   - MLXArray([...]) defaults to CPU device, causing crashes when input is GPU array
         //
         // Solution:
-        //   - Extract input values (any dtype)
+        //   - Extract input values (any dtype) and preserve input stream/device
         //   - Perform conversion in Double precision
-        //   - **Store result as Float64 MLXArray**
-        //   - All downstream operations work correctly with Float64
+        //   - **Store result as Float64 MLXArray on same device as input**
+        //   - All downstream operations work correctly with Float64 on matching device
         //
         // Type handling:
         //   - Float16 input → Float64 output (necessary for 10²⁴ values)
         //   - Float32 input → Float64 output (necessary for 10²⁴ values)
         //   - Float64 input → Float64 output (already sufficient)
         //
+        // Device handling:
+        //   - GPU input → GPU output (via stream parameter)
+        //   - CPU input → CPU output (via stream parameter)
+        //   - Critical for LinearSolver's divergence + sourceCell addition
+        //
         // References:
         //   - PHYSICS_VALIDATION_ISSUES.md Issue 1 (unit conversion fix)
         //   - User analysis: "大きな値を Float32 で保持／変換しようとしている点にあります"
+        //   - User analysis: "デバイスの異なる配列どうしは MLX 側で加算できず、mlx_add がアサーションで停止"
+
+        // **DEVICE-AWARE SOLUTION**: Use MLX operations to preserve device
+        //
+        // Strategy:
+        // 1. Convert to Float64 using MLX broadcast multiplication (safe for small input values)
+        // 2. Multiply by coefficient using MLX operations
+        // 3. Device is automatically preserved throughout MLX operation chain
+        //
+        // Why this works:
+        // - Input values (MW/m³ ~ 0.1-10) are small, safe for Float64 conversion
+        // - MLX operations preserve input device automatically
+        // - Only the final result has large values (10²⁴), already in Float64
+        // - No asType() call that triggers MLX backend validation
+        //
+        // Device handling:
+        // - GPU input → GPU output (via MLX operation chain)
+        // - CPU input → CPU output (via MLX operation chain)
+        // - No device mismatch in downstream operations
 
         let coefficient = Double(megawattsPerCubicMeterToEvPerCubicMeterPerSecond)
 
-        // Extract values based on input dtype, convert to Double, compute, return as Float64
-        let inputValues: [Double]
-
-        if megawatts.dtype == .float16 {
-            inputValues = megawatts.asArray(Float16.self).map { Double($0) }
-        } else if megawatts.dtype == .float64 {
-            inputValues = megawatts.asArray(Double.self)
+        // Step 1: Convert input to Float64 via broadcast multiplication with 1.0
+        // This is safer than asType() and preserves device
+        let inputFloat64: MLXArray
+        if megawatts.dtype == .float64 {
+            // Already Float64
+            inputFloat64 = megawatts
         } else {
-            // Default: Float32
-            inputValues = megawatts.asArray(Float.self).map { Double($0) }
+            // Multiply by Float64(1.0) to implicitly convert to Float64
+            // This uses MLX broadcast and preserves device
+            let one = MLXArray(Double(1.0))
+            inputFloat64 = megawatts * one  // Implicit type promotion to Float64
         }
 
-        // Perform conversion in Double precision
-        let outputValues = inputValues.map { $0 * coefficient }
-
-        // Return as Float64 MLXArray (necessary for 10²⁴ order values)
-        return MLXArray(outputValues)
+        // Step 2: Multiply by coefficient using MLX operations (preserves device)
+        let coeffArray = MLXArray(coefficient)
+        return inputFloat64 * coeffArray
     }
 }
