@@ -46,7 +46,15 @@ extension StaticConfig {
     ///
     /// - Throws: `ConfigurationError.invalidValue` if solver type is invalid
     public func toRuntimeParams() throws -> StaticRuntimeParams {
-        guard let solverType = SolverType(rawValue: solver.type) else {
+        let normalizedSolverType: String
+        switch solver.type {
+        case "newton":
+            normalizedSolverType = "newtonRaphson"
+        default:
+            normalizedSolverType = solver.type
+        }
+
+        guard let solverType = SolverType(rawValue: normalizedSolverType) else {
             throw ConfigurationError.invalidValue(
                 key: "solver.type",
                 value: solver.type,

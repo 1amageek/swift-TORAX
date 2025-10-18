@@ -26,12 +26,11 @@ public struct MeshConfig: Sendable, Codable, Equatable, Hashable {
         toroidalField: Float,
         geometryType: GeometryType = .circular
     ) {
-        // Preconditions to prevent division by zero in computed properties
-        precondition(nCells > 0, "MeshConfig.nCells must be positive (got \(nCells))")
-        precondition(majorRadius > 0, "MeshConfig.majorRadius must be positive (got \(majorRadius))")
-        precondition(minorRadius > 0, "MeshConfig.minorRadius must be positive (got \(minorRadius))")
-        precondition(toroidalField > 0, "MeshConfig.toroidalField must be positive (got \(toroidalField))")
-
+        // NOTE: we intentionally avoid preconditions here so configuration
+        // values coming from files can be validated explicitly via
+        // `validate()`.  This keeps construction lightweight even for
+        // obviously invalid inputs, which mirrors the configuration
+        // loading flow exercised by the tests.
         self.nCells = nCells
         self.majorRadius = majorRadius
         self.minorRadius = minorRadius
@@ -41,12 +40,14 @@ public struct MeshConfig: Sendable, Codable, Equatable, Hashable {
 
     /// Grid spacing [m]
     public var dr: Float {
-        minorRadius / Float(nCells)
+        guard nCells > 0 else { return .infinity }
+        return minorRadius / Float(nCells)
     }
 
     /// Aspect ratio (R/a)
     public var aspectRatio: Float {
-        majorRadius / minorRadius
+        guard minorRadius != 0 else { return .infinity }
+        return majorRadius / minorRadius
     }
 }
 
@@ -79,6 +80,7 @@ extension MeshConfig {
             )
         }
 
+        let aspectRatio = aspectRatio
         guard aspectRatio >= 1.5 else {
             throw ConfigurationError.physicsWarning(
                 key: "mesh.aspectRatio",

@@ -110,8 +110,16 @@ private func buildIonEquationCoeffs(
     let ne_cell = profiles.electronDensity.value  // [nCells] - actual spatial profile
     let ne_face = interpolateToFaces(ne_cell, mode: .harmonic)  // [nFaces]
 
+    // Debug
+    print("🐛 buildIonEquationCoeffs:")
+    print("   chiIon (cell): [\(transport.chiIon.value.min().item(Float.self)), \(transport.chiIon.value.max().item(Float.self))]")
+    print("   chiIonFaces: [\(chiIonFaces.min().item(Float.self)), \(chiIonFaces.max().item(Float.self))]")
+    print("   ne_cell: [\(ne_cell.min().item(Float.self)), \(ne_cell.max().item(Float.self))]")
+    print("   ne_face: [\(ne_face.min().item(Float.self)), \(ne_face.max().item(Float.self))]")
+
     // Diffusion coefficient: d = n_e * χ_i (with spatial variation!)
     let dFace = chiIonFaces * ne_face  // [nFaces]
+    print("   dFace: [\(dFace.min().item(Float.self)), \(dFace.max().item(Float.self))]")
 
     // Convection velocity: v = n_e * V_i
     // For now, assume no ion heat convection (V_i = 0)
@@ -288,6 +296,11 @@ private enum InterpolationMode {
 private func interpolateToFaces(_ cellValues: MLXArray, mode: InterpolationMode) -> MLXArray {
     let nCells = cellValues.shape[0]
 
+    // Debug
+    let cellMin = cellValues.min().item(Float.self)
+    let cellMax = cellValues.max().item(Float.self)
+    print("  📍 interpolateToFaces input: nCells=\(nCells), range=[\(cellMin), \(cellMax)]")
+
     // Interior faces
     let leftCells = cellValues[0..<(nCells - 1)]   // [nCells-1]
     let rightCells = cellValues[1..<nCells]        // [nCells-1]
@@ -305,9 +318,33 @@ private func interpolateToFaces(_ cellValues: MLXArray, mode: InterpolationMode)
     }
 
     // Boundary faces: use adjacent cell value
-    let leftBoundary = cellValues[0..<1]           // [1]
-    let rightBoundary = cellValues[(nCells - 1)..<nCells]  // [1]
+    // CRITICAL FIX: Extract scalar values and create new arrays to avoid MLX slicing issues
+    let leftBoundaryValue = cellValues[0].item(Float.self)
+    let rightBoundaryValue = cellValues[nCells - 1].item(Float.self)
 
-    // Concatenate: [left_boundary, interior_faces, right_boundary]
-    return concatenated([leftBoundary, interiorFaces, rightBoundary], axis: 0)  // [nFaces]
+    print("  📍 leftBoundaryValue: \(leftBoundaryValue)")
+    print("  📍 rightBoundaryValue: \(rightBoundaryValue)")
+    print("  📍 interiorFaces: [\(interiorFaces.min().item(Float.self)), \(interiorFaces.max().item(Float.self))]")
+
+    // Build result array manually to avoid concatenation issues
+    let nFaces = nCells + 1
+    var faceValues = [Float](repeating: 0.0, count: nFaces)
+
+    // Left boundary
+    faceValues[0] = leftBoundaryValue
+
+    // Interior faces
+    let interiorArray = interiorFaces.asArray(Float.self)
+    for i in 0..<interiorArray.count {
+        faceValues[i + 1] = interiorArray[i]
+    }
+
+    // Right boundary
+    faceValues[nFaces - 1] = rightBoundaryValue
+
+    let result = MLXArray(faceValues)
+
+    print("  📍 result: [\(result.min().item(Float.self)), \(result.max().item(Float.self))], shape=\(result.shape)")
+
+    return result
 }
