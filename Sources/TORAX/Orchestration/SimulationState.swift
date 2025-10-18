@@ -156,6 +156,15 @@ public struct SimulationResult: Sendable, Codable {
     }
 }
 
+// MARK: - CLI Integration
+
+extension SerializableProfiles {
+    /// Access temperature profiles as arrays for display
+    public var ionTemperatureArray: [Float] { ionTemperature }
+    public var electronTemperatureArray: [Float] { electronTemperature }
+    public var electronDensityArray: [Float] { electronDensity }
+}
+
 // MARK: - Time Point
 
 /// Single time point in simulation

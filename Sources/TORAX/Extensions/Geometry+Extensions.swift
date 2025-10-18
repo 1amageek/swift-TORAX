@@ -4,6 +4,34 @@ import MLX
 // MARK: - Geometry Extensions
 
 extension Geometry {
+    /// Convenience initializer from MeshConfig
+    ///
+    /// Creates a Geometry instance by computing all geometric coefficients from
+    /// the mesh configuration. This is a convenience wrapper around
+    /// `createGeometry(from:)` from GeometryHelpers.swift.
+    ///
+    /// **Geometric Coefficients (for circular geometry):**
+    /// - g0 = (R₀ + r)² - flux surface area metric
+    /// - g1 = R₀ + r - major radius at flux surface
+    /// - g2 = 1 - shape factor (constant for circular)
+    /// - g3 = r - minor radius coordinate
+    ///
+    /// - Parameter config: Mesh configuration
+    public init(config: MeshConfig) {
+        let geometry = createGeometry(from: config)
+        self.init(
+            majorRadius: geometry.majorRadius,
+            minorRadius: geometry.minorRadius,
+            toroidalField: geometry.toroidalField,
+            volume: geometry.volume,
+            g0: geometry.g0,
+            g1: geometry.g1,
+            g2: geometry.g2,
+            g3: geometry.g3,
+            type: geometry.type
+        )
+    }
+
     /// Number of radial cells
     ///
     /// Derived from g0 shape. g0 is defined on cell faces, so:

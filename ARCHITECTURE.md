@@ -107,9 +107,9 @@ public struct EvaluatedArray: @unchecked Sendable {
 
 /// Core profiles with type-safe evaluation guarantees
 struct CoreProfiles: Sendable {
-    let ionTemperature: EvaluatedArray      // Ti [keV]
-    let electronTemperature: EvaluatedArray // Te [keV]
-    let electronDensity: EvaluatedArray     // ne [10^20 m^-3]
+    let ionTemperature: EvaluatedArray      // Ti [eV]
+    let electronTemperature: EvaluatedArray // Te [eV]
+    let electronDensity: EvaluatedArray     // ne [m^-3]
     let poloidalFlux: EvaluatedArray        // psi [Wb]
 }
 

@@ -1,0 +1,67 @@
+{
+  "runtime": {
+    "static": {
+      "mesh": {
+        "nCells": 100,
+        "majorRadius": 6.2,
+        "minorRadius": 2.0,
+        "toroidalField": 5.3,
+        "geometryType": "circular"
+      },
+      "evolution": {
+        "ionTemperature": true,
+        "electronTemperature": true,
+        "density": true,
+        "current": false
+      },
+      "solver": {
+        "type": "newton",
+        "tolerance": 1e-6,
+        "maxIterations": 30
+      },
+      "scheme": {
+        "theta": 0.5,
+        "usePereverzev": true
+      }
+    },
+    "dynamic": {
+      "boundaries": {
+        "ionTemperature": 100.0,
+        "electronTemperature": 100.0,
+        "density": 1e19
+      },
+      "transport": {
+        "modelType": "bohmGyrobohm",
+        "parameters": {}
+      },
+      "sources": {
+        "fusionPower": true,
+        "ohmicHeating": true,
+        "bremsstrahlung": true,
+        "ionElectronExchange": true,
+        "fusionConfig": {
+          "deuteriumFraction": 0.5,
+          "tritiumFraction": 0.5,
+          "dilution": 0.9
+        }
+      }
+    }
+  },
+  "time": {
+    "start": 0.0,
+    "end": 2.0,
+    "initialDt": 1e-5,
+    "adaptive": {
+      "enabled": true,
+      "targetError": 1e-4,
+      "safetyFactor": 0.8,
+      "minDt": 1e-7,
+      "maxDt": 1e-3
+    }
+  },
+  "output": {
+    "saveInterval": 0.01,
+    "directory": "/tmp/torax_iter_results",
+    "format": "json"
+  }
+}

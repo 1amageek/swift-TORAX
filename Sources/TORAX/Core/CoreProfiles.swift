@@ -10,13 +10,13 @@ import Foundation
 /// - Electron density (ne)
 /// - Poloidal flux (psi)
 public struct CoreProfiles: Sendable, Equatable {
-    /// Ion temperature [keV]
+    /// Ion temperature [eV]
     public let ionTemperature: EvaluatedArray
 
-    /// Electron temperature [keV]
+    /// Electron temperature [eV]
     public let electronTemperature: EvaluatedArray
 
-    /// Electron density [10^20 m^-3]
+    /// Electron density [m^-3]
     public let electronDensity: EvaluatedArray
 
     /// Poloidal flux [Wb]

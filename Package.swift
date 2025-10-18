@@ -21,8 +21,8 @@ let package = Package(
             targets: ["TORAXPhysics"]
         ),
         .executable(
-            name: "torax",
-            targets: ["torax-cli"]
+            name: "TORAXCLI",
+            targets: ["TORAXCLI"]
         ),
     ],
     dependencies: [
@@ -66,19 +66,20 @@ let package = Package(
 
         // CLI executable target
         .executableTarget(
-            name: "torax-cli",
+            name: "TORAXCLI",
             dependencies: [
                 "TORAX",
                 "TORAXPhysics",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
-            ],
-            path: "Sources/torax-cli"
+            ]
         ),
 
         .testTarget(
             name: "TORAXTests",
             dependencies: [
                 "TORAX",
+                "TORAXPhysics",
+                .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "ConfigurationTesting", package: "swift-configuration"),
             ]
         ),
@@ -87,6 +88,12 @@ let package = Package(
             dependencies: [
                 "TORAX",
                 "TORAXPhysics",
+            ]
+        ),
+        .testTarget(
+            name: "TORAXCLITests",
+            dependencies: [
+                "TORAXCLI",
             ]
         ),
     ]

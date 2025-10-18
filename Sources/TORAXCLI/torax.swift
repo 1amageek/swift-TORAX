@@ -19,7 +19,7 @@ struct ToraxCLI: AsyncParsableCommand {
         version: "0.1.0",
         subcommands: [
             RunCommand.self,
-            // PlotCommand.self,  // TODO: Implement
+            PlotCommand.self,
         ],
         defaultSubcommand: RunCommand.self
     )

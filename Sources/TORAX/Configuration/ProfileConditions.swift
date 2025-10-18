@@ -20,14 +20,27 @@ public enum ProfileSpec: Sendable, Codable, Equatable {
 // MARK: - Profile Conditions
 
 /// Initial and prescribed profile conditions
+///
+/// **Units**: eV for temperature, m^-3 for density
+///
+/// ProfileConditions uses the same units as CoreProfiles and BoundaryConditions:
+/// - Temperature: eV (electron volts)
+/// - Density: m^-3 (particles per cubic meter)
+///
+/// This ensures consistency throughout the runtime system and eliminates
+/// the need for unit conversions when materializing profiles.
+///
+/// **Note**: While tokamak literature often uses keV and 10^20 m^-3,
+/// this implementation uses eV and m^-3 for consistency with physics models
+/// and to match the original TORAX (Python) design.
 public struct ProfileConditions: Sendable, Codable, Equatable {
-    /// Ion temperature profile [keV]
+    /// Ion temperature profile [eV]
     public var ionTemperature: ProfileSpec
 
-    /// Electron temperature profile [keV]
+    /// Electron temperature profile [eV]
     public var electronTemperature: ProfileSpec
 
-    /// Electron density profile [10^20 m^-3]
+    /// Electron density profile [m^-3]
     public var electronDensity: ProfileSpec
 
     /// Current profile [MA/m^2]

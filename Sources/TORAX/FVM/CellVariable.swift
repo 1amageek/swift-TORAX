@@ -128,9 +128,12 @@ public struct CellVariable: Sendable {
         let leftValue: MLXArray
         if let constraint = leftFaceConstraint {
             leftValue = MLXArray([constraint])
+        } else if let gradConstraint = leftFaceGradConstraint {
+            // Linear extrapolation: x_face = x_cell0 - (dr/2) * gradient
+            let firstCell = cellValues[0..<1]
+            leftValue = firstCell - MLXArray(gradConstraint * dr / 2.0)
         } else {
-            // Use leftmost cell value as default
-            leftValue = cellValues[0..<1]
+            fatalError("Left boundary condition not properly set")
         }
 
         // Inner face values (average of neighbors)
