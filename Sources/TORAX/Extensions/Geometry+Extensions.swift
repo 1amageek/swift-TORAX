@@ -16,9 +16,16 @@ extension Geometry {
     /// - g2 = 1 - shape factor (constant for circular)
     /// - g3 = r - minor radius coordinate
     ///
-    /// - Parameter config: Mesh configuration
-    public init(config: MeshConfig) {
-        let geometry = createGeometry(from: config)
+    /// - Parameters:
+    ///   - config: Mesh configuration
+    ///   - q0: Safety factor at axis (default: 1.0)
+    ///   - qEdge: Safety factor at edge (default: 3.5)
+    public init(
+        config: MeshConfig,
+        q0: Float = 1.0,
+        qEdge: Float = 3.5
+    ) {
+        let geometry = createGeometry(from: config, q0: q0, qEdge: qEdge)
         self.init(
             majorRadius: geometry.majorRadius,
             minorRadius: geometry.minorRadius,
@@ -28,6 +35,10 @@ extension Geometry {
             g1: geometry.g1,
             g2: geometry.g2,
             g3: geometry.g3,
+            radii: geometry.radii,
+            safetyFactor: geometry.safetyFactor,
+            poloidalField: geometry.poloidalField,
+            currentDensity: geometry.currentDensity,
             type: geometry.type
         )
     }

@@ -106,27 +106,31 @@ private func buildIonEquationCoeffs(
     // Interpolate transport coefficients to faces
     let chiIonFaces = interpolateToFaces(transport.chiIon.value, mode: .harmonic)  // [nFaces]
 
-    // CRITICAL FIX #3: Use actual density profile
-    let ne_cell = profiles.electronDensity.value  // [nCells] - actual spatial profile
+    // CRITICAL FIX #3: Use actual density profile with floor
+    // Density floor prevents division by zero in non-conservation form (∂T/∂t = rhs/n_e)
+    // Physical minimum: n_e ≥ 1e18 m⁻³ (below this, plasma is unphysical)
+    let ne_floor: Float = 1e18  // [m⁻³]
+    let ne_cell = maximum(profiles.electronDensity.value, MLXArray(ne_floor))  // [nCells] - actual spatial profile with floor
     let ne_face = interpolateToFaces(ne_cell, mode: .harmonic)  // [nFaces]
-
-    // Debug
-    print("🐛 buildIonEquationCoeffs:")
-    print("   chiIon (cell): [\(transport.chiIon.value.min().item(Float.self)), \(transport.chiIon.value.max().item(Float.self))]")
-    print("   chiIonFaces: [\(chiIonFaces.min().item(Float.self)), \(chiIonFaces.max().item(Float.self))]")
-    print("   ne_cell: [\(ne_cell.min().item(Float.self)), \(ne_cell.max().item(Float.self))]")
-    print("   ne_face: [\(ne_face.min().item(Float.self)), \(ne_face.max().item(Float.self))]")
 
     // Diffusion coefficient: d = n_e * χ_i (with spatial variation!)
     let dFace = chiIonFaces * ne_face  // [nFaces]
-    print("   dFace: [\(dFace.min().item(Float.self)), \(dFace.max().item(Float.self))]")
 
     // Convection velocity: v = n_e * V_i
     // For now, assume no ion heat convection (V_i = 0)
     let vFace = MLXArray.zeros([nFaces])  // [nFaces]
 
     // Source term: Q_i - Q_exchange
-    let sourceCell = sources.ionHeating.value  // [nCells]
+    // CRITICAL UNIT CONVERSION: SourceTerms provides heating in [MW/m³]
+    // Temperature equation requires [eV/(m³·s)] to match left side: n_e ∂T_i/∂t [eV/(m³·s)]
+    //
+    // Dimensional analysis:
+    //   Left side:  [m⁻³] × [eV/s] = [eV/(m³·s)]
+    //   Diffusion:  ∇·([m⁻³] × [m²/s] × [eV/m]) = [eV/(m³·s)]
+    //   Source:     Must be [eV/(m³·s)]
+    //
+    // Conversion: 1 MW/m³ = 6.2415090744×10²⁴ eV/(m³·s)
+    let sourceCell = UnitConversions.megawattsToEvDensity(sources.ionHeating.value)  // [eV/(m³·s)]
     // Q_exchange is implicit coupling term (handled via sourceMatCell)
 
     // Source matrix coefficient: -Q_exchange coupling
@@ -163,8 +167,11 @@ private func buildElectronEquationCoeffs(
     // Interpolate transport coefficients to faces
     let chiElectronFaces = interpolateToFaces(transport.chiElectron.value, mode: .harmonic)  // [nFaces]
 
-    // CRITICAL FIX #3: Use actual density profile
-    let ne_cell = profiles.electronDensity.value  // [nCells] - actual spatial profile
+    // CRITICAL FIX #3: Use actual density profile with floor
+    // Density floor prevents division by zero in non-conservation form (∂T/∂t = rhs/n_e)
+    // Physical minimum: n_e ≥ 1e18 m⁻³ (below this, plasma is unphysical)
+    let ne_floor: Float = 1e18  // [m⁻³]
+    let ne_cell = maximum(profiles.electronDensity.value, MLXArray(ne_floor))  // [nCells] - actual spatial profile with floor
     let ne_face = interpolateToFaces(ne_cell, mode: .harmonic)  // [nFaces]
 
     // Diffusion coefficient: d = n_e * χ_e (with spatial variation!)
@@ -175,7 +182,16 @@ private func buildElectronEquationCoeffs(
     let vFace = MLXArray.zeros([nFaces])  // [nFaces]
 
     // Source term: Q_e + Q_ohmic (Q_exchange handled via coupling)
-    let sourceCell = sources.electronHeating.value  // [nCells]
+    // CRITICAL UNIT CONVERSION: SourceTerms provides heating in [MW/m³]
+    // Temperature equation requires [eV/(m³·s)] to match left side: n_e ∂T_e/∂t [eV/(m³·s)]
+    //
+    // Dimensional analysis:
+    //   Left side:  [m⁻³] × [eV/s] = [eV/(m³·s)]
+    //   Diffusion:  ∇·([m⁻³] × [m²/s] × [eV/m]) = [eV/(m³·s)]
+    //   Source:     Must be [eV/(m³·s)]
+    //
+    // Conversion: 1 MW/m³ = 6.2415090744×10²⁴ eV/(m³·s)
+    let sourceCell = UnitConversions.megawattsToEvDensity(sources.electronHeating.value)  // [eV/(m³·s)]
 
     // Source matrix coefficient
     let sourceMatCell = MLXArray.zeros([nCells])  // [nCells]
@@ -282,6 +298,19 @@ private func buildFluxEquationCoeffs(
 // MARK: - Interpolation Helpers
 
 /// Interpolation mode for cell-to-face conversion
+///
+/// **Design Decision**: Different interpolation methods for different physical quantities
+///
+/// - `arithmetic`: Simple average (a + b) / 2
+///   - Used for: convection velocity (standard central differencing)
+///   - LinearSolver uses this for variable interpolation
+///
+/// - `harmonic`: Harmonic mean 2ab / (a + b) = 2 / (1/a + 1/b)
+///   - Used for: transport coefficients (χ, D) and electron density in coefficients
+///   - Preserves flux continuity across cell boundaries
+///   - Reciprocal form prevents Float32 overflow for large values (n_e ~ 1e20)
+///
+/// See IMPLEMENTATION_NOTES.md Section 1 for detailed rationale.
 private enum InterpolationMode {
     case arithmetic  // Simple average: (a + b) / 2
     case harmonic    // Harmonic mean: 2ab / (a + b) - preserves flux continuity
@@ -296,11 +325,6 @@ private enum InterpolationMode {
 private func interpolateToFaces(_ cellValues: MLXArray, mode: InterpolationMode) -> MLXArray {
     let nCells = cellValues.shape[0]
 
-    // Debug
-    let cellMin = cellValues.min().item(Float.self)
-    let cellMax = cellValues.max().item(Float.self)
-    print("  📍 interpolateToFaces input: nCells=\(nCells), range=[\(cellMin), \(cellMax)]")
-
     // Interior faces
     let leftCells = cellValues[0..<(nCells - 1)]   // [nCells-1]
     let rightCells = cellValues[1..<nCells]        // [nCells-1]
@@ -312,19 +336,32 @@ private func interpolateToFaces(_ cellValues: MLXArray, mode: InterpolationMode)
         interiorFaces = (leftCells + rightCells) / 2.0  // [nCells-1]
 
     case .harmonic:
-        // Harmonic mean: 2ab/(a+b)
-        // Add small epsilon to avoid division by zero
-        interiorFaces = 2.0 * leftCells * rightCells / (leftCells + rightCells + 1e-10)  // [nCells-1]
+        // Harmonic mean: 2ab/(a+b) = 2 / (1/a + 1/b)
+        // **CRITICAL**: Use reciprocal form to avoid Float32 overflow
+        //
+        // ❌ WRONG: 2 * a * b / (a + b)
+        //    With n_e ~ 1e20: 2 * 1e20 * 1e20 = 2e40 > Float32.max (3.4e38) → inf
+        //
+        // ✅ CORRECT: 2 / (1/a + 1/b)
+        //    With n_e ~ 1e20: 1/1e20 = 1e-20 (safe)
+        //
+        // See IMPLEMENTATION_NOTES.md Section 4 for history of this fix.
+        let reciprocalSum = 1.0 / (leftCells + 1e-30) + 1.0 / (rightCells + 1e-30)
+        interiorFaces = 2.0 / (reciprocalSum + 1e-30)  // [nCells-1]
     }
 
-    // Boundary faces: use adjacent cell value
-    // CRITICAL FIX: Extract scalar values and create new arrays to avoid MLX slicing issues
-    let leftBoundaryValue = cellValues[0].item(Float.self)
-    let rightBoundaryValue = cellValues[nCells - 1].item(Float.self)
+    // Boundary faces: use adjacent cell value (no neighbor to interpolate with)
+    // Face indexing: [0] | cell 0 | [1] | cell 1 | ... | cell N-1 | [N]
+    // See IMPLEMENTATION_NOTES.md Section 2 for face numbering convention.
 
-    print("  📍 leftBoundaryValue: \(leftBoundaryValue)")
-    print("  📍 rightBoundaryValue: \(rightBoundaryValue)")
-    print("  📍 interiorFaces: [\(interiorFaces.min().item(Float.self)), \(interiorFaces.max().item(Float.self))]")
+    // CRITICAL: Force evaluation before calling .item()
+    // cellValues[0] and cellValues[nCells-1] are lazy array slices
+    let leftBoundary = cellValues[0]
+    let rightBoundary = cellValues[nCells - 1]
+    eval(leftBoundary, rightBoundary)
+
+    let leftBoundaryValue = leftBoundary.item(Float.self)
+    let rightBoundaryValue = rightBoundary.item(Float.self)
 
     // Build result array manually to avoid concatenation issues
     let nFaces = nCells + 1
@@ -334,6 +371,9 @@ private func interpolateToFaces(_ cellValues: MLXArray, mode: InterpolationMode)
     faceValues[0] = leftBoundaryValue
 
     // Interior faces
+    // CRITICAL: Force evaluation before calling .asArray()
+    // interiorFaces is a lazy MLXArray (result of arithmetic/harmonic mean computation)
+    eval(interiorFaces)
     let interiorArray = interiorFaces.asArray(Float.self)
     for i in 0..<interiorArray.count {
         faceValues[i + 1] = interiorArray[i]
@@ -343,8 +383,6 @@ private func interpolateToFaces(_ cellValues: MLXArray, mode: InterpolationMode)
     faceValues[nFaces - 1] = rightBoundaryValue
 
     let result = MLXArray(faceValues)
-
-    print("  📍 result: [\(result.min().item(Float.self)), \(result.max().item(Float.self))], shape=\(result.shape)")
 
     return result
 }

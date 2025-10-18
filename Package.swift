@@ -37,6 +37,12 @@ let package = Package(
 
         // Swift Argument Parser: Type-safe command-line argument parsing
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
+
+        // SwiftNetCDF: NetCDF file format support for scientific data output
+        .package(url: "https://github.com/patrick-zippenfenig/SwiftNetCDF.git", from: "1.2.0"),
+
+        // FusionSurrogates: QLKNN neural network transport model (macOS only)
+        .package(url: "https://github.com/1amageek/swift-fusion-surrogates.git", branch: "main"),
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
@@ -52,6 +58,12 @@ let package = Package(
                 .product(name: "MLXLinalg", package: "mlx-swift"),
                 .product(name: "Configuration", package: "swift-configuration"),
                 .product(name: "Numerics", package: "swift-numerics"),
+                // FusionSurrogates: Conditional dependency (macOS only)
+                .product(
+                    name: "FusionSurrogates",
+                    package: "swift-fusion-surrogates",
+                    condition: .when(platforms: [.macOS])
+                ),
             ]
         ),
 
@@ -71,6 +83,7 @@ let package = Package(
                 "TORAX",
                 "TORAXPhysics",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                .product(name: "SwiftNetCDF", package: "SwiftNetCDF"),
             ]
         ),
 

@@ -213,15 +213,7 @@ struct P0IntegrationTest {
             )
         )
 
-        // Debug: Check initial values
-        print("🔍 Initial profiles:")
-        print("   Ti: [\(initialProfiles.ionTemperature.value.min().item(Float.self)), \(initialProfiles.ionTemperature.value.max().item(Float.self))]")
-        print("   Te: [\(initialProfiles.electronTemperature.value.min().item(Float.self)), \(initialProfiles.electronTemperature.value.max().item(Float.self))]")
-        print("   ne: [\(initialProfiles.electronDensity.value.min().item(Float.self)), \(initialProfiles.electronDensity.value.max().item(Float.self))]")
-        print("   psi: [\(initialProfiles.poloidalFlux.value.min().item(Float.self)), \(initialProfiles.poloidalFlux.value.max().item(Float.self))]")
-
         // Execute single time step
-        print("🚀 Starting solver...")
         let result = solver.solve(
             dt: dynamicParams.dt,
             staticParams: staticParams,
@@ -234,9 +226,6 @@ struct P0IntegrationTest {
             coreProfilesTplusDt: initialProfiles,
             coeffsCallback: coeffsCallback
         )
-        print("✅ Solver completed")
-        print("   Converged: \(result.converged)")
-        print("   Residual: \(result.residualNorm)")
 
         // Guard against known instability in current linear solver + Ohmic pipeline.
         let tiMinValue = result.updatedProfiles.ionTemperature.value.min().item(Float.self)

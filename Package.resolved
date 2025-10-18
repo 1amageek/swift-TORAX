@@ -1,5 +1,5 @@
 {
-  "originHash" : "2b084c457b6a23f4315fbb8526b0bfc088ac925467058d0eed2585015955d781",
+  "originHash" : "3d2356173f02061ecae6e752e94fd8e190d477f1cf1a7670c2935919989c2b3a",
   "pins" : [
     {
       "identity" : "mlx-swift",
@@ -8,6 +8,15 @@
       "state" : {
         "revision" : "072b684acaae80b6a463abab3a103732f33774bf",
         "version" : "0.29.1"
+      }
+    },
+    {
+      "identity" : "pythonkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/pvieito/PythonKit.git",
+      "state" : {
+        "branch" : "master",
+        "revision" : "d030b5193d1e4e770156deb27865773b64c5695f"
       }
     },
     {
@@ -47,6 +56,15 @@
       }
     },
     {
+      "identity" : "swift-fusion-surrogates",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/1amageek/swift-fusion-surrogates.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "f169d28df8e5b414d20f6d98509f59bece265f58"
+      }
+    },
+    {
       "identity" : "swift-log",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-log.git",
@@ -80,6 +98,15 @@
       "state" : {
         "revision" : "395a77f0aa927f0ff73941d7ac35f2b46d47c9db",
         "version" : "1.6.3"
+      }
+    },
+    {
+      "identity" : "swiftnetcdf",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/patrick-zippenfenig/SwiftNetCDF.git",
+      "state" : {
+        "revision" : "d945826df984db4e1791745d19e484c3f5cbe0c8",
+        "version" : "1.2.0"
       }
     }
   ],

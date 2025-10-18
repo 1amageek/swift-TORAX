@@ -75,8 +75,15 @@ public struct HybridLinearSolver: Sendable {
 
             // Verify solution quality
             let residual = matmul(A, x) - b
-            let residualNorm = MLX.norm(residual).item(Float.self)
-            let rhsNorm = MLX.norm(b).item(Float.self)
+
+            // CRITICAL: Force evaluation before calling .item()
+            // MLX.norm() returns lazy MLXArray
+            let residualNormArray = MLX.norm(residual)
+            let rhsNormArray = MLX.norm(b)
+            eval(residualNormArray, rhsNormArray)
+
+            let residualNorm = residualNormArray.item(Float.self)
+            let rhsNorm = rhsNormArray.item(Float.self)
             let relativeError = residualNorm / (rhsNorm + 1e-10)
 
             if relativeError < iterativeTolerance * 10 {
@@ -108,13 +115,24 @@ public struct HybridLinearSolver: Sendable {
         var v = MLXArray.ones([n])  // Use ones instead of random for deterministic behavior
         for _ in 0..<maxIter {
             v = matmul(A, v)
-            let vnorm = MLX.norm(v).item(Float.self)
+
+            // CRITICAL: Force evaluation before calling .item()
+            // MLX.norm(v) is a lazy MLXArray
+            let vnormArray = MLX.norm(v)
+            eval(vnormArray)
+            let vnorm = vnormArray.item(Float.self)
+
             if vnorm < 1e-10 {
                 return 1e15  // Matrix is essentially singular
             }
             v = v / vnorm
         }
-        let normA = MLX.norm(matmul(A, v)).item(Float.self)
+
+        // CRITICAL: Force evaluation before calling .item()
+        // MLX.norm(matmul(A, v)) is a lazy MLXArray
+        let normAArray = MLX.norm(matmul(A, v))
+        eval(normAArray)
+        let normA = normAArray.item(Float.self)
 
         // Estimate ||A⁻¹|| by solving Ay = v using few SOR iterations
         var y = MLXArray.zeros([n])
@@ -122,8 +140,15 @@ public struct HybridLinearSolver: Sendable {
             // Approximate A⁻¹v using few SOR iterations
             y = sorIteration(A, v, x: y, omega: 1.0, iterations: 5)
         }
-        let normY = MLX.norm(y).item(Float.self)
-        let normV = MLX.norm(v).item(Float.self)
+
+        // CRITICAL: Force evaluation before calling .item()
+        // MLX.norm(y) and MLX.norm(v) are lazy MLXArrays
+        let normYArray = MLX.norm(y)
+        let normVArray = MLX.norm(v)
+        eval(normYArray, normVArray)
+
+        let normY = normYArray.item(Float.self)
+        let normV = normVArray.item(Float.self)
         let normAinv = normY / (normV + 1e-10)
 
         let cond = normA * normAinv
@@ -149,7 +174,14 @@ public struct HybridLinearSolver: Sendable {
 
             // Check convergence
             let diff = x - xOld
-            let relativeChange = MLX.norm(diff).item(Float.self) / (MLX.norm(x).item(Float.self) + 1e-10)
+
+            // CRITICAL: Force evaluation before calling .item()
+            // MLX.norm() returns lazy MLXArray
+            let normDiffArray = MLX.norm(diff)
+            let normXArray = MLX.norm(x)
+            eval(normDiffArray, normXArray)
+
+            let relativeChange = normDiffArray.item(Float.self) / (normXArray.item(Float.self) + 1e-10)
 
             if relativeChange < iterativeTolerance {
                 print("[HybridLinearSolver] Converged in \(iter + 1) iterations (rel_change=\(String(format: "%.2e", relativeChange)))")
@@ -211,11 +243,19 @@ public struct HybridLinearSolver: Sendable {
                 // Compute: b[i] - Σ(j≠i) A[i,j] * x[j]
                 // Use row slice and dot product for efficiency
                 let A_row = A[i, 0..<n]  // Get entire row [n]
-                let ax = (A_row * xCurrent).sum().item(Float.self)  // A[i,:] · x
 
-                let b_i = b[i].item(Float.self)
-                let a_ii = diag[i].item(Float.self)
-                let x_i_old = xCurrent[i].item(Float.self)
+                // CRITICAL: Force evaluation before calling .item()
+                // All of these are lazy MLXArrays (slices and arithmetic results)
+                let axArray = (A_row * xCurrent).sum()
+                let b_i_array = b[i]
+                let a_ii_array = diag[i]
+                let x_i_old_array = xCurrent[i]
+                eval(axArray, b_i_array, a_ii_array, x_i_old_array)
+
+                let ax = axArray.item(Float.self)  // A[i,:] · x
+                let b_i = b_i_array.item(Float.self)
+                let a_ii = a_ii_array.item(Float.self)
+                let x_i_old = x_i_old_array.item(Float.self)
 
                 // SOR update: x_new[i] = (1-ω)x[i] + (ω/a_ii)(b[i] - Σ(j≠i) a_ij*x_j)
                 // Note: ax includes a_ii*x_i, so we subtract it

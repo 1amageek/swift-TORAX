@@ -70,6 +70,7 @@ Current test suites cover core data structures, FVM utilities, and flattening he
 - `ARCHITECTURE.md`: Big picture overview and performance best practices.
 - `SOLVER_IMPLEMENTATION_STRATEGY.md`: Current solver redesign plan.
 - `SOLVER_STRATEGY_DEEP_ANALYSIS.md`, `SOLVER_STRATEGY_REVIEW.md`: Investigation notes and recommendations.
+- `IMPLEMENTATION_NOTES.md`: Design decisions, apparent inconsistencies, and their rationale (interpolation methods, Float32 overflow fixes, etc.).
 
 ## Roadmap
 

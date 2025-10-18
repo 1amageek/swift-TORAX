@@ -59,13 +59,6 @@ public struct LinearSolver: PDESolver {
         // Get coefficients at old time
         let coeffsOld = coeffsCallback(coreProfilesT, geometryT)
 
-        // Debug: Check coefficients
-        print("🔧 Coefficients:")
-        print("   dFace (Ti): [\(coeffsOld.ionCoeffs.dFace.value.min().item(Float.self)), \(coeffsOld.ionCoeffs.dFace.value.max().item(Float.self))]")
-        print("   transient (Ti): [\(coeffsOld.ionCoeffs.transientCoeff.value.min().item(Float.self)), \(coeffsOld.ionCoeffs.transientCoeff.value.max().item(Float.self))]")
-        print("   cellVolumes: [\(coeffsOld.geometry.cellVolumes.value.min().item(Float.self)), \(coeffsOld.geometry.cellVolumes.value.max().item(Float.self))]")
-        print("   cellDistances[0]: \(coeffsOld.geometry.cellDistances.value[0].item(Float.self))")
-
         // Predictor step: Explicit Euler
         xNew = predictorStep(
             xOld: coreProfilesT,
@@ -74,13 +67,6 @@ public struct LinearSolver: PDESolver {
             dr: staticParams.mesh.dr,
             staticParams: staticParams
         )
-
-        // Debug: Check predictor result
-        let tiAfterPredictor = xNew.ionTemperature.value
-        let teAfterPredictor = xNew.electronTemperature.value
-        print("📐 After predictor:")
-        print("   Ti: [\(tiAfterPredictor.min().item(Float.self)), \(tiAfterPredictor.max().item(Float.self))]")
-        print("   Te: [\(teAfterPredictor.min().item(Float.self)), \(teAfterPredictor.max().item(Float.self))]")
 
         // Corrector steps: Fixed-point iteration
         var residualNorm: Float = 0.0
@@ -293,6 +279,12 @@ public struct LinearSolver: PDESolver {
     /// Apply operator to single variable: ∂x/∂t = (1/c) * [∇·(D ∇x) + v·∇x + S]
     ///
     /// where c = transientCoeff (e.g., n_e for temperature equations)
+    ///
+    /// **IMPORTANT ASSUMPTIONS**:
+    /// 1. Uniform grid: Uses `dr = cellDist[0]` for all cells
+    ///    - TODO: Support non-uniform grids (IMPLEMENTATION_NOTES.md Section 7)
+    /// 2. Division by transientCoeff: Uses small epsilon `1e-10` to avoid zero division
+    ///    - Safe for typical densities (n_e ~ 1e20), but see IMPLEMENTATION_NOTES.md Section 3
     private func applyOperatorToVariable(
         x: MLXArray,
         eqCoeffs: EquationCoeffs,
@@ -306,20 +298,29 @@ public struct LinearSolver: PDESolver {
         let sourceCell = eqCoeffs.sourceCell.value
         let transientCoeff = eqCoeffs.transientCoeff.value
 
-        // Get cell distance (assume uniform grid for now)
-        // For uniform grid, all distances are equal
+        // Get cell distance (ASSUMES UNIFORM GRID - uses first cell distance for all)
+        // For non-uniform grids, should use per-cell spacing
         let cellDist = geometry.cellDistances.value
         guard cellDist.shape[0] > 0 else {
             // Fallback: compute from rCell
             let rCellArr = geometry.rCell.value
             if rCellArr.shape[0] >= 2 {
-                let dr_computed = (rCellArr[1] - rCellArr[0]).item(Float.self)
+                // CRITICAL: Force evaluation before calling .item()
+                // (rCellArr[1] - rCellArr[0]) is a lazy MLXArray (subtraction result)
+                let drComputed = rCellArr[1] - rCellArr[0]
+                eval(drComputed)
+                let dr_computed = drComputed.item(Float.self)
                 return MLXArray.zeros([nCells])  // Cannot compute without proper grid
             } else {
                 return MLXArray.zeros([nCells])
             }
         }
-        let dr = cellDist[0].item(Float.self)
+
+        // CRITICAL: Force evaluation before calling .item()
+        // cellDist[0] is a lazy array slice
+        let drSlice = cellDist[0]
+        eval(drSlice)
+        let dr = drSlice.item(Float.self)  // UNIFORM GRID ASSUMPTION
 
         // Compute gradients at interior faces (vectorized)
         let x_right = x[1..<nCells]
@@ -351,19 +352,33 @@ public struct LinearSolver: PDESolver {
         let rhs = divergence + sourceCell
 
         // Time derivative: ∂x/∂t = (1/c) * rhs
-        return rhs / (transientCoeff + 1e-10)
+        // NOTE: For temperature equations, c = n_e (electron density)
+        // Density floor prevents division by zero in non-conservation form
+        // Physical minimum: n_e ≥ 1e18 m⁻³ (below this, plasma is unphysical)
+        // The density floor is already applied in Block1DCoeffsBuilder, but we add safety here too
+        let safetyFloor: Float = 1e18  // [m⁻³]
+        return rhs / maximum(transientCoeff, MLXArray(safetyFloor))
     }
 
     /// Interpolate cell values to faces (vectorized)
+    ///
+    /// **IMPORTANT**: This uses **arithmetic mean** for variable interpolation.
+    /// This is different from Block1DCoeffsBuilder which uses **harmonic mean** for coefficients.
+    ///
+    /// **Rationale**:
+    /// - Variables (T, n): Arithmetic mean `(a+b)/2` - standard central differencing
+    /// - Coefficients (D, χ): Harmonic mean `2/(1/a+1/b)` - preserves flux continuity
+    ///
+    /// See IMPLEMENTATION_NOTES.md Section 1 for detailed explanation.
     private func interpolateToFaces(_ cellValues: MLXArray) -> MLXArray {
         let nCells = cellValues.shape[0]
 
-        // Interior faces (central difference)
+        // Interior faces (central difference - arithmetic mean)
         let left = cellValues[0..<(nCells-1)]
         let right = cellValues[1..<nCells]
         let interior = 0.5 * (left + right)
 
-        // Boundary faces
+        // Boundary faces (use adjacent cell value)
         let leftBoundary = cellValues[0..<1]
         let rightBoundary = cellValues[(nCells-1)..<nCells]
 

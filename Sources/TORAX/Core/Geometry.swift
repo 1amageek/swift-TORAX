@@ -37,6 +37,18 @@ public struct Geometry: Sendable, Equatable {
     /// Geometric coefficient g3 (for FVM)
     public let g3: EvaluatedArray
 
+    /// Radial coordinates at cell centers [m]
+    public let radii: EvaluatedArray
+
+    /// Safety factor profile q(r)
+    public let safetyFactor: EvaluatedArray
+
+    /// Poloidal magnetic field profile Bp(r) [T] (optional)
+    public let poloidalField: EvaluatedArray?
+
+    /// Current density profile j(r) [MA/m^2] (optional)
+    public let currentDensity: EvaluatedArray?
+
     /// Geometry type
     public let type: GeometryType
 
@@ -49,6 +61,10 @@ public struct Geometry: Sendable, Equatable {
         g1: EvaluatedArray,
         g2: EvaluatedArray,
         g3: EvaluatedArray,
+        radii: EvaluatedArray,
+        safetyFactor: EvaluatedArray,
+        poloidalField: EvaluatedArray? = nil,
+        currentDensity: EvaluatedArray? = nil,
         type: GeometryType
     ) {
         self.majorRadius = majorRadius
@@ -59,6 +75,10 @@ public struct Geometry: Sendable, Equatable {
         self.g1 = g1
         self.g2 = g2
         self.g3 = g3
+        self.radii = radii
+        self.safetyFactor = safetyFactor
+        self.poloidalField = poloidalField
+        self.currentDensity = currentDensity
         self.type = type
     }
 }

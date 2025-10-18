@@ -124,4 +124,63 @@ public enum PhysicsConstants {
     public static func megawattsToWatts(_ megawatts: MLXArray) -> MLXArray {
         return megawatts * 1e6
     }
+
+    // MARK: - Power Density Unit Conversions for Temperature Equations
+
+    /// Convert power density from MW/m³ to eV/(m³·s)
+    ///
+    /// This conversion is essential for temperature equations in non-conservation form:
+    /// ```
+    /// n_e ∂T_i/∂t = ∇·(n_e χ_i ∇T_i) + Q_i
+    /// ```
+    ///
+    /// **Dimensional Analysis**:
+    /// - Left side: [m⁻³] × [eV/s] = [eV/(m³·s)]
+    /// - Diffusion term: ∇·([m⁻³] × [m²/s] × [eV/m]) = [eV/(m³·s)]
+    /// - Source term Q_i must also be [eV/(m³·s)]
+    ///
+    /// **Conversion derivation**:
+    /// ```
+    /// 1 MW/m³ = 10⁶ W/m³
+    ///         = 10⁶ J/(m³·s)
+    ///         = 10⁶ J/(m³·s) × (1 eV / 1.602176634×10⁻¹⁹ J)
+    ///         = 6.2415090744×10²⁴ eV/(m³·s)
+    /// ```
+    ///
+    /// - Parameter megawatts: Power density in MW/m³
+    /// - Returns: Power density in eV/(m³·s)
+    public static let megawattsPerCubicMeterToEvPerCubicMeterPerSecond: Float = 6.2415090744e24
+
+    /// Convert power density from MW/m³ to eV/(m³·s) (scalar version)
+    ///
+    /// Use this when converting heating source terms for temperature equations.
+    ///
+    /// **Example**:
+    /// ```swift
+    /// let Q_MW: Float = 1.0  // [MW/m³] - heating power density
+    /// let Q_eV = PhysicsConstants.megawattsToEvDensity(Q_MW)  // [eV/(m³·s)]
+    /// ```
+    ///
+    /// - Parameter megawatts: Power density in [MW/m³]
+    /// - Returns: Power density in [eV/(m³·s)]
+    public static func megawattsToEvDensity(_ megawatts: Float) -> Float {
+        return megawatts * megawattsPerCubicMeterToEvPerCubicMeterPerSecond
+    }
+
+    /// Convert power density from MW/m³ to eV/(m³·s) (array version)
+    ///
+    /// Use this when converting heating source terms for temperature equations.
+    ///
+    /// **Example**:
+    /// ```swift
+    /// // In Block1DCoeffsBuilder.swift:
+    /// let Q_MW = sources.ionHeating.value  // [MW/m³]
+    /// let Q_eV = PhysicsConstants.megawattsToEvDensity(Q_MW)  // [eV/(m³·s)]
+    /// ```
+    ///
+    /// - Parameter megawatts: Power density array in [MW/m³]
+    /// - Returns: Power density array in [eV/(m³·s)]
+    public static func megawattsToEvDensity(_ megawatts: MLXArray) -> MLXArray {
+        return megawatts * megawattsPerCubicMeterToEvPerCubicMeterPerSecond
+    }
 }

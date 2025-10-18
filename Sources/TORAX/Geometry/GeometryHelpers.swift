@@ -72,13 +72,58 @@ public func computeG3(_ mesh: MeshConfig) -> MLXArray {
     return r
 }
 
+// MARK: - Safety Factor Computation
+
+/// Compute safety factor profile for circular geometry
+///
+/// Simple parametric model: q(r) = q₀ + (q_edge - q₀) * (r/a)^α
+///
+/// - Parameters:
+///   - mesh: Mesh configuration
+///   - q0: Safety factor at axis (default: 1.0)
+///   - qEdge: Safety factor at edge (default: 3.5)
+///   - alpha: Profile shape parameter (default: 2.0 for parabolic)
+/// - Returns: Lazy MLXArray of shape [nCells] (caller wraps in EvaluatedArray)
+public func computeSafetyFactor(
+    _ mesh: MeshConfig,
+    q0: Float = 1.0,
+    qEdge: Float = 3.5,
+    alpha: Float = 2.0
+) -> MLXArray {
+    // Cell-centered radial coordinates
+    let dr = mesh.dr
+    let r = (MLXArray(0..<mesh.nCells).asType(.float32) + 0.5) * dr
+
+    // Normalized radius
+    let rNorm = r / mesh.minorRadius
+
+    // q(r) = q₀ + (q_edge - q₀) * (r/a)^α
+    return q0 + (qEdge - q0) * pow(rNorm, alpha)
+}
+
+/// Compute cell-centered radial coordinates
+///
+/// - Parameter mesh: Mesh configuration
+/// - Returns: Lazy MLXArray of shape [nCells] (caller wraps in EvaluatedArray)
+public func computeRadii(_ mesh: MeshConfig) -> MLXArray {
+    let dr = mesh.dr
+    return (MLXArray(0..<mesh.nCells).asType(.float32) + 0.5) * dr
+}
+
 // MARK: - Geometry Construction
 
 /// Construct Geometry from mesh configuration
 ///
-/// - Parameter mesh: Mesh configuration
+/// - Parameters:
+///   - mesh: Mesh configuration
+///   - q0: Safety factor at axis (default: 1.0)
+///   - qEdge: Safety factor at edge (default: 3.5)
 /// - Returns: Geometry with evaluated arrays
-public func createGeometry(from mesh: MeshConfig) -> Geometry {
+public func createGeometry(
+    from mesh: MeshConfig,
+    q0: Float = 1.0,
+    qEdge: Float = 3.5
+) -> Geometry {
     Geometry(
         majorRadius: mesh.majorRadius,
         minorRadius: mesh.minorRadius,
@@ -88,6 +133,10 @@ public func createGeometry(from mesh: MeshConfig) -> Geometry {
         g1: EvaluatedArray(evaluating: computeG1(mesh)),
         g2: EvaluatedArray(evaluating: computeG2(mesh)),
         g3: EvaluatedArray(evaluating: computeG3(mesh)),
+        radii: EvaluatedArray(evaluating: computeRadii(mesh)),
+        safetyFactor: EvaluatedArray(evaluating: computeSafetyFactor(mesh, q0: q0, qEdge: qEdge)),
+        poloidalField: nil,
+        currentDensity: nil,
         type: mesh.geometryType
     )
 }
