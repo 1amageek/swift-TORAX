@@ -220,14 +220,14 @@ public struct MLXGradient {
         let epsilon = radii / majorRadius
 
         // Coulomb logarithm: log(Λ) ≈ 15.2 - 0.5*log(ne/1e20) + log(Te/1000)
-        let logLambda = 15.2 - 0.5 * log(ne / 1e20) + log(Te / 1000.0)
+        let logLambda = Float(15.2) - Float(0.5) * log(ne / Float(1e20)) + log(Te / Float(1000.0))
 
         // Collision frequency constant [m³ eV² / s]
         let C: Float = 6.92e-15
 
         // ν* = (q R / ε^1.5) * C * Z_eff * ne * log(Λ) / Te²
-        let nuStar = (q * majorRadius / pow(epsilon, 1.5))
-                   * C * Zeff * ne * logLambda / pow(Te, 2)
+        let nuStar = (q * majorRadius / pow(epsilon, Float(1.5)))
+                   * C * Zeff * ne * logLambda / pow(Te, Float(2))
 
         // Return log10(ν*) for QLKNN input
         return log10(nuStar)

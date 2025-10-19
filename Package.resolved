@@ -11,15 +11,6 @@
       }
     },
     {
-      "identity" : "pythonkit",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/pvieito/PythonKit.git",
-      "state" : {
-        "branch" : "master",
-        "revision" : "d030b5193d1e4e770156deb27865773b64c5695f"
-      }
-    },
-    {
       "identity" : "swift-argument-parser",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-argument-parser.git",
@@ -61,7 +52,7 @@
       "location" : "https://github.com/1amageek/swift-fusion-surrogates.git",
       "state" : {
         "branch" : "main",
-        "revision" : "8885bbb8272ee8c35a830d6591827b4e67c6431c"
+        "revision" : "e5755e53f9f7864d24e93e03c7996e45e1bcee86"
       }
     },
     {
