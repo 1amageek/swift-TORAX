@@ -4,52 +4,72 @@ A Swift implementation of Google DeepMind's [TORAX](https://github.com/google-de
 
 ## Highlights
 
-- **Differentiable Transport Solver**: Coupled 1D PDEs for ion/electron temperature, particle density, and (future) poloidal flux
-- **Apple Silicon Optimized**: MLX-Swift backend with lazy evaluation, JIT compilation, and unified memory architecture
-- **GPU-Accelerated**: All computations run on Apple Silicon GPU using float32 precision
-- **Modular Physics Stack**: Protocol-based transport models, source terms, and boundary conditions
-- **Type-Safe Concurrency**: Swift 6 actors with `EvaluatedArray` wrapper for Sendable MLXArray handling
-- **Auto-Differentiation**: Jacobian computation via `grad()` and `vjp()` for Newton-Raphson solvers
-- **Full CLI**: Command-line interface for running simulations and analyzing results
-- **Comprehensive Documentation**: Architecture guides, implementation notes, and numerical precision policies
+- **Differentiable Transport Solver**: Coupled 1D PDEs for ion/electron temperature and particle density
+- **Apple Silicon Optimized**: MLX-Swift backend with lazy evaluation, JIT compilation, and unified memory
+- **GPU-Accelerated**: All computations on Apple Silicon GPU using Float32 precision
+- **QLKNN Neural Network**: Fast turbulent transport prediction (4-6 orders of magnitude faster than QuaLiKiz)
+- **Modular Physics Stack**: Protocol-based transport models and source terms
+- **Type-Safe Concurrency**: Swift 6 actors with `EvaluatedArray` wrapper for Sendable MLXArray
+- **Auto-Differentiation**: Jacobian computation via `grad()` and `vjp()` for Newton-Raphson
+- **Command-Line Interface**: Full CLI with progress monitoring and multiple output formats
+- **Scientific Data Formats**: JSON and NetCDF-4 output with CF-1.8 compliance
 
 ## Project Status
 
-**Phase 4 Complete (95%)** - Core functionality operational with CLI integration.
+**Phase 4 Complete (100%)** - Core functionality operational with full CLI integration.
 
-✅ **Implemented**:
-- Core data structures (profiles, coefficients, geometry)
+✅ **Core Infrastructure**:
 - FVM discretization with power-law scheme
-- Linear and Newton-Raphson solvers
-- Transport models (constant, Bohm-GyroBohm)
-- Source models (fusion power, Ohmic heating, radiation, ion-electron exchange)
+- Linear solver (predictor-corrector with Pereverzev)
+- Newton-Raphson solver with auto-differentiation
+- Geometry system (circular tokamak)
 - Configuration system (JSON loading and validation)
-- CLI executable with progress monitoring
-- Actor-based simulation orchestration
-- JSON output format
+- CLI executable (TORAXCLI)
+- Actor-based orchestration
+- High-precision time accumulation (Double)
+- Conservation law enforcement
 
-⏳ **In Progress**:
-- Plotting and visualization
-- HDF5/NetCDF output formats
-- QLKNN neural network transport model
+✅ **Physics Models** (TORAXPhysics):
+- Fusion power (Bosch-Hale reactivity)
+- Ohmic heating
+- Ion-electron energy exchange
+- Bremsstrahlung radiation
+
+✅ **Transport Models**:
+- Constant transport model
+- Bohm-GyroBohm transport model
+- **QLKNN neural network** (FusionSurrogates, 4-6 orders of magnitude faster than QuaLiKiz)
+
+✅ **Output Formats**:
+- JSON (human-readable)
+- NetCDF-4 (CF-1.8 compliant, compressed)
+
+⏳ **In Development**:
+- Visualization and plotting
+- Interactive CLI menu actions
+- Pedestal models
 
 ## Prerequisites
 
 - **macOS 15.0+** on Apple Silicon (M1/M2/M3/M4)
 - **Xcode 16.0+** with Swift 6.2 toolchain
-- **MLX-Swift 0.20+** (automatically resolved via SwiftPM)
-- **Swift Numerics** (automatically resolved via SwiftPM)
+- **Dependencies** (automatically resolved via SwiftPM):
+  - MLX-Swift 0.29.1+
+  - Swift Configuration 0.1.1+
+  - Swift Argument Parser 1.5.0+
+  - SwiftNetCDF 1.2.0+
+  - FusionSurrogates (macOS only, for QLKNN)
 
 **Optional**:
-- **Python 3.11+** with original TORAX for comparison workflows
-- **gnuplot** for visualization (future plotting support)
+- **ncdump** (part of NetCDF tools) for inspecting NetCDF output
+- **Python 3.11+** with original TORAX for comparison
 
 ## Quick Start
 
 ### Installation
 
 ```bash
-git clone https://github.com/your-org/swift-TORAX.git
+git clone https://github.com/yourusername/swift-TORAX.git
 cd swift-TORAX
 swift build -c release
 ```
@@ -58,21 +78,25 @@ swift build -c release
 
 ```bash
 # Run with example configuration
-.build/release/torax-cli run \
-  --config examples/iter_like.json \
-  --output-dir results/ \
+.build/release/TORAXCLI run \
+  --config examples/Configurations/minimal.json \
+  --output-dir /tmp/torax_results \
+  --output-format netcdf \
   --log-progress
 
-# Or use installed CLI
+# Or install globally
 swift package experimental-install -c release
-torax run --config examples/iter_like.json --log-progress
+torax run --config examples/Configurations/iter_like.json
 ```
 
-### View Results
+### Inspect Results
 
 ```bash
-# Plot results (currently a stub - manual plotting required)
-torax plot results/state_history_*.json
+# NetCDF output (recommended for scientific workflows)
+ncdump -h /tmp/torax_results/state_history_*.nc
+
+# JSON output (human-readable)
+cat /tmp/torax_results/state_history_*.json | jq .
 ```
 
 ### Run Tests
@@ -83,99 +107,162 @@ swift test
 
 # Run specific test suite
 swift test --filter TORAXTests
+swift test --filter TORAXPhysicsTests
+swift test --filter TORAXCLITests
 
-# Run with verbose output
+# Verbose output
 swift test -v
 ```
 
-## CLI Usage
-
-The `torax` CLI provides commands for running simulations and analyzing results:
-
-```bash
-# Get help
-torax --help
-
-# Run simulation with custom parameters
-torax run \
-  --config config.json \
-  --output-dir ./output \
-  --mesh-ncells 100 \
-  --log-progress \
-  --no-compile  # Disable JIT for debugging
-
-# Plot multiple result files
-torax plot results/*.json --format pdf
-```
-
-### Configuration Files
-
-Configuration is specified via JSON files following the TORAX schema:
-
-```json
-{
-  "mesh": {
-    "nCells": 100
-  },
-  "geometry": {
-    "geometryType": "circular",
-    "Rmaj": 6.2,
-    "Rmin": 2.0,
-    "B0": 5.3,
-    "elongation": 1.7,
-    "triangularity": 0.33
-  },
-  "timeRange": {
-    "start": 0.0,
-    "end": 2.0
-  },
-  "transport": {
-    "modelType": "bohmGyrobohm"
-  },
-  "sources": {
-    "fusionPower": {
-      "enabled": true
-    },
-    "ohmicHeating": {
-      "enabled": true
-    }
-  },
-  "boundary": {
-    "Ti": 1000.0,
-    "Te": 1000.0,
-    "ne": 5.0e19
-  }
-}
-```
-
-See `examples/` directory for complete configuration examples.
-
-## Repository Layout
+## Repository Structure
 
 ```
 swift-TORAX/
 ├── Sources/
 │   ├── TORAX/                      # Core library
-│   │   ├── Core/                   # Data structures (CoreProfiles, TransportCoefficients)
+│   │   ├── Configuration/          # Config loaders and validation
+│   │   ├── Conservation/           # Conservation law enforcement
+│   │   ├── Core/                   # CoreProfiles, EvaluatedArray, Geometry
+│   │   ├── Diagnostics/            # Diagnostic outputs
+│   │   ├── FVM/                    # Finite volume method utilities
+│   │   ├── Geometry/               # Tokamak geometry calculations
+│   │   ├── Orchestration/          # SimulationOrchestrator (actor-based)
+│   │   ├── Output/                 # Result serialization
+│   │   ├── Protocols/              # Core protocols (TransportModel, etc.)
 │   │   ├── Solver/                 # PDE solvers (Linear, Newton-Raphson)
-│   │   ├── Transport/              # Transport models (Bohm-GyroBohm, constant)
-│   │   ├── Sources/                # Source terms (fusion, Ohmic, radiation)
-│   │   ├── Geometry/               # Geometry system (circular tokamak)
-│   │   ├── Configuration/          # Configuration loaders and validation
-│   │   ├── Orchestration/          # Simulation orchestrator (actor-based)
-│   │   └── Utils/                  # Utilities (FVM, interpolation)
-│   └── torax-cli/                  # CLI executable
-│       ├── Commands/               # CLI commands (run, plot)
-│       └── Output/                 # Progress logging, result formatting
+│   │   ├── Transport/              # Transport model implementations
+│   │   └── Utilities/              # Helper utilities
+│   │
+│   ├── TORAXPhysics/               # Physics models (separate module)
+│   │   ├── Heating/                # FusionPower, OhmicHeating, IonElectronExchange
+│   │   ├── Radiation/              # Bremsstrahlung
+│   │   ├── Neoclassical/           # SauterBootstrapModel
+│   │   └── Utilities/              # PhysicsConstants, PhysicsError
+│   │
+│   └── TORAXCLI/                   # CLI executable
+│       ├── Commands/               # RunCommand, PlotCommand, InteractiveMenu
+│       ├── Configuration/          # EnvironmentConfig
+│       ├── Output/                 # ProgressLogger, OutputWriter
+│       └── Utilities/              # DisplayUnits
+│
 ├── Tests/
-│   └── TORAXTests/                 # Unit and integration tests
-├── examples/                        # Example configuration files
-└── docs/                           # Documentation and design notes
+│   ├── TORAXTests/                 # Core library tests
+│   ├── TORAXPhysicsTests/          # Physics model tests
+│   └── TORAXCLITests/              # CLI tests
+│
+├── examples/
+│   └── Configurations/             # Example JSON configurations
+│       ├── minimal.json
+│       ├── simple_constant_transport.json
+│       └── iter_like.json
+│
+└── docs/                           # Documentation (implementation notes)
 ```
+
+## CLI Usage
+
+The `torax` CLI provides commands for running simulations:
+
+```bash
+# Get help
+torax --help
+torax run --help
+
+# Run simulation with NetCDF output
+torax run \
+  --config examples/Configurations/minimal.json \
+  --output-dir ./results \
+  --output-format netcdf \
+  --log-progress
+
+# Run with debugging
+torax run \
+  --config config.json \
+  --no-compile \
+  --enable-errors \
+  --log-output
+
+# Quit immediately after completion (for scripts)
+torax run --config config.json --quit
+```
+
+### Configuration Files
+
+Configurations use JSON format with nested structure:
+
+```json
+{
+  "runtime": {
+    "static": {
+      "mesh": {
+        "nCells": 50,
+        "majorRadius": 3.0,
+        "minorRadius": 1.0,
+        "toroidalField": 2.5,
+        "geometryType": "circular"
+      },
+      "solver": {
+        "type": "linear",
+        "tolerance": 1e-6,
+        "maxIterations": 20
+      }
+    },
+    "dynamic": {
+      "boundaries": {
+        "ionTemperature": 50.0,
+        "electronTemperature": 50.0,
+        "density": 5e18
+      },
+      "transport": {
+        "modelType": "constant"
+      },
+      "sources": {
+        "fusionPower": false,
+        "ohmicHeating": true,
+        "bremsstrahlung": true
+      }
+    }
+  },
+  "time": {
+    "start": 0.0,
+    "end": 1.0,
+    "initialDt": 1e-5
+  },
+  "output": {
+    "directory": "/tmp/torax_results",
+    "format": "netcdf"
+  }
+}
+```
+
+See `examples/Configurations/` for complete examples.
+
+## Output Formats
+
+### NetCDF-4 (Recommended)
+
+CF-1.8 compliant NetCDF-4 format with:
+- UNLIMITED time dimension for time series
+- Compression (deflate level 6, shuffle filter)
+- Proper metadata (units, long_name, standard_name)
+- Global attributes (simulation statistics, provenance)
+
+```bash
+# Inspect NetCDF file
+ncdump -h output.nc
+
+# Variables: Ti, Te, ne, psi
+# Coordinates: time [s], rho [normalized]
+# Attributes: total_steps, converged, wall_time_seconds
+```
+
+### JSON
+
+Human-readable format for quick inspection and debugging.
 
 ## Unit System
 
-**CRITICAL**: swift-TORAX uses **SI-based units** throughout to prevent conversion errors:
+**CRITICAL**: swift-TORAX uses **SI-based units** internally:
 
 | Quantity | Unit | Symbol | Notes |
 |----------|------|--------|-------|
@@ -186,42 +273,27 @@ swift-TORAX/
 | **Magnetic Field** | tesla | **T** | SI derived |
 | **Power Density** | MW/m³ | **MW/m³** | Source terms |
 
-**Display units** (CLI output only) may show keV and 10²⁰ m⁻³ for convenience, but all internal computations use eV and m⁻³.
+**Display units** (CLI output) may show keV and 10²⁰ m⁻³ for user convenience via `DisplayUnits` module.
 
-See `CLAUDE.md` "Unit System Standard" section for detailed rationale.
+See `CLAUDE.md` section "Unit System Standard" for detailed rationale.
 
-## Documentation
+## Key Design Features
 
-### Core Documentation
-- **`CLAUDE.md`**: Comprehensive project guide for AI assistants (architecture, precision policy, design decisions)
-- **`README.md`**: This file - quick start and overview
+### Numerical Precision (Float32 only)
 
-### Design Documents
-- **`ARCHITECTURE.md`**: System design and performance optimization strategies
-- **`IMPLEMENTATION_NOTES.md`**: Design decisions, numerical considerations, and rationale
-- **`SOLVER_IMPLEMENTATION_STRATEGY.md`**: Solver architecture and refactoring roadmap
-
-### Phase Documentation
-- **`PHASE4_IMPLEMENTATION_REVIEW.md`**: Unit system audit and CLI integration review
-- **`SOLVER_STRATEGY_*.md`**: Solver analysis and recommendations
-
-## Key Features
-
-### Numerical Precision
-
-swift-TORAX uses **float32** exclusively on GPU (Apple Silicon GPUs don't support float64) with algorithmic stability techniques:
+swift-TORAX uses **Float32** exclusively on GPU (Apple Silicon GPUs don't support Float64):
 
 - **Variable scaling** for Newton-Raphson conditioning
-- **High-precision time accumulation** using `Double` (CPU-only operation)
+- **High-precision time accumulation** using `Double` (CPU-only, 1 op/timestep)
 - **Diagonal preconditioning** for ill-conditioned Jacobians
-- **Conservation law enforcement** to detect numerical drift
-- **Epsilon regularization** for gradient calculations
+- **Epsilon regularization** for stable gradients
+- **Conservation law enforcement** for numerical drift detection
 
-Result: Engineering-grade accuracy (relative error ≤ 10⁻³) sufficient for experimental validation.
+Result: Engineering-grade accuracy (relative error ≤ 10⁻³) over 20,000+ timesteps.
 
 ### MLX Lazy Evaluation
 
-All MLX operations are lazy by default. The `EvaluatedArray` wrapper enforces evaluation at type boundaries:
+`EvaluatedArray` wrapper enforces evaluation at type boundaries:
 
 ```swift
 public struct EvaluatedArray: @unchecked Sendable {
@@ -236,58 +308,79 @@ public struct EvaluatedArray: @unchecked Sendable {
 }
 ```
 
-This prevents unevaluated computation graphs from crossing actor boundaries while maintaining GPU-first architecture.
+### Swift 6 Concurrency
 
-### Concurrency Model
-
-Swift 6 strict concurrency with actors:
+Actor-based simulation orchestration:
 
 ```swift
 public actor SimulationOrchestrator {
     public func run(
-        config: SimulationConfig,
-        progress: ((SimulationProgress) async -> Void)? = nil
+        config: SimulationConfiguration,
+        progressCallback: ((ProgressInfo) async -> Void)?
     ) async throws -> SimulationResult
 }
 ```
 
-All data structures are `Sendable`, with `EvaluatedArray` as the only `@unchecked Sendable` type.
+All data structures are `Sendable`. `EvaluatedArray` is the only `@unchecked Sendable` type.
+
+## Documentation
+
+### Primary Documentation
+- **`CLAUDE.md`**: Comprehensive project guide (architecture, precision policy, design decisions)
+- **`README.md`**: This file - quick start and overview
+
+### Design Documents
+- **`ARCHITECTURE.md`**: System design (if exists)
+- **`IMPLEMENTATION_NOTES.md`**: Design decisions and numerical considerations
+- **`SOLVER_IMPLEMENTATION_STRATEGY.md`**: Solver architecture
+
+### Phase Documentation
+- **`docs/`**: Implementation notes and design analysis
 
 ## Roadmap
 
 ### P0 - High Priority
-- [ ] Implement plotting with Swift Charts or gnuplot bridge
-- [ ] Add HDF5/NetCDF output formats
-- [ ] Implement QLKNN neural network transport model
 - [ ] Add pedestal models
-- [ ] Conservation law renormalization
+- [ ] Implement plotting with Swift Charts or gnuplot bridge
+- [ ] Complete interactive menu actions in CLI
+- [ ] Benchmark QLKNN against original Python implementation
 
 ### P1 - Medium Priority
-- [ ] Time-dependent geometry support
+- [ ] Time-dependent geometry
 - [ ] Current diffusion equation (ψ evolution)
-- [ ] Forward sensitivity analysis (gradient-based optimization)
+- [ ] Forward sensitivity analysis
 - [ ] Compilation caching
 - [ ] Multi-ion species support
 
-### P2 - Future Extensions
+### P2 - Future
 - [ ] MHD models (sawteeth, neoclassical tearing modes)
 - [ ] Core-edge coupling
-- [ ] Benchmark suite against original TORAX
-- [ ] Performance profiling harness
+- [ ] Benchmark suite vs. original TORAX
+- [ ] Performance profiling
+- [ ] HDF5 output (optional, NetCDF is preferred)
 
-See `CLAUDE.md` for detailed feature roadmap aligned with [TORAX paper](https://arxiv.org/abs/2406.06718v2).
+See `CLAUDE.md` for detailed roadmap aligned with [TORAX paper (arXiv:2406.06718v2)](https://arxiv.org/abs/2406.06718).
 
 ## Contributing
 
-1. Fork the repository and create a feature branch.
-2. Run `swift test` before opening a PR.
-3. Include updates to documentation/tests for user-facing changes.
-4. Follow Swift formatting conventions and keep comments concise but informative.
+1. Fork the repository and create a feature branch
+2. Run `swift test` before opening a PR
+3. Include documentation/test updates
+4. Follow Swift formatting conventions
 
 ## License
 
-MIT License. See `LICENSE` for full text.
+MIT License. See `LICENSE` for details.
+
+## References
+
+- Original TORAX: https://github.com/google-deepmind/torax
+- TORAX Paper: arXiv:2406.06718v2
+- MLX-Swift: https://github.com/ml-explore/mlx-swift
+- Swift Numerics: https://github.com/apple/swift-numerics
+- Swift Argument Parser: https://github.com/apple/swift-argument-parser
+- SwiftNetCDF: https://github.com/patrick-zippenfenig/SwiftNetCDF
 
 ---
 
-Questions or suggestions? Open an issue or reach out to the maintainers—feedback on the solver refactor is especially welcome.
+Questions or feedback? Open an issue on GitHub.
