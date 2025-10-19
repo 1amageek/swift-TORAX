@@ -148,6 +148,107 @@ public struct FlattenedState: Sendable {
             poloidalFlux: extracted[3]
         )
     }
+
+    // MARK: - GPU-Based Variable Scaling
+
+    /// Create scaled state with reference normalization
+    ///
+    /// **GPU-First Design**: All operations execute on GPU using MLXArray element-wise
+    /// arithmetic. No CPU transfers or type conversions occur.
+    ///
+    /// **Purpose**: Normalize variables to O(1) scale to improve numerical conditioning
+    /// in Newton-Raphson solver. This prevents loss of precision when combining variables
+    /// with vastly different magnitudes (e.g., Ti ~10⁴ eV vs ne ~10²⁰ m⁻³).
+    ///
+    /// **Example**:
+    /// ```swift
+    /// // Reference state: typical plasma values
+    /// let reference = try FlattenedState(profiles: referenceProfiles)
+    ///
+    /// // Scale current state
+    /// let scaled = currentState.scaled(by: reference)
+    /// // scaled.values ≈ O(1) for all variables
+    ///
+    /// // Solve in scaled space
+    /// let scaledSolution = solver.solve(scaled)
+    ///
+    /// // Restore to physical units
+    /// let solution = scaledSolution.unscaled(by: reference)
+    /// ```
+    ///
+    /// - Parameter reference: Reference state for normalization
+    /// - Returns: Scaled state with values normalized by reference
+    public func scaled(by reference: FlattenedState) -> FlattenedState {
+        // ✅ GPU element-wise division (no CPU transfer)
+        // Add small epsilon to prevent division by zero
+        let scaledValues = values.value / (reference.values.value + 1e-10)
+        eval(scaledValues)
+
+        return FlattenedState(
+            values: EvaluatedArray(evaluating: scaledValues),
+            layout: layout
+        )
+    }
+
+    /// Restore from scaled state to physical units
+    ///
+    /// **GPU-First Design**: All operations execute on GPU using MLXArray element-wise
+    /// arithmetic. No CPU transfers or type conversions occur.
+    ///
+    /// **Purpose**: Convert normalized solution back to physical units after solving
+    /// in scaled space.
+    ///
+    /// **Mathematical Correctness**:
+    /// If `scaled(by:)` computes `x_s = x / (r + ε)`, then `unscaled(by:)` must compute:
+    /// `x = x_s * (r + ε)` to ensure perfect round-trip: `x.scaled(by: r).unscaled(by: r) == x`
+    ///
+    /// **Example**:
+    /// ```swift
+    /// // After solving in scaled space
+    /// let scaledSolution = newtonRaphson.solve(scaledState)
+    ///
+    /// // Restore to physical units
+    /// let physicalSolution = scaledSolution.unscaled(by: reference)
+    /// // physicalSolution now has correct units (eV, m⁻³, etc.)
+    /// ```
+    ///
+    /// - Parameter reference: Reference state used for original scaling
+    /// - Returns: Unscaled state in physical units
+    public func unscaled(by reference: FlattenedState) -> FlattenedState {
+        // ✅ GPU element-wise multiplication (no CPU transfer)
+        // Must use (reference + ε) to match scaling formula
+        let unscaledValues = values.value * (reference.values.value + 1e-10)
+        eval(unscaledValues)
+
+        return FlattenedState(
+            values: EvaluatedArray(evaluating: unscaledValues),
+            layout: layout
+        )
+    }
+
+    // MARK: - Scaling Utilities
+
+    /// Compute scaling factors from current state
+    ///
+    /// **Use Case**: Create reference state for variable scaling based on current
+    /// plasma conditions.
+    ///
+    /// **Strategy**: Use absolute values to ensure positive scaling factors,
+    /// with minimum floor to prevent division by zero for small values.
+    ///
+    /// - Parameter minScale: Minimum scaling factor (default: 1e-10)
+    /// - Returns: Scaling reference state with safe normalization values
+    public func asScalingReference(minScale: Float = 1e-10) -> FlattenedState {
+        // ✅ GPU operations: abs() and maximum()
+        let absValues = abs(values.value)
+        let safeScales = maximum(absValues, MLXArray(minScale))
+        eval(safeScales)
+
+        return FlattenedState(
+            values: EvaluatedArray(evaluating: safeScales),
+            layout: layout
+        )
+    }
 }
 
 // MARK: - Jacobian Computation Utilities

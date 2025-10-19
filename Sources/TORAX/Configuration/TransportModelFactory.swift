@@ -29,10 +29,13 @@ public struct TransportModelFactory {
             return BohmGyroBohmTransportModel(params: params)
 
         case .qlknn:
-            // Future implementation
+            #if os(macOS)
+            return try QLKNNTransportModel(params: params)
+            #else
             throw ConfigurationError.notImplemented(
-                feature: "QLKNN transport model (planned for future release)"
+                feature: "QLKNN transport model (macOS only, requires FusionSurrogates)"
             )
+            #endif
         }
     }
 

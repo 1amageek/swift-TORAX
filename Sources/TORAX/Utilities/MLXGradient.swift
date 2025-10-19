@@ -85,27 +85,50 @@ public struct MLXGradient {
 
     // MARK: - Normalized Gradient
 
-    /// Compute normalized gradient: a/L_T = -a(∇T/T)
+    /// Compute normalized gradient: L/L_T = -L(∇T/T)
     ///
-    /// Used in QLKNN for temperature and density gradients.
+    /// **General Formula**: `L/L_T = -L * (dT/dr) / T`
+    ///
+    /// where L is an arbitrary normalization length scale:
+    /// - L = a (minor radius): gives a/L_T (TORAX convention)
+    /// - L = R (major radius): gives R/L_T (QLKNN convention)
     ///
     /// **Physical Interpretation**:
-    /// - a/L_T > 0: Temperature decreases outward (normal)
-    /// - a/L_T = 2: Gaussian profile
-    /// - a/L_T > 10: Very steep gradient (ITG unstable)
+    /// - L/L_T > 0: Temperature decreases outward (normal)
+    /// - L/L_T = 2: Gaussian profile (T ∝ exp(-r²/2σ²) with σ = L/2)
+    /// - L/L_T > 10: Very steep gradient (ITG unstable)
+    ///
+    /// **Usage Examples**:
+    /// ```swift
+    /// // TORAX-style: a/L_T
+    /// let aLT = normalizedGradient(profile: T, radii: r, normalizationLength: minorRadius)
+    ///
+    /// // QLKNN-style: R/L_T
+    /// let RLT = normalizedGradient(profile: T, radii: r, normalizationLength: majorRadius)
+    /// ```
     ///
     /// - Parameters:
     ///   - profile: Temperature or density profile [n]
     ///   - radii: Radial coordinates [n]
-    ///   - minorRadius: Minor radius (normalization length scale) [m]
-    /// - Returns: Normalized gradient a/L_T [n]
+    ///   - normalizationLength: Length scale for normalization (e.g., a or R) [m]
+    /// - Returns: Normalized gradient L/L_T [n]
+    public static func normalizedGradient(
+        profile: MLXArray,
+        radii: MLXArray,
+        normalizationLength: Float
+    ) -> MLXArray {
+        let gradient = radialGradient(field: profile, radii: radii)
+        return -(normalizationLength * gradient) / profile
+    }
+
+    @available(*, deprecated, renamed: "normalizedGradient(profile:radii:normalizationLength:)",
+               message: "Use normalizationLength parameter for clarity")
     public static func normalizedGradient(
         profile: MLXArray,
         radii: MLXArray,
         minorRadius: Float
     ) -> MLXArray {
-        let gradient = radialGradient(field: profile, radii: radii)
-        return -(minorRadius * gradient) / profile
+        return normalizedGradient(profile: profile, radii: radii, normalizationLength: minorRadius)
     }
 
     // MARK: - Magnetic Shear

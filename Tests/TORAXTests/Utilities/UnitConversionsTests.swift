@@ -43,8 +43,8 @@ struct UnitConversionsTests {
         let megawatt: Float = 1e6  // [W]
 
         // Convert J to eV: J / (J/eV) = eV
-        let evPerJoule = 1.0 / UnitConversions.eV  // [eV/J]
-        let evPerSecond = megawatt * evPerJoule  // [eV/s]
+        let evPerJoule: Float = 1.0 / UnitConversions.eV  // [eV/J]
+        let evPerSecond: Float = megawatt * evPerJoule  // [eV/s]
 
         // For power density: [MW/m³] → [eV/(m³·s)]
         let derived = evPerSecond  // Same as MW * (eV/J)
@@ -112,14 +112,14 @@ struct UnitConversionsTests {
         let input = MLXArray(Array(repeating: Float(1.0), count: nCells))  // [MW/m³]
         let output = UnitConversions.megawattsToEvDensity(input)
 
-        // Verify output is Float64 (required for 10²⁴ values)
-        #expect(output.dtype == .float64, "Output should be Float64 for large values")
+        // Verify output is Float32 (GPU-compatible)
+        #expect(output.dtype == .float32, "Output should be Float32 for GPU compatibility")
 
         // CRITICAL: eval() forces computation before extracting values
         eval(output)
 
-        let expected: Double = 6.2415090744e24  // [eV/(m³·s)]
-        let outputArray = output.asArray(Double.self)
+        let expected: Float = 6.2415090744e24  // [eV/(m³·s)]
+        let outputArray = output.asArray(Float.self)
 
         for (i, value) in outputArray.enumerated() {
             let relativeError = abs(value - expected) / expected
@@ -137,27 +137,27 @@ struct UnitConversionsTests {
         var inputArray = [Float]()
         for i in 0..<nCells {
             let rho = Float(i) / Float(nCells - 1)  // Normalized radius
-            let Q_MW = 1.0 * (1.0 - 0.9 * rho * rho)  // [MW/m³]
+            let Q_MW: Float = 1.0 * (1.0 - 0.9 * rho * rho)  // [MW/m³]
             inputArray.append(Q_MW)
         }
 
         let input = MLXArray(inputArray)
         let output = UnitConversions.megawattsToEvDensity(input)
 
-        // Verify output is Float64
-        #expect(output.dtype == .float64, "Output should be Float64 for large values")
+        // Verify output is Float32 (GPU-compatible)
+        #expect(output.dtype == .float32, "Output should be Float32 for GPU compatibility")
 
         // CRITICAL: eval() forces computation before extracting values
         eval(output)
 
-        let outputArray = output.asArray(Double.self)
-        let conversionFactor: Double = 6.2415090744e24
+        let outputArray = output.asArray(Float.self)
+        let conversionFactor: Float = 6.2415090744e24
 
         for (i, value) in outputArray.enumerated() {
-            let expected = Double(inputArray[i]) * conversionFactor
-            let relativeError = abs(value - expected) / (expected + 1e-30)  // Avoid division by zero at edge
+            let expected = inputArray[i] * conversionFactor
+            let relativeError = abs(value - expected) / (expected + Float(1e-30))  // Avoid division by zero at edge
 
-            #expect(relativeError < 1e-6 || expected < 1e10,
+            #expect(relativeError < Float(1e-6) || expected < Float(1e10),
                     "Conversion error at cell \(i): \(value) vs \(expected)")
         }
     }
@@ -169,13 +169,13 @@ struct UnitConversionsTests {
         let input = MLXArray.zeros([nCells])  // [MW/m³]
         let output = UnitConversions.megawattsToEvDensity(input)
 
-        // Verify output is Float64
-        #expect(output.dtype == .float64, "Output should be Float64")
+        // Verify output is Float32 (GPU-compatible)
+        #expect(output.dtype == .float32, "Output should be Float32 for GPU compatibility")
 
         // CRITICAL: eval() forces computation before extracting values
         eval(output)
 
-        let outputArray = output.asArray(Double.self)
+        let outputArray = output.asArray(Float.self)
 
         for (i, value) in outputArray.enumerated() {
             #expect(value == 0.0, "Zero input should give zero output at cell \(i)")
@@ -185,24 +185,25 @@ struct UnitConversionsTests {
     /// Test array conversion with mixed positive/negative values
     @Test("Array conversion: mixed heating/cooling")
     func testArrayConversionMixed() {
-        let input = MLXArray([1.0, -0.5, 0.0, 0.3, -0.1])  // [MW/m³]
+        let input = MLXArray([Float(1.0), Float(-0.5), Float(0.0), Float(0.3), Float(-0.1)])  // [MW/m³]
         let output = UnitConversions.megawattsToEvDensity(input)
 
-        // Verify output is Float64
-        #expect(output.dtype == .float64, "Output should be Float64")
+        // Verify output is Float32 (GPU-compatible)
+        #expect(output.dtype == .float32, "Output should be Float32 for GPU compatibility")
 
         // CRITICAL: eval() forces computation of lazy MLXArray before extracting values
         eval(output)
 
-        let expectedArray: [Double] = [
-            1.0 * 6.2415090744e24,
-            -0.5 * 6.2415090744e24,
-            0.0,
-            0.3 * 6.2415090744e24,
-            -0.1 * 6.2415090744e24
+        let coefficient: Float = 6.2415090744e24
+        let expectedArray: [Float] = [
+            Float(1.0) * coefficient,
+            Float(-0.5) * coefficient,
+            Float(0.0),
+            Float(0.3) * coefficient,
+            Float(-0.1) * coefficient
         ]
 
-        let outputArray = output.asArray(Double.self)
+        let outputArray = output.asArray(Float.self)
 
         for (i, value) in outputArray.enumerated() {
             let expected = expectedArray[i]
@@ -245,7 +246,7 @@ struct UnitConversionsTests {
         let ratio = sourceTerm / diffusionTerm
 
         // For typical ITER: heating and transport are comparable
-        #expect(ratio > 0.1 && ratio < 100,
+        #expect(ratio > Float(0.1) && ratio < Float(100),
                 "Source and diffusion terms have inconsistent magnitude (ratio = \(ratio))")
     }
 
@@ -257,7 +258,8 @@ struct UnitConversionsTests {
         let output = UnitConversions.megawattsToEvDensity(input)
 
         // Verify at least 6 significant figures preserved
-        let expected = input * 6.2415090744e24
+        let coefficient: Float = 6.2415090744e24
+        let expected = input * coefficient
         let relativeError = abs(output - expected) / expected
 
         // Float32 has ~7 decimal digits precision
@@ -270,7 +272,8 @@ struct UnitConversionsTests {
         let input: Float = 1e-6  // [MW/m³] - very small heating
         let output = UnitConversions.megawattsToEvDensity(input)
 
-        let expected = input * 6.2415090744e24
+        let coefficient: Float = 6.2415090744e24
+        let expected = input * coefficient
         let relativeError = abs(output - expected) / expected
 
         #expect(relativeError < 1e-6, "Conversion error for very small value")
@@ -282,7 +285,8 @@ struct UnitConversionsTests {
         let input: Float = 100.0  // [MW/m³] - very large heating
         let output = UnitConversions.megawattsToEvDensity(input)
 
-        let expected = input * 6.2415090744e24
+        let coefficient: Float = 6.2415090744e24
+        let expected = input * coefficient
 
         // Check for overflow
         #expect(!output.isInfinite, "Conversion resulted in infinity")
@@ -294,28 +298,27 @@ struct UnitConversionsTests {
 
     // MARK: - Type Safety Tests
 
-    /// Test that array version always returns Float64 for large values
-    @Test("Array conversion always returns Float64")
+    /// Test that array version uses Float32 (GPU-compatible)
+    @Test("Array conversion uses Float32 for GPU compatibility")
     func testArrayConversionDtype() {
-        // Test with different input dtypes
+        // Test with Float32 input
         let nCells = 10
 
-        // Float32 input → Float64 output
+        // Float32 input → Float32 output (GPU-compatible)
         let float32Input = MLXArray(Array(repeating: Float(1.0), count: nCells))
         let float32Output = UnitConversions.megawattsToEvDensity(float32Input)
-        #expect(float32Output.dtype == .float64, "Float32 input should produce Float64 output")
+        #expect(float32Output.dtype == .float32, "Float32 input should produce Float32 output (GPU-compatible)")
 
-        // Float64 input → Float64 output
-        let float64Input = MLXArray(Array(repeating: Double(1.0), count: nCells))
-        let float64Output = UnitConversions.megawattsToEvDensity(float64Input)
-        #expect(float64Output.dtype == .float64, "Float64 input should produce Float64 output")
+        // Note: Float64 is NOT supported on Apple Silicon GPU
+        // All computations use Float32
     }
 
-    /// Test no overflow with large values in Float64
-    @Test("No overflow with large conversion coefficient in Float64")
+    /// Test no overflow with large values in Float32
+    @Test("No overflow with large conversion coefficient in Float32")
     func testNoOverflowWithLargeCoefficient() {
-        // Test scalar version (always safe with Float)
+        // Test scalar version (Float32 arithmetic)
         let scalarValues: [Float] = [1.0, 10.0, 100.0]
+        let coefficient = Float(6.2415090744e24)  // Explicitly Float32
 
         for (i, input) in scalarValues.enumerated() {
             let output = UnitConversions.megawattsToEvDensity(input)
@@ -323,27 +326,28 @@ struct UnitConversionsTests {
             #expect(!output.isInfinite, "Scalar value at index \(i) overflowed to infinity")
             #expect(!output.isNaN, "Scalar value at index \(i) is NaN")
 
-            let expected = input * 6.2415090744e24
+            let expected = input * coefficient
             let relativeError = abs(output - expected) / expected
             #expect(relativeError < 1e-6, "Scalar conversion error at index \(i)")
         }
 
-        // Test array version with Float64 output (safe for large values)
-        let arrayInput = MLXArray([1.0, 10.0, 100.0])
+        // Test array version with Float32 output (GPU-compatible, sufficient precision)
+        let arrayInput = MLXArray([Float(1.0), Float(10.0), Float(100.0)])
         let arrayOutput = UnitConversions.megawattsToEvDensity(arrayInput)
 
-        #expect(arrayOutput.dtype == .float64, "Array output should be Float64")
+        #expect(arrayOutput.dtype == .float32, "Array output should be Float32 (GPU-compatible)")
 
         eval(arrayOutput)
-        let outputArray = arrayOutput.asArray(Double.self)
+        let outputArray = arrayOutput.asArray(Float.self)
 
         for (i, value) in outputArray.enumerated() {
             #expect(!value.isInfinite, "Array value at index \(i) overflowed to infinity")
             #expect(!value.isNaN, "Array value at index \(i) is NaN")
 
-            let expected = Double(scalarValues[i]) * 6.2415090744e24
+            let expected = scalarValues[i] * coefficient  // Use same coefficient as scalar test
             let relativeError = abs(value - expected) / expected
-            #expect(relativeError < 1e-6, "Array conversion error at index \(i)")
+            // Float32 has ~7 significant digits, so relative error should be < 1e-6
+            #expect(relativeError < 1e-6, "Array conversion error at index \(i): got \(value), expected \(expected), rel_error=\(relativeError)")
         }
     }
 }

@@ -96,98 +96,52 @@ public enum UnitConversions {
     /// - `buildElectronEquationCoeffs()` for electron heating sources
     ///
     /// **Implementation strategy**:
-    /// - Performs conversion in Swift (not MLX) to avoid MLX CPU backend validation issues
-    /// - Uses Double precision throughout to safely represent large values (10²⁴ order)
-    /// - **Always returns Float64 MLXArray** regardless of input dtype
-    /// - Input is typically Float32, output is Float64 (necessary for 10²⁴ values)
+    /// - Uses MLX Float32 operations (GPU-compatible)
+    /// - Apple Silicon GPU does NOT support Float64
+    /// - **Returns Float32 MLXArray** on same device as input
     ///
-    /// **Rationale for Float64 output**:
-    /// - Input: Q_MW ~ 0.1-10 MW/m³ (fits comfortably in Float32)
-    /// - Output: Q_eV ~ 10²³-10²⁵ eV/(m³·s) (exceeds Float32 safe range)
-    /// - Float32 max: 3.4×10³⁸, but precision degrades severely for 10²⁴ values
-    /// - Float32 has ~7 decimal digits precision → only 1 digit for 10²⁴ values
-    /// - Float64 has ~15 decimal digits precision → 6-7 digits for 10²⁴ values
-    /// - MLX operations on Float64 are well-supported and stable
+    /// **Rationale for Float32**:
+    /// - Input: Q_MW ~ 0.1-10 MW/m³
+    /// - Output: Q_eV ~ 10²³-10²⁵ eV/(m³·s)
+    /// - Float32 max: ~3.4×10³⁸ (sufficient for 10²⁵)
+    /// - Float32 precision: 7 significant digits
+    /// - For value ~6×10²⁴, relative precision: ~10⁻⁷ (0.00001%)
+    /// - This is **acceptable** for physics simulation (solver tolerance ~10⁻⁵)
     ///
-    /// **Performance consideration**:
-    /// - Element-wise multiplication is simple enough that Swift-side computation is acceptable
+    /// **Performance**:
+    /// - All operations stay on GPU (no CPU transfer)
     /// - Typical array size: 25-100 elements (radial cells)
-    /// - Overhead: < 1ms, negligible compared to solver (10-100ms per timestep)
-    /// - Float64 arithmetic is native on CPU, minimal overhead vs Float32
+    /// - Overhead: < 0.1ms, negligible compared to solver (10-100ms per timestep)
     ///
     /// - Parameter megawatts: Power density array in [MW/m³]
-    /// - Returns: Power density array in [eV/(m³·s)] as **Float64 MLXArray**
+    /// - Returns: Power density array in [eV/(m³·s)] as **Float32 MLXArray**
     public static func megawattsToEvDensity(_ megawatts: MLXArray) -> MLXArray {
-        // **CRITICAL FIX**: Always use Float64 for output + preserve input device
+        // **CRITICAL**: Apple Silicon GPU does NOT support Float64
         //
-        // Problem history:
-        //   1. Initial approach: MLX multiply with Float32 → overflow in MLX backend
-        //   2. asType promotion: Float32→Float64 → MLX backend validation crash
-        //   3. Swift-side computation with Float32 output → MLX backend rejects 10²⁴ values in Float32
-        //   4. Swift-side Float64 output without device preservation → mlx_add crash (GPU+CPU mismatch)
+        // Problem: Converting MW/m³ to eV/(m³·s) involves large coefficient (~6.24×10²⁴)
+        // - Input: 0.1-10 MW/m³
+        // - Output: 6×10²³ - 6×10²⁵ eV/(m³·s)
         //
-        // Root causes:
-        //   - Converted values (10²³-10²⁵) exceed Float32's safe precision range
-        //   - MLX CPU backend has strict validation that rejects large Float32 values
-        //   - Problem is not the arithmetic but the storage/representation in Float32
-        //   - MLXArray([...]) defaults to CPU device, causing crashes when input is GPU array
+        // Float32 precision analysis:
+        // - Float32 max: ~3.4×10³⁸ (sufficient for 10²⁵)
+        // - Float32 precision: 7 significant digits
+        // - For value 6×10²⁴: precision is ~6×10¹⁷ (absolute error)
+        // - Relative error: ~10⁻⁷ (0.00001%) - **acceptable for physics simulation**
         //
-        // Solution:
-        //   - Extract input values (any dtype) and preserve input stream/device
-        //   - Perform conversion in Double precision
-        //   - **Store result as Float64 MLXArray on same device as input**
-        //   - All downstream operations work correctly with Float64 on matching device
+        // Solution: Use Float32 arithmetic throughout (GPU-compatible)
+        // - All MLX operations stay on GPU
+        // - No Float64 → no CPU fallback
+        // - Physics accuracy maintained (relative error < 10⁻⁶ is negligible)
         //
-        // Type handling:
-        //   - Float16 input → Float64 output (necessary for 10²⁴ values)
-        //   - Float32 input → Float64 output (necessary for 10²⁴ values)
-        //   - Float64 input → Float64 output (already sufficient)
-        //
-        // Device handling:
-        //   - GPU input → GPU output (via stream parameter)
-        //   - CPU input → CPU output (via stream parameter)
-        //   - Critical for LinearSolver's divergence + sourceCell addition
-        //
-        // References:
-        //   - PHYSICS_VALIDATION_ISSUES.md Issue 1 (unit conversion fix)
-        //   - User analysis: "大きな値を Float32 で保持／変換しようとしている点にあります"
-        //   - User analysis: "デバイスの異なる配列どうしは MLX 側で加算できず、mlx_add がアサーションで停止"
+        // Alternative (if higher precision needed):
+        // - Move to CPU, use Float64, move back to GPU (expensive)
+        // - Not justified for this use case (solver tolerance is ~10⁻⁵)
 
-        // **DEVICE-AWARE SOLUTION**: Use MLX operations to preserve device
-        //
-        // Strategy:
-        // 1. Convert to Float64 using MLX broadcast multiplication (safe for small input values)
-        // 2. Multiply by coefficient using MLX operations
-        // 3. Device is automatically preserved throughout MLX operation chain
-        //
-        // Why this works:
-        // - Input values (MW/m³ ~ 0.1-10) are small, safe for Float64 conversion
-        // - MLX operations preserve input device automatically
-        // - Only the final result has large values (10²⁴), already in Float64
-        // - No asType() call that triggers MLX backend validation
-        //
-        // Device handling:
-        // - GPU input → GPU output (via MLX operation chain)
-        // - CPU input → CPU output (via MLX operation chain)
-        // - No device mismatch in downstream operations
+        // Conversion coefficient as Float32
+        let coefficient = Float(megawattsPerCubicMeterToEvPerCubicMeterPerSecond)
 
-        let coefficient = Double(megawattsPerCubicMeterToEvPerCubicMeterPerSecond)
-
-        // Step 1: Convert input to Float64 via broadcast multiplication with 1.0
-        // This is safer than asType() and preserves device
-        let inputFloat64: MLXArray
-        if megawatts.dtype == .float64 {
-            // Already Float64
-            inputFloat64 = megawatts
-        } else {
-            // Multiply by Float64(1.0) to implicitly convert to Float64
-            // This uses MLX broadcast and preserves device
-            let one = MLXArray(Double(1.0))
-            inputFloat64 = megawatts * one  // Implicit type promotion to Float64
-        }
-
-        // Step 2: Multiply by coefficient using MLX operations (preserves device)
+        // Multiply using MLX operations (stays on same device as input)
         let coeffArray = MLXArray(coefficient)
-        return inputFloat64 * coeffArray
+        return megawatts * coeffArray
     }
 }

@@ -76,10 +76,10 @@ public actor SimulationOrchestrator {
             )
         }
 
-        // Initialize state
+        // Initialize state with high-precision time accumulation
         self.state = SimulationState(
             profiles: CoreProfiles(from: initialProfiles),
-            time: 0.0,
+            timeAccumulator: 0.0,
             dt: 1e-4,
             step: 0
         )
@@ -174,19 +174,9 @@ public actor SimulationOrchestrator {
             dt = 1e-5
         }
 
-        // Compute source terms
-        let sourceTerms = sources.reduce(into: SourceTerms.zero(nCells: staticParams.mesh.nCells)) { total, model in
-            if let params = dynamicParams.sourceParams[model.name] {
-                let contribution = model.computeTerms(
-                    profiles: state.profiles,
-                    geometry: geometry,
-                    params: params
-                )
-                total = total + contribution
-            }
-        }
-
         // Build CoeffsCallback with closure capture
+        // Note: Source terms are computed inside the callback because they depend
+        // on the profiles being solved, which may be updated iteratively (Newton-Raphson)
         let coeffsCallback: CoeffsCallback = { [transport, sources, dynamicParams, staticParams] profiles, geo in
             // Capture context from outer scope
             let transportCoeffs = transport.computeCoefficients(
@@ -235,18 +225,18 @@ public actor SimulationOrchestrator {
             coeffsCallback: coeffsCallback
         )
 
-        // Update state
+        // Update state using high-precision time accumulation
         var newStats = state.statistics
         newStats.totalSteps += 1
         newStats.totalIterations += result.iterations
         newStats.converged = result.converged
         newStats.maxResidualNorm = max(newStats.maxResidualNorm, result.residualNorm)
 
-        state = SimulationState(
+        // Use advanced(by:profiles:statistics:) for high-precision time accumulation
+        // This prevents cumulative round-off errors over long simulations (20,000+ steps)
+        state = state.advanced(
+            by: dt,
             profiles: result.updatedProfiles,
-            time: state.time + dt,
-            dt: dt,
-            step: state.step + 1,
             statistics: newStats
         )
     }

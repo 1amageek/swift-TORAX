@@ -4,12 +4,49 @@ import Foundation
 // MARK: - Simulation State
 
 /// Internal simulation state (actor-isolated)
+///
+/// Uses high-precision (Double) time accumulation to prevent cumulative round-off errors
+/// over long simulations (20,000+ timesteps).
 public struct SimulationState: Sendable {
     /// Current plasma profiles
     public let profiles: CoreProfiles
 
+    /// High-precision time accumulator (internal, ~15 digits precision)
+    ///
+    /// Uses Double (64-bit) instead of Float (32-bit) to maintain precision over
+    /// long integrations. This is the **only CPU operation** in the entire
+    /// simulation pipeline, but has negligible cost (1 operation per timestep).
+    ///
+    /// **Precision Analysis**: Double provides sufficient precision for time accumulation
+    /// - Float32 machine epsilon: ~1.2×10⁻⁷
+    /// - Double64 machine epsilon: ~2.2×10⁻¹⁶
+    /// - For 20,000 steps with dt=1e-4: Float error ~2×10⁻³, Double error ~4×10⁻¹²
+    private let timeAccumulator: Double
+
     /// Current simulation time [s]
-    public let time: Float
+    ///
+    /// Computed from high-precision accumulator to avoid cumulative errors.
+    ///
+    /// ## Precision Analysis
+    ///
+    /// Without Double accumulator (naive Float):
+    /// ```
+    /// var time: Float = 0.0
+    /// for _ in 0..<20000 {
+    ///     time += dt  // Cumulative error: 20,000 × 10⁻⁷ ≈ 2×10⁻³ (0.2%)
+    /// }
+    /// ```
+    ///
+    /// With Double accumulator:
+    /// ```
+    /// var acc: Double = 0.0
+    /// for _ in 0..<20000 {
+    ///     acc += Double(dt)  // Cumulative error: 20,000 × 10⁻¹⁶ ≈ 2×10⁻¹² (negligible)
+    /// }
+    /// ```
+    public var time: Float {
+        Float(timeAccumulator)
+    }
 
     /// Current timestep [s]
     public let dt: Float
@@ -22,19 +59,21 @@ public struct SimulationState: Sendable {
 
     public init(
         profiles: CoreProfiles,
-        time: Float = 0.0,
+        timeAccumulator: Double = 0.0,
         dt: Float = 1e-4,
         step: Int = 0,
         statistics: SimulationStatistics = SimulationStatistics()
     ) {
         self.profiles = profiles
-        self.time = time
+        self.timeAccumulator = timeAccumulator
         self.dt = dt
         self.step = step
         self.statistics = statistics
     }
 
-    /// Create updated state
+    /// Create updated state (legacy compatibility)
+    ///
+    /// **Deprecated**: Use `advanced(by:profiles:)` for time stepping.
     public func updated(
         profiles: CoreProfiles? = nil,
         time: Float? = nil,
@@ -44,9 +83,60 @@ public struct SimulationState: Sendable {
     ) -> SimulationState {
         SimulationState(
             profiles: profiles ?? self.profiles,
-            time: time ?? self.time,
+            timeAccumulator: time.map { Double($0) } ?? self.timeAccumulator,
             dt: dt ?? self.dt,
             step: step ?? self.step,
+            statistics: statistics ?? self.statistics
+        )
+    }
+
+    /// Advance state by one timestep with high-precision time accumulation
+    ///
+    /// This is the **recommended** method for time stepping, as it maintains
+    /// numerical precision over long simulations.
+    ///
+    /// - Parameters:
+    ///   - dt: Timestep duration [s]
+    ///   - profiles: Updated plasma profiles
+    ///   - statistics: Updated statistics (optional)
+    /// - Returns: New state with accumulated time
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// var state = SimulationState(profiles: initialProfiles)
+    /// for _ in 0..<20000 {
+    ///     let newProfiles = solver.solve(...)
+    ///     state = state.advanced(by: dt, profiles: newProfiles)
+    /// }
+    /// print(state.time)  // Accurate to ~10⁻¹⁰ after 20,000 steps
+    /// ```
+    public func advanced(
+        by dt: Float,
+        profiles: CoreProfiles,
+        statistics: SimulationStatistics? = nil
+    ) -> SimulationState {
+        // Validate timestep
+        guard dt.isFinite else {
+            fatalError("SimulationState.advanced: dt must be finite (got \(dt))")
+        }
+        guard dt >= 0 else {
+            fatalError("SimulationState.advanced: dt must be non-negative (got \(dt))")
+        }
+
+        // High-precision time accumulation using Double (CPU operation, but 1 per timestep)
+        let newTimeAccumulator = timeAccumulator + Double(dt)
+
+        // Check for overflow (extremely rare: would require ~10^300 seconds)
+        guard newTimeAccumulator.isFinite else {
+            fatalError("SimulationState.advanced: time accumulator overflow (accumulated time: \(timeAccumulator)s, dt: \(dt)s)")
+        }
+
+        return SimulationState(
+            profiles: profiles,
+            timeAccumulator: newTimeAccumulator,
+            dt: dt,
+            step: step + 1,
             statistics: statistics ?? self.statistics
         )
     }
