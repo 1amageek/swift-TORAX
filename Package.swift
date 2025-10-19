@@ -32,9 +32,6 @@ let package = Package(
         // Swift Configuration: Configuration management
         .package(url: "https://github.com/apple/swift-configuration", from: "0.1.1"),
 
-        // Swift Numerics: Numerical computing (special functions, complex numbers, high-precision arithmetic)
-        .package(url: "https://github.com/apple/swift-numerics", from: "1.1.1"),
-
         // Swift Argument Parser: Type-safe command-line argument parsing
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
 
@@ -57,7 +54,6 @@ let package = Package(
                 .product(name: "MLXFFT", package: "mlx-swift"),
                 .product(name: "MLXLinalg", package: "mlx-swift"),
                 .product(name: "Configuration", package: "swift-configuration"),
-                .product(name: "Numerics", package: "swift-numerics"),
                 // FusionSurrogates: Conditional dependency (macOS only)
                 .product(
                     name: "FusionSurrogates",

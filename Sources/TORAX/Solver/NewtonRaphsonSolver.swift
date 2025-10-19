@@ -61,9 +61,16 @@ public struct NewtonRaphsonSolver: PDESolver {
         coeffsCallback: @escaping CoeffsCallback
     ) -> SolverResult {
         // Flatten initial guess
-        var xFlat = try! FlattenedState(profiles: coreProfilesTplusDt)
+        let xFlat = try! FlattenedState(profiles: coreProfilesTplusDt)
         let xOldFlat = try! FlattenedState(profiles: CoreProfiles.fromTuple(xOld))
         let layout = xFlat.layout
+
+        // GPU Variable Scaling: Create reference state for normalization
+        // Uses absolute values to handle both positive and negative values
+        let referenceState = xFlat.asScalingReference(minScale: 1e-10)
+
+        // Scale initial state to O(1)
+        var xScaled = xFlat.scaled(by: referenceState)
 
         // Get coefficients at old time
         let coeffsOld = coeffsCallback(coreProfilesT, geometryT)
@@ -71,19 +78,20 @@ public struct NewtonRaphsonSolver: PDESolver {
         // Extract boundary conditions
         let boundaryConditions = dynamicParamsTplusDt.boundaryConditions
 
-        // Residual function: R(x^{n+1}) = (x^{n+1} - x^n) / dt - θ*A(x^{n+1}) - (1-θ)*A(x^n) - b
-        let residualFn: (MLXArray) -> MLXArray = { xNewFlat in
-            // Unflatten to CoreProfiles
-            let xNewState = FlattenedState(values: EvaluatedArray(evaluating: xNewFlat), layout: layout)
+        // Residual function in PHYSICAL space (not scaled)
+        // This ensures physics calculations use correct units
+        let residualFnPhysical: (MLXArray) -> MLXArray = { xNewFlatPhysical in
+            // Unflatten to CoreProfiles (physical units)
+            let xNewState = FlattenedState(values: EvaluatedArray(evaluating: xNewFlatPhysical), layout: layout)
             let profilesNew = xNewState.toCoreProfiles()
 
             // Get coefficients at new time (via callback)
             let coeffsNew = coeffsCallback(profilesNew, geometryTplusDt)
 
-            // Compute residual for theta-method
+            // Compute residual for theta-method (physical units)
             let residual = self.computeThetaMethodResidual(
                 xOld: xOldFlat.values.value,
-                xNew: xNewFlat,
+                xNew: xNewFlatPhysical,
                 coeffsOld: coeffsOld,
                 coeffsNew: coeffsNew,
                 dt: dt,
@@ -95,7 +103,24 @@ public struct NewtonRaphsonSolver: PDESolver {
             return residual
         }
 
-        // Newton-Raphson iteration
+        // Residual function in SCALED space (for Newton iteration)
+        // Converts scaled variables to physical, computes residual, then scales residual back
+        let residualFnScaled: (MLXArray) -> MLXArray = { xNewScaled in
+            // Unscale to physical units
+            let xScaledState = FlattenedState(values: EvaluatedArray(evaluating: xNewScaled), layout: layout)
+            let xPhysical = xScaledState.unscaled(by: referenceState)
+
+            // Compute residual in physical units
+            let residualPhysical = residualFnPhysical(xPhysical.values.value)
+
+            // Scale residual for uniform precision
+            let residualState = FlattenedState(values: EvaluatedArray(evaluating: residualPhysical), layout: layout)
+            let residualScaled = residualState.scaled(by: referenceState)
+
+            return residualScaled.values.value
+        }
+
+        // Newton-Raphson iteration in SCALED space
         var converged = false
         var iterations = 0
         var residualNorm: Float = 0.0
@@ -103,12 +128,12 @@ public struct NewtonRaphsonSolver: PDESolver {
         for iter in 0..<maxIterations {
             iterations = iter + 1
 
-            // Compute residual
-            let residual = residualFn(xFlat.values.value)
-            eval(residual)
+            // Compute residual in scaled space
+            let residualScaled = residualFnScaled(xScaled.values.value)
+            eval(residualScaled)
 
-            // Compute residual norm
-            residualNorm = sqrt((residual * residual).mean()).item(Float.self)
+            // Compute residual norm (scaled space)
+            residualNorm = sqrt((residualScaled * residualScaled).mean()).item(Float.self)
 
             // Check convergence
             if residualNorm < tolerance {
@@ -116,36 +141,48 @@ public struct NewtonRaphsonSolver: PDESolver {
                 break
             }
 
-            // Compute Jacobian via vjp() (efficient!)
-            let jacobian = computeJacobianViaVJP(residualFn, xFlat.values.value)
-            eval(jacobian)
+            // Compute Jacobian via vjp() in scaled space (efficient!)
+            let jacobianScaled = computeJacobianViaVJP(residualFnScaled, xScaled.values.value)
+            eval(jacobianScaled)
 
             // Solve linear system: J * Δx = -R using hybrid solver
-            let delta: MLXArray
+            let deltaScaled: MLXArray
             do {
-                delta = try linearSolver.solve(jacobian, -residual)
+                deltaScaled = try linearSolver.solve(jacobianScaled, -residualScaled)
             } catch {
                 print("[NewtonRaphsonSolver] Linear solver failed: \(error)")
-                // Return partial solution
-                break
+                // Return partial solution (unscale before returning)
+                let finalPhysical = xScaled.unscaled(by: referenceState)
+                let finalProfiles = finalPhysical.toCoreProfiles()
+                return SolverResult(
+                    updatedProfiles: finalProfiles,
+                    iterations: iterations,
+                    residualNorm: residualNorm,
+                    converged: false,
+                    metadata: [
+                        "theta": theta,
+                        "dt": dt
+                    ]
+                )
             }
-            eval(delta)
+            eval(deltaScaled)
 
-            // Update solution with line search (damping factor)
+            // Update solution with line search (in scaled space)
             let alpha = lineSearch(
-                residualFn: residualFn,
-                x: xFlat.values.value,
-                delta: delta,
-                residual: residual,
+                residualFn: residualFnScaled,
+                x: xScaled.values.value,
+                delta: deltaScaled,
+                residual: residualScaled,
                 maxAlpha: 1.0
             )
 
-            let xNewFlat = xFlat.values.value + alpha * delta
-            xFlat = FlattenedState(values: EvaluatedArray(evaluating: xNewFlat), layout: layout)
+            let xNewScaled = xScaled.values.value + alpha * deltaScaled
+            xScaled = FlattenedState(values: EvaluatedArray(evaluating: xNewScaled), layout: layout)
         }
 
-        // Unflatten final solution
-        let finalProfiles = xFlat.toCoreProfiles()
+        // Unscale final solution to physical units
+        let xFinalPhysical = xScaled.unscaled(by: referenceState)
+        let finalProfiles = xFinalPhysical.toCoreProfiles()
 
         return SolverResult(
             updatedProfiles: finalProfiles,
@@ -154,7 +191,8 @@ public struct NewtonRaphsonSolver: PDESolver {
             converged: converged,
             metadata: [
                 "theta": theta,
-                "dt": dt
+                "dt": dt,
+                "variable_scaling": 1.0  // 1.0 = enabled, 0.0 = disabled
             ]
         )
     }
