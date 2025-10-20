@@ -21,7 +21,7 @@ This document identified gaps in the initial unit system unification. All issues
 
 ## Critical Review Findings
 
-This document addresses critical gaps identified in the unit system unification effort. While the TORAX core library has been unified to eV/m^-3, **two critical areas remain unconverted**, causing potential display errors of 10^3 / 10^20 magnitude.
+This document addresses critical gaps identified in the unit system unification effort. While the Gotenx core library has been unified to eV/m^-3, **two critical areas remain unconverted**, causing potential display errors of 10^3 / 10^20 magnitude.
 
 ---
 
@@ -35,7 +35,7 @@ This document addresses critical gaps identified in the unit system unification 
 
 #### 1. PlotCommand.swift - Plot Labels
 
-**File**: `Sources/torax-cli/Commands/PlotCommand.swift:245,251`
+**File**: `Sources/gotenx-cli/Commands/PlotCommand.swift:245,251`
 
 **Current Code** (INCORRECT):
 ```swift
@@ -75,7 +75,7 @@ ylabel: "Density (m^-3)"
 
 #### 2. ProgressLogger.swift - Console Output
 
-**File**: `Sources/torax-cli/Output/ProgressLogger.swift:61,73`
+**File**: `Sources/gotenx-cli/Output/ProgressLogger.swift:61,73`
 
 **Current Code** (INCORRECT):
 ```swift
@@ -145,7 +145,7 @@ Min:  \(String(format: "%.3f", state.ionTemperature.min / 1000.0))  // eV → ke
 
 #### PedestalModel.swift
 
-**File**: `Sources/TORAX/Protocols/PedestalModel.swift:6-11`
+**File**: `Sources/Gotenx/Protocols/PedestalModel.swift:6-11`
 
 **Current Code** (INCONSISTENT):
 ```swift
@@ -378,7 +378,7 @@ func testCLIOutputScaling() {
 
 ## Conclusion
 
-The unit system unification is **functionally complete** in the TORAX core library, but **incomplete in user-facing layers**. This creates a **critical UX issue** where users see values with incorrect magnitude labels.
+The unit system unification is **functionally complete** in the Gotenx core library, but **incomplete in user-facing layers**. This creates a **critical UX issue** where users see values with incorrect magnitude labels.
 
 **Priority**: Fix CLI display layer immediately (P1) to prevent user confusion and potential configuration errors.
 

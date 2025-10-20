@@ -1,0 +1,355 @@
+import Testing
+import Foundation
+@testable import Gotenx
+
+// MARK: - SimulationOrchestrator Integration Tests
+
+/// Test conservation and diagnostics integration with SimulationOrchestrator
+///
+/// Verifies that:
+/// - Conservation laws can be enabled and applied during simulation
+/// - Diagnostics are collected periodically
+/// - Reports can be generated with accumulated results
+@Suite("SimulationOrchestrator Conservation & Diagnostics Integration")
+struct SimulationOrchestratorIntegrationTests {
+
+    // MARK: - Helper: Create Test Orchestrator
+
+    private func createTestOrchestrator() async -> SimulationOrchestrator {
+        let meshConfig = MeshConfig(
+            nCells: 20,
+            majorRadius: 6.2,
+            minorRadius: 2.0,
+            toroidalField: 5.3
+        )
+
+        let staticParams = StaticRuntimeParams(
+            mesh: meshConfig,
+            evolveIonHeat: true,
+            evolveElectronHeat: true,
+            evolveDensity: true,
+            evolveCurrent: false,
+            solverType: .linear,
+            theta: 1.0,
+            solverTolerance: 1e-6,
+            solverMaxIterations: 30
+        )
+
+        let initialProfiles = SerializableProfiles(
+            ionTemperature: Array(repeating: 10000.0, count: 20),
+            electronTemperature: Array(repeating: 10000.0, count: 20),
+            electronDensity: Array(repeating: 1e20, count: 20),
+            poloidalFlux: Array(repeating: 0.0, count: 20)
+        )
+
+        let transport = ConstantTransportModel(
+            chiIon: 1.0,
+            chiElectron: 1.0,
+            particleDiffusivity: 0.5,
+            convectionVelocity: 0.0
+        )
+
+        return await SimulationOrchestrator(
+            staticParams: staticParams,
+            initialProfiles: initialProfiles,
+            transport: transport,
+            sources: []
+        )
+    }
+
+    // MARK: - Test: Enable Conservation
+
+    @Test("Enable conservation enforcement")
+    func testEnableConservation() async throws {
+        let orchestrator = await createTestOrchestrator()
+
+        // Enable conservation with particle and energy laws
+        try await orchestrator.enableConservation(
+            laws: [
+                ParticleConservation(),
+                EnergyConservation()
+            ],
+            interval: 10
+        )
+
+        // No error means success
+        #expect(true, "Conservation enabled successfully")
+    }
+
+    // MARK: - Test: Enable Diagnostics
+
+    @Test("Enable diagnostics")
+    func testEnableDiagnostics() async {
+        let orchestrator = await createTestOrchestrator()
+
+        // Enable diagnostics
+        let config = DiagnosticsConfig(
+            enableJacobianCheck: false,  // Expensive, skip for unit test
+            jacobianCheckInterval: 5000,
+            conditionThreshold: 1e6
+        )
+
+        await orchestrator.enableDiagnostics(config)
+
+        // No error means success
+        #expect(true, "Diagnostics enabled successfully")
+    }
+
+    // MARK: - Test: Get Diagnostics Report (Empty)
+
+    @Test("Get diagnostics report before simulation")
+    func testGetDiagnosticsReportEmpty() async {
+        let orchestrator = await createTestOrchestrator()
+
+        let report = await orchestrator.getDiagnosticsReport()
+
+        // Report should be empty initially
+        #expect(report.results.isEmpty)
+        #expect(report.conservationResults.isEmpty)
+        #expect(report.totalSteps == 0)
+    }
+
+    // MARK: - Test: Conservation Integration
+
+    @Test("Conservation enforcement during simulation")
+    func testConservationIntegration() async throws {
+        let orchestrator = await createTestOrchestrator()
+
+        // Enable conservation
+        try await orchestrator.enableConservation(
+            laws: [
+                ParticleConservation(),
+                EnergyConservation()
+            ],
+            interval: 5  // Enforce every 5 steps
+        )
+
+        // Enable diagnostics
+        await orchestrator.enableDiagnostics(
+            DiagnosticsConfig(
+                enableJacobianCheck: false,
+                jacobianCheckInterval: 10000,
+                conditionThreshold: 1e6
+            )
+        )
+
+        // Run short simulation
+        let dynamicParams = DynamicRuntimeParams(
+            dt: 1e-4,
+            boundaryConditions: BoundaryConditions(
+                ionTemperature: BoundaryCondition(value: 10000.0, location: .core),
+                electronTemperature: BoundaryCondition(value: 10000.0, location: .core),
+                electronDensity: BoundaryCondition(value: 1e20, location: .core)
+            ),
+            profileConditions: ProfileConditions.flat(
+                ionTemperature: 10000.0,
+                electronTemperature: 10000.0,
+                electronDensity: 1e20
+            ),
+            sourceParams: [:],
+            transportParams: TransportParameters(
+                bohmFactor: 1.0,
+                gyrobohmFactor: 1.0
+            )
+        )
+
+        // Run for 20 steps (should trigger 4 conservation enforcements at steps 5, 10, 15, 20)
+        let result = try await orchestrator.run(
+            until: 0.002,  // 2ms = 20 steps at dt=0.1ms
+            dynamicParams: dynamicParams,
+            saveInterval: nil
+        )
+
+        // Get diagnostics report
+        let report = await orchestrator.getDiagnosticsReport()
+
+        // Verify conservation results were collected
+        #expect(report.conservationResults.count > 0, "Conservation results should be collected")
+
+        // Verify diagnostics results were collected (transport diagnostics run every 100 steps,
+        // but we only run 20 steps, so we might not have diagnostics yet)
+        // This is OK - the test confirms the integration works
+
+        // Verify report structure
+        #expect(report.totalSteps == result.statistics.totalSteps)
+        #expect(report.endTime > 0.0)
+    }
+
+    // MARK: - Test: Diagnostics Accumulation
+
+    @Test("Diagnostics accumulation during simulation")
+    func testDiagnosticsAccumulation() async throws {
+        let orchestrator = await createTestOrchestrator()
+
+        // Enable diagnostics
+        await orchestrator.enableDiagnostics(
+            DiagnosticsConfig(
+                enableJacobianCheck: false,
+                jacobianCheckInterval: 10000,
+                conditionThreshold: 1e6
+            )
+        )
+
+        let dynamicParams = DynamicRuntimeParams(
+            dt: 1e-4,
+            boundaryConditions: BoundaryConditions(
+                ionTemperature: BoundaryCondition(value: 10000.0, location: .core),
+                electronTemperature: BoundaryCondition(value: 10000.0, location: .core),
+                electronDensity: BoundaryCondition(value: 1e20, location: .core)
+            ),
+            profileConditions: ProfileConditions.flat(
+                ionTemperature: 10000.0,
+                electronTemperature: 10000.0,
+                electronDensity: 1e20
+            ),
+            sourceParams: [:],
+            transportParams: TransportParameters(
+                bohmFactor: 1.0,
+                gyrobohmFactor: 1.0
+            )
+        )
+
+        // Run for 250 steps (should trigger 2 diagnostic runs at steps 100, 200)
+        _ = try await orchestrator.run(
+            until: 0.025,  // 25ms = 250 steps at dt=0.1ms
+            dynamicParams: dynamicParams,
+            saveInterval: nil
+        )
+
+        // Get diagnostics report
+        let report = await orchestrator.getDiagnosticsReport()
+
+        // Verify diagnostics were collected (transport diagnostics run every 100 steps)
+        #expect(report.results.count > 0, "Diagnostic results should be collected")
+
+        // Verify report can be formatted
+        let summary = report.summary()
+        #expect(summary.contains("SIMULATION DIAGNOSTICS REPORT"))
+    }
+
+    // MARK: - Test: Report JSON Export
+
+    @Test("Diagnostics report JSON export")
+    func testReportJSONExport() async throws {
+        let orchestrator = await createTestOrchestrator()
+
+        // Enable both conservation and diagnostics
+        try await orchestrator.enableConservation(
+            laws: [ParticleConservation()],
+            interval: 5
+        )
+
+        await orchestrator.enableDiagnostics(
+            DiagnosticsConfig(
+                enableJacobianCheck: false,
+                jacobianCheckInterval: 10000,
+                conditionThreshold: 1e6
+            )
+        )
+
+        let dynamicParams = DynamicRuntimeParams(
+            dt: 1e-4,
+            boundaryConditions: BoundaryConditions(
+                ionTemperature: BoundaryCondition(value: 10000.0, location: .core),
+                electronTemperature: BoundaryCondition(value: 10000.0, location: .core),
+                electronDensity: BoundaryCondition(value: 1e20, location: .core)
+            ),
+            profileConditions: ProfileConditions.flat(
+                ionTemperature: 10000.0,
+                electronTemperature: 10000.0,
+                electronDensity: 1e20
+            ),
+            sourceParams: [:],
+            transportParams: TransportParameters(
+                bohmFactor: 1.0,
+                gyrobohmFactor: 1.0
+            )
+        )
+
+        // Run short simulation
+        _ = try await orchestrator.run(
+            until: 0.01,
+            dynamicParams: dynamicParams,
+            saveInterval: nil
+        )
+
+        // Get report
+        let report = await orchestrator.getDiagnosticsReport()
+
+        // Verify JSON export
+        let jsonData = try report.exportJSON()
+        #expect(jsonData.count > 0, "JSON export should produce data")
+
+        // Verify JSON is valid (can be decoded back)
+        let decoder = JSONDecoder()
+        let decoded = try decoder.decode(DiagnosticsReport.self, from: jsonData)
+        #expect(decoded.totalSteps == report.totalSteps)
+    }
+
+    // MARK: - Test: Report Statistics
+
+    @Test("Diagnostics report statistics")
+    func testReportStatistics() async throws {
+        let orchestrator = await createTestOrchestrator()
+
+        try await orchestrator.enableConservation(
+            laws: [
+                ParticleConservation(),
+                EnergyConservation()
+            ],
+            interval: 10
+        )
+
+        await orchestrator.enableDiagnostics(
+            DiagnosticsConfig(
+                enableJacobianCheck: false,
+                jacobianCheckInterval: 10000,
+                conditionThreshold: 1e6
+            )
+        )
+
+        let dynamicParams = DynamicRuntimeParams(
+            dt: 1e-4,
+            boundaryConditions: BoundaryConditions(
+                ionTemperature: BoundaryCondition(value: 10000.0, location: .core),
+                electronTemperature: BoundaryCondition(value: 10000.0, location: .core),
+                electronDensity: BoundaryCondition(value: 1e20, location: .core)
+            ),
+            profileConditions: ProfileConditions.flat(
+                ionTemperature: 10000.0,
+                electronTemperature: 10000.0,
+                electronDensity: 1e20
+            ),
+            sourceParams: [:],
+            transportParams: TransportParameters(
+                bohmFactor: 1.0,
+                gyrobohmFactor: 1.0
+            )
+        )
+
+        // Run simulation
+        _ = try await orchestrator.run(
+            until: 0.02,
+            dynamicParams: dynamicParams,
+            saveInterval: nil
+        )
+
+        let report = await orchestrator.getDiagnosticsReport()
+
+        // Test statistics method
+        let stats = report.statistics()
+
+        // Verify statistics structure
+        #expect(stats["totalDiagnostics"] is Int)
+        #expect(stats["conservationLaws"] is [String])
+        #expect(stats["hasCriticalIssues"] is Bool)
+
+        // Verify filtering methods
+        let errors = report.filterBySeverity(.error)
+        let warnings = report.filterBySeverity(.warning)
+        let infos = report.filterBySeverity(.info)
+
+        // Total should equal sum of all severities
+        #expect(errors.count + warnings.count + infos.count <= report.results.count)
+    }
+}

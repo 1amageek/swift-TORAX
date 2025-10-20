@@ -1,6 +1,6 @@
 # QLKNN Transport Model Integration Plan
 
-**Project**: swift-TORAX
+**Project**: swift-Gotenx
 **Integration Target**: swift-fusion-surrogates (QLKNN neural network transport model)
 **Date**: 2025-10-18
 **Status**: Design Phase
@@ -24,14 +24,14 @@
 
 ### Objective
 
-Integrate the QLKNN (QuaLiKiz Neural Network) turbulent transport model from `swift-fusion-surrogates` into swift-TORAX to enable high-fidelity, GPU-accelerated transport coefficient predictions for tokamak plasma simulations.
+Integrate the QLKNN (QuaLiKiz Neural Network) turbulent transport model from `swift-fusion-surrogates` into swift-Gotenx to enable high-fidelity, GPU-accelerated transport coefficient predictions for tokamak plasma simulations.
 
 ### Background
 
 **QLKNN** is a neural network surrogate model trained on QuaLiKiz gyrokinetic simulations that predicts turbulent transport coefficients across ITG (Ion Temperature Gradient), TEM (Trapped Electron Mode), and ETG (Electron Temperature Gradient) instabilities.
 
 **Current State**:
-- swift-TORAX has `TransportModel` protocol with `ConstantTransportModel` and `BohmGyroBohmTransportModel`
+- swift-Gotenx has `TransportModel` protocol with `ConstantTransportModel` and `BohmGyroBohmTransportModel`
 - `TransportModelType.qlknn` is defined but not implemented (placeholder)
 - swift-fusion-surrogates provides QLKNN wrapper with MLXArray support
 
@@ -53,7 +53,7 @@ Integrate the QLKNN (QuaLiKiz Neural Network) turbulent transport model from `sw
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    swift-TORAX Simulation                        │
+│                    swift-Gotenx Simulation                        │
 │                                                                  │
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │            SimulationOrchestrator                         │  │
@@ -150,7 +150,7 @@ TransportCoefficients (Sendable)
 
 #### A. `QLKNNTransportModel.swift`
 
-**Location**: `Sources/TORAX/Transport/Models/QLKNNTransportModel.swift`
+**Location**: `Sources/Gotenx/Transport/Models/QLKNNTransportModel.swift`
 
 **Purpose**: Conform to `TransportModel` protocol, coordinate QLKNN predictions
 
@@ -178,7 +178,7 @@ public struct QLKNNTransportModel: TransportModel {
 
 #### B. `QLKNNInputBuilder.swift`
 
-**Location**: `Sources/TORAX/Transport/QLKNN/QLKNNInputBuilder.swift`
+**Location**: `Sources/Gotenx/Transport/QLKNN/QLKNNInputBuilder.swift`
 
 **Purpose**: Transform `CoreProfiles` + `Geometry` → QLKNN normalized inputs
 
@@ -237,7 +237,7 @@ public struct QLKNNInputBuilder {
 
 #### C. `Geometry+QLKNN.swift`
 
-**Location**: `Sources/TORAX/Extensions/Geometry+QLKNN.swift`
+**Location**: `Sources/Gotenx/Extensions/Geometry+QLKNN.swift`
 
 **Purpose**: QLKNN-specific geometry calculations
 
@@ -371,7 +371,7 @@ case .qlknn:
 
 #### Task 2.1: Gradient Computation
 
-**File**: `Sources/TORAX/Transport/QLKNN/GradientComputation.swift`
+**File**: `Sources/Gotenx/Transport/QLKNN/GradientComputation.swift`
 
 **Implementation**:
 
@@ -420,11 +420,11 @@ public struct GradientComputation {
 - Test with linear profile (∇T = constant)
 - Test with exponential profile (a/LT = constant)
 - Test boundary conditions
-- Test with TORAX-like grid spacing
+- Test with Gotenx-like grid spacing
 
 #### Task 2.2: Geometry Extensions
 
-**File**: `Sources/TORAX/Extensions/Geometry+QLKNN.swift`
+**File**: `Sources/Gotenx/Extensions/Geometry+QLKNN.swift`
 
 **Implementation**:
 
@@ -492,7 +492,7 @@ extension Geometry {
 
 #### Task 2.3: QLKNNInputBuilder
 
-**File**: `Sources/TORAX/Transport/QLKNN/QLKNNInputBuilder.swift`
+**File**: `Sources/Gotenx/Transport/QLKNN/QLKNNInputBuilder.swift`
 
 **Implementation**:
 
@@ -634,7 +634,7 @@ public enum QLKNNError: LocalizedError {
 
 #### Task 2.4: QLKNNTransportModel
 
-**File**: `Sources/TORAX/Transport/Models/QLKNNTransportModel.swift`
+**File**: `Sources/Gotenx/Transport/Models/QLKNNTransportModel.swift`
 
 **Implementation**:
 
@@ -814,7 +814,7 @@ extension QLKNNTransportModel: @unchecked Sendable {}
 
 #### Task 3.1: Update TransportConfig
 
-**File**: `Sources/TORAX/Configuration/TransportConfig.swift`
+**File**: `Sources/Gotenx/Configuration/TransportConfig.swift`
 
 **Changes**: (Already documented in Architecture Design section)
 
@@ -825,7 +825,7 @@ extension QLKNNTransportModel: @unchecked Sendable {}
 
 #### Task 3.2: Update TransportModelFactory
 
-**File**: `Sources/TORAX/Configuration/TransportModelFactory.swift`
+**File**: `Sources/Gotenx/Configuration/TransportModelFactory.swift`
 
 **Changes**: (Already documented in Architecture Design section)
 
@@ -894,7 +894,7 @@ extension QLKNNTransportModel: @unchecked Sendable {}
 
 #### Task 4.1: Unit Tests
 
-**File**: `Tests/TORAXTests/Transport/QLKNNInputBuilderTests.swift`
+**File**: `Tests/GotenxTests/Transport/QLKNNInputBuilderTests.swift`
 
 **Tests**:
 ```swift
@@ -924,7 +924,7 @@ extension QLKNNTransportModel: @unchecked Sendable {}
 }
 ```
 
-**File**: `Tests/TORAXTests/Transport/QLKNNTransportModelTests.swift`
+**File**: `Tests/GotenxTests/Transport/QLKNNTransportModelTests.swift`
 
 **Tests**:
 ```swift
@@ -964,7 +964,7 @@ extension QLKNNTransportModel: @unchecked Sendable {}
 
 #### Task 4.2: Integration Tests
 
-**File**: `Tests/TORAXTests/Integration/QLKNNSimulationTests.swift`
+**File**: `Tests/GotenxTests/Integration/QLKNNSimulationTests.swift`
 
 **Tests**:
 ```swift
@@ -1005,7 +1005,7 @@ extension QLKNNTransportModel: @unchecked Sendable {}
 
 #### Task 4.3: Performance Benchmarks
 
-**File**: `Tests/TORAXTests/Performance/QLKNNPerformanceTests.swift`
+**File**: `Tests/GotenxTests/Performance/QLKNNPerformanceTests.swift`
 
 **Benchmarks**:
 ```swift
@@ -1252,7 +1252,7 @@ Rationale: QLKNN provides smooth gradients suitable for Newton-Raphson
 **Enable Detailed Logging**:
 ```swift
 // Set environment variable
-TORAX_LOG_LEVEL=debug swift run torax run --config qlknn_iter.json
+GOTENX_LOG_LEVEL=debug swift run torax run --config qlknn_iter.json
 ```
 
 **QLKNN-Specific Logs**:
@@ -1512,7 +1512,7 @@ D = Γ / ∇n
 
 ### C. Unit Conversions
 
-swift-TORAX uses **eV** and **m^-3** internally.
+swift-Gotenx uses **eV** and **m^-3** internally.
 
 **QLKNN Outputs** (Gyro-Bohm normalized):
 - Need to multiply by `(ρ_s/a)^2 * c_s` to get SI units [m^2/s]
@@ -1529,7 +1529,7 @@ let chi_SI = chiGB * pow(rhoS / minorRadius, 2) * cs  // [m^2/s]
 
 ## Conclusion
 
-This integration plan provides a comprehensive roadmap for adding QLKNN transport model support to swift-TORAX. The phased approach ensures:
+This integration plan provides a comprehensive roadmap for adding QLKNN transport model support to swift-Gotenx. The phased approach ensures:
 
 1. **Minimal Risk**: Dependencies and build environment verified first
 2. **Modular Design**: Components are independent and testable

@@ -1,4 +1,4 @@
-# TORAX Implementation Status & Future Roadmap
+# Gotenx Implementation Status & Future Roadmap
 ## Version 2.0 - Reflecting Current State
 
 **Date**: 2025-10-20
@@ -23,7 +23,7 @@ This revision corrects significant discrepancies between the original design doc
 
 ### 1.1 Status: ✅ FULLY IMPLEMENTED
 
-**Implementation**: `Sources/TORAX/Transport/Models/QLKNNTransportModel.swift` (335 lines)
+**Implementation**: `Sources/Gotenx/Transport/Models/QLKNNTransportModel.swift` (335 lines)
 
 **Key Difference from Original Design**: The implementation uses the `FusionSurrogates` Swift package, NOT a custom min-max normalization approach.
 
@@ -159,7 +159,7 @@ The only limitation is that **convection velocity is set to zero** because QLKNN
 
 ### 2.1 Status: ⚠️ PLACEHOLDER ONLY
 
-**Current Implementation**: `Sources/TORAX/Solver/Block1DCoeffsBuilder.swift:254-296`
+**Current Implementation**: `Sources/Gotenx/Solver/Block1DCoeffsBuilder.swift:254-296`
 
 ### 2.2 What Exists Now
 
@@ -401,7 +401,7 @@ func testSafetyFactorEvolution() async throws {
 
 ### 3.1 Status: ⚠️ PROTOCOL ONLY
 
-**Current Implementation**: `Sources/TORAX/Protocols/PedestalModel.swift` (49 lines)
+**Current Implementation**: `Sources/Gotenx/Protocols/PedestalModel.swift` (49 lines)
 
 ### 3.2 What Exists Now
 
@@ -435,7 +435,7 @@ public protocol PedestalModel: PhysicsComponent {
 **Design**:
 
 ```swift
-// In Sources/TORAX/Physics/Pedestal/FixedPedestalModel.swift
+// In Sources/Gotenx/Physics/Pedestal/FixedPedestalModel.swift
 
 /// Fixed pedestal model with constant boundary conditions
 ///
@@ -799,22 +799,22 @@ let Zeff = dynamicParams.transportParams.params["Zeff"] ?? 1.5
 ### Current Implementation Files
 
 **QLKNN Transport Model** (✅ Complete):
-- `Sources/TORAX/Transport/Models/QLKNNTransportModel.swift` (335 lines)
+- `Sources/Gotenx/Transport/Models/QLKNNTransportModel.swift` (335 lines)
 - Uses `FusionSurrogates.QLKNNNetwork`
 - 10-feature dictionary input
 - GyroBohm normalization
 
 **Current Diffusion Placeholder** (⚠️ Needs Work):
-- `Sources/TORAX/Solver/Block1DCoeffsBuilder.swift:254-296`
+- `Sources/Gotenx/Solver/Block1DCoeffsBuilder.swift:254-296`
 - Hard-coded resistivity (line 273)
 - Zero bootstrap current (line 280 defaults to zero)
 
 **Pedestal Protocol** (⚠️ Empty):
-- `Sources/TORAX/Protocols/PedestalModel.swift` (49 lines)
+- `Sources/Gotenx/Protocols/PedestalModel.swift` (49 lines)
 - Protocol only, no implementations
 
 **Configuration**:
-- `Sources/TORAX/Configuration/Parameters.swift`
+- `Sources/Gotenx/Configuration/Parameters.swift`
 - `TransportParameters` has NO `gyrobohmFactor` field
 
 ---

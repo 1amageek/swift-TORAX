@@ -1,4 +1,4 @@
-# TORAX Visualization System Design
+# Gotenx Visualization System Design
 
 **Version**: 1.0
 **Date**: 2025-01-20
@@ -6,7 +6,7 @@
 
 ## Executive Summary
 
-This document defines the comprehensive visualization system for swift-TORAX, designed from the perspective of tokamak fusion researchers. The system provides multi-scale, multi-physics visualization capabilities ranging from real-time monitoring to detailed post-processing analysis.
+This document defines the comprehensive visualization system for swift-Gotenx, designed from the perspective of tokamak fusion researchers. The system provides multi-scale, multi-physics visualization capabilities ranging from real-time monitoring to detailed post-processing analysis.
 
 ### Design Principles
 
@@ -638,7 +638,7 @@ struct PoloidalContourView: View {
 #if available(macOS 26, iOS 26, visionOS 26)
 import Charts
 
-struct Torax3DView: View {
+struct Gotenx3DView: View {
     let data: PlotData3D
 
     var body: some View {
@@ -661,7 +661,7 @@ struct Torax3DView: View {
 ```swift
 import RealityKit
 
-struct RealityKitToraxView: View {
+struct RealityKitGotenxView: View {
     let data: PlotData3D
 
     var body: some View {
@@ -683,7 +683,7 @@ struct RealityKitToraxView: View {
 ```swift
 import SceneKit
 
-struct SceneKitToraxView: View {
+struct SceneKitGotenxView: View {
     let data: PlotData3D
 
     var body: some View {
@@ -719,7 +719,7 @@ struct SceneKitToraxView: View {
 
 #### Current Limitations
 
-1. **SimulationState** (Sources/TORAX/Orchestration/SimulationState.swift:12-120)
+1. **SimulationState** (Sources/Gotenx/Orchestration/SimulationState.swift:12-120)
    ```swift
    // CURRENT: Only profiles + metadata
    public struct SimulationState: Sendable {
@@ -789,7 +789,7 @@ SimulationState (Enhanced)
 ### 3.3 Enhanced SimulationState
 
 ```swift
-// TORAX/Orchestration/SimulationState.swift
+// Gotenx/Orchestration/SimulationState.swift
 
 public struct SimulationState: Sendable {
     // Current (minimal)
@@ -835,7 +835,7 @@ public struct SimulationState: Sendable {
 ### 3.4 New Supporting Types
 
 ```swift
-// TORAX/Core/DerivedQuantities.swift
+// Gotenx/Core/DerivedQuantities.swift
 
 /// Derived scalar quantities for performance monitoring
 public struct DerivedQuantities: Sendable, Codable {
@@ -886,7 +886,7 @@ public struct DerivedQuantities: Sendable, Codable {
     }
 }
 
-// TORAX/Solver/NumericalDiagnostics.swift
+// Gotenx/Solver/NumericalDiagnostics.swift
 
 /// Numerical solver diagnostics
 public struct NumericalDiagnostics: Sendable, Codable {
@@ -1199,7 +1199,7 @@ extension PlotData {
 - ✅ CoreProfiles (Ti, Te, ne, psi)
 - ✅ SerializableProfiles
 - ✅ PlotData structure (with zero-filled placeholders)
-- ✅ ToraxPlotView (1D temperature/density profiles)
+- ✅ GotenxPlotView (1D temperature/density profiles)
 - ✅ TimeSlider component
 - ✅ PlotData3D physics model
 
@@ -1218,10 +1218,10 @@ let result = try await runner.run(config: config)
 let plotData = try PlotData(from: result)
 
 // This works:
-ToraxPlotView(data: plotData, config: .temperature)  // ✅ Shows Ti, Te, ne
+GotenxPlotView(data: plotData, config: .temperature)  // ✅ Shows Ti, Te, ne
 
 // This shows zeros:
-ToraxPlotView(data: plotData, config: .transport)    // ⚠️ All zeros
+GotenxPlotView(data: plotData, config: .transport)    // ⚠️ All zeros
 ```
 
 ---
@@ -1236,12 +1236,12 @@ ToraxPlotView(data: plotData, config: .transport)    // ⚠️ All zeros
 
 1. **Create new type definitions** (No dependencies)
    ```swift
-   // Sources/TORAX/Core/DerivedQuantities.swift
+   // Sources/Gotenx/Core/DerivedQuantities.swift
    public struct DerivedQuantities: Sendable, Codable {
        // Minimal implementation - return zeros for now
    }
 
-   // Sources/TORAX/Solver/NumericalDiagnostics.swift
+   // Sources/Gotenx/Solver/NumericalDiagnostics.swift
    public struct NumericalDiagnostics: Sendable, Codable {
        // Minimal implementation - return defaults
    }
@@ -1852,7 +1852,7 @@ extension Color {
 1. **SimulationState Missing Fields**
    - **Issue**: `SimulationState` only tracks `profiles`, `timeAccumulator`, `dt`, `step`, `statistics`
    - **Impact**: Cannot capture transport coefficients, source terms, or derived metrics
-   - **Location**: `Sources/TORAX/Orchestration/SimulationState.swift:12-120`
+   - **Location**: `Sources/Gotenx/Orchestration/SimulationState.swift:12-120`
    - **Solution**: See Phase 1 roadmap (Section 4)
 
 2. **PlotData Zero-Filled Fields**
@@ -1871,7 +1871,7 @@ extension Color {
 4. **SerializableProfiles Limited Scope**
    - **Issue**: `TimePoint` only wraps `SerializableProfiles` (4 fields)
    - **Impact**: Cannot serialize full physics state
-   - **Location**: `Sources/TORAX/Orchestration/SimulationState.swift:282-289`
+   - **Location**: `Sources/Gotenx/Orchestration/SimulationState.swift:282-289`
    - **Solution**: See Phase 1.4 (enhanced serialization)
 
 5. **No Sampling Configuration**
@@ -1997,7 +1997,7 @@ return SimulationState(..., transport: computedTransport)
 ## Appendix A: References
 
 1. **ITER Physics Basis** - Nucl. Fusion 39 (1999) 2137
-2. **TORAX Paper** - arXiv:2406.06718v2
+2. **Gotenx Paper** - arXiv:2406.06718v2
 3. **H98(y,2) Scaling** - Nucl. Fusion 39 (1999) 2175
 4. **Troyon Beta Limit** - Plasma Phys. Control. Fusion 26 (1984) 209
 5. **Swift Charts Documentation** - https://developer.apple.com/documentation/charts
@@ -2020,5 +2020,5 @@ return SimulationState(..., transport: computedTransport)
 
 **Document Version**: 1.0
 **Last Updated**: 2025-01-20
-**Authors**: TORAX Development Team
+**Authors**: Gotenx Development Team
 **Status**: Design Phase - Ready for Implementation

@@ -1,4 +1,4 @@
-# swift-TORAX Configuration System - Final Verification Summary
+# swift-Gotenx Configuration System - Final Verification Summary
 
 **Date**: October 2025
 **Reviewer**: User (detailed code review)
@@ -25,27 +25,27 @@ Following user's comprehensive code review that examined all critical logic path
 ### ✅ All Verified Points (8/8)
 
 1. **Provider Priority Order**: JSON→Env→CLI ensures CLI highest priority ✅
-   - Location: `ToraxConfigReader.swift:29-60`
+   - Location: `GotenxConfigReader.swift:29-60`
    - Verified: REVERSE array order correctly implemented
 
 2. **Type Conversions**: All Double→Float conversions explicit ✅
-   - Location: `ToraxConfigReader.swift:109-214, 173-186, 300-404`
+   - Location: `GotenxConfigReader.swift:109-214, 173-186, 300-404`
    - Verified: No implicit conversions
 
 3. **Optional Handling**: All optional fields use `try?` and `map` ✅
-   - Location: `ToraxConfigReader.swift:254-259, 342-358, 420-448`
+   - Location: `GotenxConfigReader.swift:254-259, 342-358, 420-448`
    - Verified: No throws on missing optional keys
 
 4. **Default Values**: All required fields have defaults ✅
-   - Location: `ToraxConfigReader.swift:105-208, 365-377`
+   - Location: `GotenxConfigReader.swift:105-208, 365-377`
    - Verified: Keys match JSON structure
 
 5. **Enum Fallbacks**: Safe fallback for invalid values ✅
-   - Location: `ToraxConfigReader.swift:116-185, 429-444`
+   - Location: `GotenxConfigReader.swift:116-185, 429-444`
    - Verified: `?? .circular` and switch defaults
 
 6. **Actor Isolation**: Thread-safe concurrent access ✅
-   - Location: `ToraxConfigReader.swift:13`
+   - Location: `GotenxConfigReader.swift:13`
    - Verified: Actor definition present
 
 7. **Builder Pattern**: Immutable struct handling correct ✅
@@ -75,7 +75,7 @@ Following user's comprehensive code review that examined all critical logic path
 **Impact**:
 ```bash
 # User runs:
-swift run TORAXCLI run --config config.json --mesh-ncells 200
+swift run GotenxCLI run --config config.json --mesh-ncells 200
 
 # With bug: nCells = 100 (JSON wins) ❌
 # After fix: nCells = 200 (CLI wins) ✅
@@ -95,7 +95,7 @@ providers.append(InMemoryProvider(...))      // CLI - Index 2 = HIGHEST ✅
 ```
 
 **Files Modified**:
-1. `ToraxConfigReader.swift` - Fixed provider order + added comment
+1. `GotenxConfigReader.swift` - Fixed provider order + added comment
 2. `CLAUDE.md` - Updated example + added warning in "Common Pitfalls"
 3. `SWIFT_CONFIGURATION_INTEGRATION.md` - Documented bug as Key Decision #1
 
@@ -107,7 +107,7 @@ Following user's recommendation: "優先順位テストをswift testに組み込
 
 ### Test File Created
 
-**`Tests/TORAXTests/Configuration/ConfigurationPriorityTests.swift`**
+**`Tests/GotenxTests/Configuration/ConfigurationPriorityTests.swift`**
 
 **Total Tests**: 11
 **Lines of Code**: ~500
@@ -152,7 +152,7 @@ func testProviderOrderRegression() async throws {
 
 **Content**:
 - Hierarchical priority explanation
-- ToraxConfigReader implementation
+- GotenxConfigReader implementation
 - Configuration structure diagrams
 - CLI integration patterns
 - Type conversion examples
@@ -195,10 +195,10 @@ func testProviderOrderRegression() async throws {
 
 ## Current Build Status
 
-### TORAXCLI Target
+### GotenxCLI Target
 
 ```bash
-$ swift build --target TORAXCLI
+$ swift build --target GotenxCLI
 Build complete! (2.85s)
 ```
 
@@ -218,19 +218,19 @@ error: missing required module 'CNetCDF'
 
 ### New Files (6)
 
-1. `Sources/TORAXCLI/Configuration/ToraxConfigReader.swift` (451 lines)
-2. `Sources/TORAX/Configuration/RestartConfig.swift`
-3. `Sources/TORAX/Configuration/MHDConfig.swift`
-4. `Sources/TORAX/Compilation/CompilationCache.swift`
-5. `Sources/TORAX/Physics/MHD/SawtoothModel.swift`
-6. `Tests/TORAXTests/Configuration/ConfigurationPriorityTests.swift` (500+ lines)
+1. `Sources/GotenxCLI/Configuration/GotenxConfigReader.swift` (451 lines)
+2. `Sources/Gotenx/Configuration/RestartConfig.swift`
+3. `Sources/Gotenx/Configuration/MHDConfig.swift`
+4. `Sources/Gotenx/Compilation/CompilationCache.swift`
+5. `Sources/Gotenx/Physics/MHD/SawtoothModel.swift`
+6. `Tests/GotenxTests/Configuration/ConfigurationPriorityTests.swift` (500+ lines)
 
 ### Modified Files (5)
 
-1. `Sources/TORAXCLI/Commands/RunCommand.swift` - Uses ToraxConfigReader
-2. `Sources/TORAXCLI/Commands/InteractiveMenu.swift` - Builder pattern fix
-3. `Sources/TORAX/Configuration/DynamicConfig.swift` - Added mhd, restart
-4. `Sources/TORAX/Configuration/SimulationConfiguration.swift` - Public builders
+1. `Sources/GotenxCLI/Commands/RunCommand.swift` - Uses GotenxConfigReader
+2. `Sources/GotenxCLI/Commands/InteractiveMenu.swift` - Builder pattern fix
+3. `Sources/Gotenx/Configuration/DynamicConfig.swift` - Added mhd, restart
+4. `Sources/Gotenx/Configuration/SimulationConfiguration.swift` - Public builders
 5. `CLAUDE.md` - Added configuration documentation
 
 ### Documentation Files (4)

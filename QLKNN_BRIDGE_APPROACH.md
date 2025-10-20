@@ -57,7 +57,7 @@
 **Pure Swiftの勝ち**: 完全なクロスプラットフォーム
 
 **しかし**:
-- swift-TORAXの主な用途は**研究・シミュレーション**（macOS/Linux）
+- swift-Gotenxの主な用途は**研究・シミュレーション**（macOS/Linux）
 - iOS/visionOSでの需要は**限定的**（モバイルで重いシミュレーションは稀）
 
 **結論**: 当面はmacOS対応で十分 → ブリッジで問題なし
@@ -159,11 +159,11 @@ Pure Swift処理時間:
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│            swift-TORAX Application                   │
+│            swift-Gotenx Application                   │
 │                                                      │
 │  ┌────────────────────────────────────────────┐    │
 │  │       QLKNNTransportModel                   │    │
-│  │  (swift-TORAX native, Sendable)            │    │
+│  │  (swift-Gotenx native, Sendable)            │    │
 │  └──────────────────┬─────────────────────────┘    │
 │                     │                                │
 │                     ▼                                │
@@ -206,7 +206,7 @@ Pure Swift処理時間:
 #### 1. QLKNNBridge (薄いラッパー)
 
 ```swift
-// Sources/TORAX/Transport/QLKNN/QLKNNBridge.swift
+// Sources/Gotenx/Transport/QLKNN/QLKNNBridge.swift
 
 import MLX
 import FusionSurrogates
@@ -307,10 +307,10 @@ public enum QLKNNError: LocalizedError {
 }
 ```
 
-#### 2. QLKNNTransportModel (swift-TORAX native)
+#### 2. QLKNNTransportModel (swift-Gotenx native)
 
 ```swift
-// Sources/TORAX/Transport/Models/QLKNNTransportModel.swift
+// Sources/Gotenx/Transport/Models/QLKNNTransportModel.swift
 
 import MLX
 import Foundation
@@ -424,7 +424,7 @@ extension QLKNNTransportModel: @unchecked Sendable {}
 #### 起動時チェック
 
 ```swift
-// Sources/TORAX/Transport/QLKNN/PythonEnvironmentValidator.swift
+// Sources/Gotenx/Transport/QLKNN/PythonEnvironmentValidator.swift
 
 #if canImport(PythonKit)
 import PythonKit
@@ -516,7 +516,7 @@ public struct PythonEnvironmentValidator {
 #### CLI統合
 
 ```swift
-// Sources/TORAXCLI/Commands/RunCommand.swift
+// Sources/GotenxCLI/Commands/RunCommand.swift
 
 extension RunCommand {
     func validateEnvironment() throws {
@@ -560,7 +560,7 @@ extension RunCommand {
 // Package.swift
 
 let package = Package(
-    name: "swift-TORAX",
+    name: "swift-Gotenx",
     platforms: [
         .macOS(.v15),    // PythonKit requires macOS
         .iOS(.v18),      // QLKNN not available on iOS
@@ -568,7 +568,7 @@ let package = Package(
     ],
     products: [
         .library(name: "TORAX", targets: ["TORAX"]),
-        .executable(name: "TORAXCLI", targets: ["TORAXCLI"]),
+        .executable(name: "GotenxCLI", targets: ["GotenxCLI"]),
     ],
     dependencies: [
         .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.29.1"),
@@ -606,7 +606,7 @@ let package = Package(
 ```markdown
 ## Transport Models
 
-swift-TORAX supports multiple transport models:
+swift-Gotenx supports multiple transport models:
 
 ### 1. Constant Transport
 Simple constant diffusivity (for testing)

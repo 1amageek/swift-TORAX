@@ -1,6 +1,6 @@
-# swift-TORAX Architecture
+# swift-Gotenx Architecture
 
-Comprehensive architecture documentation for the Swift implementation of TORAX (Tokamak Transport Simulator).
+Comprehensive architecture documentation for the Swift implementation of Gotenx (Tokamak Transport Simulator).
 
 **Version**: 1.0
 **Based on**: TORAX (https://github.com/google-deepmind/torax), Paper arXiv:2406.06718v2
@@ -25,7 +25,7 @@ Comprehensive architecture documentation for the Swift implementation of TORAX (
 
 ### Purpose
 
-swift-TORAX is a differentiable tokamak core transport simulator optimized for Apple Silicon, implementing:
+swift-Gotenx is a differentiable tokamak core transport simulator optimized for Apple Silicon, implementing:
 - 1D coupled PDE solving (heat transport, particle transport, current diffusion)
 - Finite Volume Method (FVM) spatial discretization
 - Theta method time discretization
@@ -171,20 +171,20 @@ struct DynamicRuntimeParams: Sendable, Codable {
 }
 
 // Swift Configuration integration
-struct ToraxConfiguration: Codable {
+struct GotenxConfiguration: Codable {
     var staticParams: StaticRuntimeParams
     var dynamicParams: DynamicRuntimeParamsConfig
     var solver: SolverConfig
     var transport: TransportModelConfig
     var sources: [SourceConfig]
 
-    static func load() async throws -> ToraxConfiguration {
+    static func load() async throws -> GotenxConfiguration {
         let config = Configuration(
             JSONProvider(url: configURL),
             EnvironmentVariablesProvider(),
             CommandLineArgumentsProvider()
         )
-        return try await config.get(as: ToraxConfiguration.self)
+        return try await config.get(as: GotenxConfiguration.self)
     }
 }
 ```
@@ -392,7 +392,7 @@ struct NewtonRaphsonSolver: PDESolver {
 actor SimulationOrchestrator {
     // MARK: - State (actor-isolated)
     private var state: SimulationState
-    private let config: ToraxConfiguration
+    private let config: GotenxConfiguration
     private let transport: any TransportModel
     private let sources: [any SourceModel]
 
@@ -401,7 +401,7 @@ actor SimulationOrchestrator {
 
     // MARK: - Initialization
     init(
-        config: ToraxConfiguration,
+        config: GotenxConfiguration,
         initialProfiles: SerializableProfiles,
         transport: any TransportModel,
         sources: [any SourceModel]
@@ -708,13 +708,13 @@ let transport = MLX.compute(on: .gpu) {
 ## Module Organization
 
 ```
-swift-TORAX/
+swift-Gotenx/
 ├── Sources/
-│   └── TORAX/
+│   └── Gotenx/
 │       ├── Core/
 │       │   ├── Protocols.swift             # PhysicsComponent, TransportModel, etc.
 │       │   ├── DataStructures.swift        # CoreProfiles, TransportCoefficients
-│       │   ├── Configuration.swift         # ToraxConfiguration, params
+│       │   ├── Configuration.swift         # GotenxConfiguration, params
 │       │   └── Utilities.swift             # Helper functions
 │       │
 │       ├── Geometry/
@@ -777,7 +777,7 @@ swift-TORAX/
 │           └── Diagnostics.swift
 │
 └── Tests/
-    └── TORAXTests/
+    └── GotenxTests/
         ├── Core/
         ├── FVM/
         ├── Solver/
@@ -1521,7 +1521,7 @@ func testCellVariableFaceGrad() {
 ```swift
 @Test("Full simulation runs without error")
 func testFullSimulation() async throws {
-    let config = try await ToraxConfiguration.load()
+    let config = try await GotenxConfiguration.load()
     let initialProfiles = SerializableProfiles(/* ... */)
 
     let orchestrator = SimulationOrchestrator(

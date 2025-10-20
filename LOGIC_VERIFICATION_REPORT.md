@@ -1,4 +1,4 @@
-# swift-TORAX Configuration Logic Verification Report
+# swift-Gotenx Configuration Logic Verification Report
 
 **Date**: October 2025
 **Reviewer Request**: 実装を確認してください。ロジックに矛盾はありませんか？
@@ -12,7 +12,7 @@
 
 **Severity**: **CRITICAL** - Would cause complete configuration hierarchy failure
 
-**Location**: `Sources/TORAXCLI/Configuration/ToraxConfigReader.swift:29-61`
+**Location**: `Sources/GotenxCLI/Configuration/GotenxConfigReader.swift:29-61`
 
 **Problem Description**:
 
@@ -84,21 +84,21 @@ let reader = ConfigReader(providers: providers)
 ```bash
 # Test 1: CLI should override JSON
 # JSON has: "nCells": 100
-swift run TORAXCLI run --config minimal.json --mesh-ncells 200 --quit
+swift run GotenxCLI run --config minimal.json --mesh-ncells 200 --quit
 
 # Expected (correct): Uses 200 cells (CLI wins)
 # Would have gotten (bug): Uses 100 cells (JSON wins) ❌
 
 # Test 2: Environment should override JSON but not CLI
-export TORAX_MESH_NCELLS=150
-swift run TORAXCLI run --config minimal.json --quit
+export GOTENX_MESH_NCELLS=150
+swift run GotenxCLI run --config minimal.json --quit
 
 # Expected (correct): Uses 150 cells (Env wins over JSON)
 # Would have gotten (bug): Uses 100 cells (JSON wins) ❌
 
 # Test 3: CLI should override Environment
-export TORAX_MESH_NCELLS=150
-swift run TORAXCLI run --config minimal.json --mesh-ncells 200 --quit
+export GOTENX_MESH_NCELLS=150
+swift run GotenxCLI run --config minimal.json --mesh-ncells 200 --quit
 
 # Expected (correct): Uses 200 cells (CLI wins)
 # Would have gotten (bug): Uses 100 cells (JSON wins) ❌
@@ -174,9 +174,9 @@ let mesh = MeshConfig(
 
 ### ✅ Actor Isolation: CORRECT
 
-`ToraxConfigReader` is an actor for thread safety:
+`GotenxConfigReader` is an actor for thread safety:
 ```swift
-public actor ToraxConfigReader {
+public actor GotenxConfigReader {
     private let configReader: ConfigReader  // ✅ Only accessed from actor
 }
 ```
@@ -216,7 +216,7 @@ builder.runtime.dynamic.boundaries = BoundaryConfig(
 
 ## Files Modified to Fix Issues
 
-1. **`Sources/TORAXCLI/Configuration/ToraxConfigReader.swift`**
+1. **`Sources/GotenxCLI/Configuration/GotenxConfigReader.swift`**
    - Lines 33-61: Reversed provider append order
    - Added critical comment about REVERSE priority
 
@@ -233,11 +233,11 @@ builder.runtime.dynamic.boundaries = BoundaryConfig(
 
 ```bash
 # Build verification
-swift build --target TORAXCLI
+swift build --target GotenxCLI
 # ✅ Build complete! (2.85s)
 
 # Manual test (requires example config)
-swift run TORAXCLI run \
+swift run GotenxCLI run \
   --config Examples/Configurations/minimal.json \
   --mesh-ncells 200 \
   --quit

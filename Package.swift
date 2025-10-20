@@ -4,7 +4,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "swift-TORAX",
+    name: "swift-Gotenx",
     platforms: [
         .macOS(.v26),
         .iOS(.v26),
@@ -13,20 +13,20 @@ let package = Package(
     products: [
         // Products define the executables and libraries a package produces, making them visible to other packages.
         .library(
-            name: "TORAX",
-            targets: ["TORAX"]
+            name: "Gotenx",
+            targets: ["Gotenx"]
         ),
         .library(
-            name: "TORAXPhysics",
-            targets: ["TORAXPhysics"]
+            name: "GotenxPhysics",
+            targets: ["GotenxPhysics"]
         ),
         .library(
             name: "GotenxUI",
             targets: ["GotenxUI"]
         ),
         .executable(
-            name: "TORAXCLI",
-            targets: ["TORAXCLI"]
+            name: "GotenxCLI",
+            targets: ["GotenxCLI"]
         ),
     ],
     dependencies: [
@@ -49,7 +49,7 @@ let package = Package(
         // Targets are the basic building blocks of a package, defining a module or a test suite.
         // Targets can depend on other targets in this package and products from dependencies.
         .target(
-            name: "TORAX",
+            name: "Gotenx",
             dependencies: [
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
@@ -67,11 +67,11 @@ let package = Package(
             ]
         ),
 
-        // Physics models target (depends on TORAX core)
+        // Physics models target (depends on Gotenx core)
         .target(
-            name: "TORAXPhysics",
+            name: "GotenxPhysics",
             dependencies: [
-                "TORAX",
+                "Gotenx",
                 .product(name: "MLX", package: "mlx-swift"),
             ]
         ),
@@ -80,16 +80,16 @@ let package = Package(
         .target(
             name: "GotenxUI",
             dependencies: [
-                "TORAX",
+                "Gotenx",
             ]
         ),
 
         // CLI executable target
         .executableTarget(
-            name: "TORAXCLI",
+            name: "GotenxCLI",
             dependencies: [
-                "TORAX",
-                "TORAXPhysics",
+                "Gotenx",
+                "GotenxPhysics",
                 "GotenxUI",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "SwiftNetCDF", package: "SwiftNetCDF"),
@@ -97,34 +97,34 @@ let package = Package(
         ),
 
         .testTarget(
-            name: "TORAXTests",
+            name: "GotenxTests",
             dependencies: [
-                "TORAX",
-                "TORAXPhysics",
-                "TORAXCLI",  // Added: ToraxConfigReader tests need TORAXCLI
+                "Gotenx",
+                "GotenxPhysics",
+                "GotenxCLI",  // Added: GotenxConfigReader tests need GotenxCLI
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "ConfigurationTesting", package: "swift-configuration"),
                 .product(name: "SwiftNetCDF", package: "SwiftNetCDF"),
             ]
         ),
         .testTarget(
-            name: "TORAXPhysicsTests",
+            name: "GotenxPhysicsTests",
             dependencies: [
-                "TORAX",
-                "TORAXPhysics",
+                "Gotenx",
+                "GotenxPhysics",
             ]
         ),
         .testTarget(
-            name: "TORAXCLITests",
+            name: "GotenxCLITests",
             dependencies: [
-                "TORAXCLI",
+                "GotenxCLI",
             ]
         ),
         .testTarget(
             name: "GotenxUITests",
             dependencies: [
                 "GotenxUI",
-                "TORAX",
+                "Gotenx",
             ]
         ),
     ]

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-swift-TORAX is a Swift implementation of Google DeepMind's TORAX (https://github.com/google-deepmind/torax), a differentiable tokamak core transport simulator. The goal is to leverage Swift 6.2 and Apple's MLX framework (instead of JAX) to achieve high-performance fusion plasma simulations optimized for Apple Silicon.
+swift-Gotenx is a Swift implementation of Google DeepMind's TORAX (https://github.com/google-deepmind/torax), a differentiable tokamak core transport simulator. The goal is to leverage Swift 6.2 and Apple's MLX framework (instead of JAX) to achieve high-performance fusion plasma simulations optimized for Apple Silicon.
 
 ### Key Technologies
 - **Swift 6.2**: Modern language features including strict concurrency, value semantics, and protocol-oriented design
@@ -65,7 +65,7 @@ for value in criticalValues {
 
 ### Overview
 
-swift-TORAX uses **swift-configuration** for hierarchical, type-safe configuration management. The system provides a clear separation between different configuration sources with well-defined override priority.
+swift-Gotenx uses **swift-configuration** for hierarchical, type-safe configuration management. The system provides a clear separation between different configuration sources with well-defined override priority.
 
 ### Hierarchical Configuration Priority
 
@@ -76,7 +76,7 @@ Configuration values are resolved in the following priority order (highest to lo
    - Mapped to hierarchical keys: `runtime.static.mesh.nCells`
 
 2. **Environment Variables**
-   - Prefixed with `TORAX_` (e.g., `TORAX_MESH_NCELLS=150`)
+   - Prefixed with `GOTENX_` (e.g., `GOTENX_MESH_NCELLS=150`)
    - Automatically converted by `EnvironmentVariablesProvider`
 
 3. **JSON Configuration File**
@@ -86,22 +86,22 @@ Configuration values are resolved in the following priority order (highest to lo
 4. **Default Values** (lowest priority)
    - Hardcoded defaults in configuration structs
 
-### ToraxConfigReader Implementation
+### GotenxConfigReader Implementation
 
 ```swift
 import Configuration
 import Foundation
 import SystemPackage
 
-/// TORAX-specific ConfigReader wrapper
-public actor ToraxConfigReader {
+/// Gotenx-specific ConfigReader wrapper
+public actor GotenxConfigReader {
     private let configReader: ConfigReader
 
     /// Create with hierarchical providers
     public static func create(
         jsonPath: String,
         cliOverrides: [String: String] = [:]
-    ) async throws -> ToraxConfigReader {
+    ) async throws -> GotenxConfigReader {
         var providers: [any ConfigProvider] = []
 
         // IMPORTANT: ConfigReader uses FIRST-MATCH priority order
@@ -127,7 +127,7 @@ public actor ToraxConfigReader {
         providers.append(jsonProvider)
 
         let reader = ConfigReader(providers: providers)
-        return ToraxConfigReader(configReader: reader)
+        return GotenxConfigReader(configReader: reader)
     }
 
     /// Fetch complete SimulationConfiguration
@@ -182,7 +182,7 @@ public struct DynamicConfig: Codable, Sendable {
 
 ### CLI Integration
 
-**RunCommand** uses `ToraxConfigReader` to apply CLI overrides:
+**RunCommand** uses `GotenxConfigReader` to apply CLI overrides:
 
 ```swift
 private func loadConfiguration(from path: String) async throws -> SimulationConfiguration {
@@ -198,7 +198,7 @@ private func loadConfiguration(from path: String) async throws -> SimulationConf
     // ... more overrides
 
     // Create hierarchical config reader
-    let configReader = try await ToraxConfigReader.create(
+    let configReader = try await GotenxConfigReader.create(
         jsonPath: path,
         cliOverrides: cliOverrides
     )
@@ -211,12 +211,12 @@ private func loadConfiguration(from path: String) async throws -> SimulationConf
 
 **IMPORTANT**: `ConfigReader` does not have a `reload()` method. To reload configuration:
 
-1. **For static changes**: Create a new `ToraxConfigReader` instance
+1. **For static changes**: Create a new `GotenxConfigReader` instance
 2. **For dynamic hot-reload**: Use `ReloadingJSONProvider` instead of `JSONProvider`
 
 ```swift
 // Option 1: Manual reload (recreate reader)
-let newReader = try await ToraxConfigReader.create(
+let newReader = try await GotenxConfigReader.create(
     jsonPath: configPath,
     cliOverrides: cliOverrides
 )
@@ -319,7 +319,7 @@ let geometryType = try await configReader.fetchString(
     }
   },
   "output": {
-    "directory": "/tmp/torax_results",
+    "directory": "/tmp/gotenx_results",
     "format": "netcdf",
     "saveInterval": 0.01
   }
@@ -330,20 +330,20 @@ let geometryType = try await configReader.fetchString(
 
 ```bash
 # Mesh configuration
-export TORAX_MESH_NCELLS=150
-export TORAX_MESH_MAJOR_RADIUS=6.5
-export TORAX_MESH_MINOR_RADIUS=2.1
+export GOTENX_MESH_NCELLS=150
+export GOTENX_MESH_MAJOR_RADIUS=6.5
+export GOTENX_MESH_MINOR_RADIUS=2.1
 
 # Time configuration
-export TORAX_TIME_END=3.0
-export TORAX_TIME_INITIAL_DT=0.0005
+export GOTENX_TIME_END=3.0
+export GOTENX_TIME_INITIAL_DT=0.0005
 
 # Output configuration
-export TORAX_OUTPUT_DIR=/scratch/torax_output
-export TORAX_OUTPUT_FORMAT=netcdf
+export GOTENX_OUTPUT_DIR=/scratch/gotenx_output
+export GOTENX_OUTPUT_FORMAT=netcdf
 
 # Run with environment overrides
-swift run TORAXCLI run --config examples/Configurations/minimal.json
+swift run GotenxCLI run --config examples/Configurations/minimal.json
 ```
 
 ### Validation Strategy
@@ -455,14 +455,14 @@ configReader.reload()  // ❌ Method doesn't exist
 
 ✅ **DO**: Create new reader or use ReloadingJSONProvider
 ```swift
-let newReader = try await ToraxConfigReader.create(...)  // ✅
+let newReader = try await GotenxConfigReader.create(...)  // ✅
 ```
 
 ### References
 
 - **swift-configuration**: https://github.com/apple/swift-configuration
 - **DeepWiki Docs**: https://deepwiki.com/apple/swift-configuration
-- **TORAX Config Examples**: `Examples/Configurations/`
+- **Gotenx Config Examples**: `Examples/Configurations/`
 
 ## ⚠️ CRITICAL: Apple Silicon GPU Precision Constraints
 
@@ -487,11 +487,11 @@ let result = exp(array_f32)  // Executes on GPU
 | Data Type | Precision | GPU Support | Use Case |
 |-----------|-----------|-------------|----------|
 | **float32** | 32-bit (7 digits) | ✅ Full GPU support | **Primary computation type** |
-| **float16** | 16-bit (3 digits) | ✅ Full GPU support | Mixed-precision training (not used in TORAX) |
-| **bfloat16** | 16-bit (3 digits) | ✅ Full GPU support | ML inference (not used in TORAX) |
+| **float16** | 16-bit (3 digits) | ✅ Full GPU support | Mixed-precision training (not used in Gotenx) |
+| **bfloat16** | 16-bit (3 digits) | ✅ Full GPU support | ML inference (not used in Gotenx) |
 | **float64** | 64-bit (15 digits) | ❌ **CPU only** | Not usable for GPU-accelerated arrays |
 
-### Why This Matters for TORAX
+### Why This Matters for Gotenx
 
 Tokamak plasma simulation involves numerically challenging computations:
 
@@ -698,11 +698,11 @@ With proper numerical stability techniques, float32 is **more than adequate** fo
 
 ## 📘 Numerical Precision and Stability Policy
 
-**CRITICAL: This section defines the numerical foundation of the entire TORAX architecture.**
+**CRITICAL: This section defines the numerical foundation of the entire Gotenx architecture.**
 
 ### 1. Precision Policy Overview
 
-TORAX adopts a **Float32-only computation model** with algorithmic stability guarantees, based on the architectural characteristics of Apple Silicon GPUs and the mathematical properties of plasma transport PDEs.
+Gotenx adopts a **Float32-only computation model** with algorithmic stability guarantees, based on the architectural characteristics of Apple Silicon GPUs and the mathematical properties of plasma transport PDEs.
 
 | Category | Policy | Rationale |
 |----------|--------|-----------|
@@ -713,7 +713,7 @@ TORAX adopts a **Float32-only computation model** with algorithmic stability gua
 
 ### 2. PDE System Characteristics
 
-TORAX solves **four coupled, nonlinear, parabolic PDEs** describing tokamak plasma core transport:
+Gotenx solves **four coupled, nonlinear, parabolic PDEs** describing tokamak plasma core transport:
 
 1. **Ion temperature**: `n_e ∂T_i/∂t = ∇·(n_e χ_i ∇T_i) + P_i`
 2. **Electron temperature**: `n_e ∂T_e/∂t = ∇·(n_e χ_e ∇T_e) + P_e`
@@ -1168,7 +1168,7 @@ This approach achieves **100× GPU speedup** while maintaining **engineering-gra
 
 ---
 
-**This numerical precision policy is fundamental to TORAX architecture and must be followed in all implementations.**
+**This numerical precision policy is fundamental to Gotenx architecture and must be followed in all implementations.**
 
 ## ⚠️ MLX Lazy Evaluation and eval() - CRITICAL
 
@@ -1879,7 +1879,7 @@ When you need multiple dynamic properties, declare them all at the beginning:
 
     // ✅ View
     VStack {
-        ToraxPlotView(data: plotData, config: config)
+        GotenxPlotView(data: plotData, config: config)
         PlaybackControls(data: plotData, timeIndex: $timeIndex)
     }
 }
@@ -1887,7 +1887,7 @@ When you need multiple dynamic properties, declare them all at the beginning:
 
 ### Why This Matters for GotenxUI
 
-GotenxUI components (ToraxPlotView, TimeSlider, PlaybackControls) often require `@State` bindings for interactive features:
+GotenxUI components (GotenxPlotView, TimeSlider, PlaybackControls) often require `@State` bindings for interactive features:
 - Time index selection
 - Playback controls
 - Camera angle adjustments (3D plots)
@@ -1964,10 +1964,10 @@ GotenxUI components (ToraxPlotView, TimeSlider, PlaybackControls) often require 
 swift build
 
 # Build only the library
-swift build --product TORAX
+swift build --product Gotenx
 
 # Build only the CLI
-swift build --product TORAXCLI
+swift build --product GotenxCLI
 
 # Run all tests
 swift test
@@ -1982,18 +1982,18 @@ swift build -c release
 ### CLI Development and Testing
 ```bash
 # Run CLI during development
-.build/debug/TORAXCLI run --config examples/Configurations/minimal.json
+.build/debug/GotenxCLI run --config examples/Configurations/minimal.json
 
 # Install CLI locally for testing
 swift build -c release
-sudo cp .build/release/TORAXCLI /usr/local/bin/torax
+sudo cp .build/release/GotenxCLI /usr/local/bin/gotenx
 
 # Or use Swift Package Manager experimental install
 swift package experimental-install -c release
 
 # Test CLI commands
-torax run --config examples/Configurations/minimal.json --quit
-torax run --config examples/Configurations/iter_like.json --output-format netcdf
+gotenx run --config examples/Configurations/minimal.json --quit
+gotenx run --config examples/Configurations/iter_like.json --output-format netcdf
 ```
 
 ### Package Management
@@ -2174,7 +2174,7 @@ swift package generate-xcodeproj
 
 ### Solver Implementation Requirements
 
-When implementing any solver, ensure it accepts all required arguments matching TORAX interface:
+When implementing any solver, ensure it accepts all required arguments matching Gotenx interface:
 - `dt`, `staticParams`, `dynamicParamsT`, `dynamicParamsTplusDt`
 - `geometryT`, `geometryTplusDt`
 - `xOld` (tuple of CellVariables), `coreProfilesT`, `coreProfilesTplusDt`
@@ -2293,16 +2293,16 @@ The architecture is designed for extensibility to support planned enhancements f
 
 ## Command-Line Interface
 
-swift-TORAX provides a comprehensive CLI built with [swift-argument-parser](https://github.com/apple/swift-argument-parser). See [CLI.md](CLI.md) for complete documentation.
+swift-Gotenx provides a comprehensive CLI built with [swift-argument-parser](https://github.com/apple/swift-argument-parser). See [CLI.md](CLI.md) for complete documentation.
 
 ### Architecture
 
-The CLI is implemented as a separate executable target (`torax-cli`) that depends on the core TORAX library:
+The CLI is implemented as a separate executable target (`gotenx-cli`) that depends on the core Gotenx library:
 
 ```
 Sources/
-├── TORAX/           # Core library (reusable)
-└── torax-cli/       # CLI executable
+├── Gotenx/          # Core library (reusable)
+└── gotenx-cli/      # CLI executable
     ├── main.swift
     ├── Commands/
     │   ├── RunCommand.swift
@@ -2317,14 +2317,14 @@ This separation allows the core library to be used independently in other Swift 
 
 ### Main Commands
 
-**`torax run`** - Execute simulations
+**`gotenx run`** - Execute simulations
 ```bash
-torax run --config examples/basic_config.json --log-progress
+gotenx run --config examples/basic_config.json --log-progress
 ```
 
-**`torax plot`** - Visualize results
+**`gotenx plot`** - Visualize results
 ```bash
-torax plot results/state_history_*.json
+gotenx plot results/state_history_*.json
 ```
 
 ### Key Features
@@ -2350,9 +2350,9 @@ torax plot results/state_history_*.json
 
 ### Environment Variables
 
-- `TORAX_COMPILATION_ENABLED`: Enable/disable MLX JIT (default: `true`)
-- `TORAX_ERRORS_ENABLED`: Additional error checking (default: `false`)
-- `TORAX_GPU_CACHE_LIMIT`: MLX GPU cache limit in bytes
+- `GOTENX_COMPILATION_ENABLED`: Enable/disable MLX JIT (default: `true`)
+- `GOTENX_ERRORS_ENABLED`: Additional error checking (default: `false`)
+- `GOTENX_GPU_CACHE_LIMIT`: MLX GPU cache limit in bytes
 
 ### Output Formats
 
@@ -2364,16 +2364,16 @@ torax plot results/state_history_*.json
 
 ```bash
 # 1. Run simulation with progress logging
-torax run \
+gotenx run \
   --config iter_hybrid.json \
   --output-dir ~/simulations/run_001 \
   --log-progress
 
 # 2. Plot results
-torax plot ~/simulations/run_001/state_history_*.json
+gotenx plot ~/simulations/run_001/state_history_*.json
 
 # 3. Compare with reference
-torax plot \
+gotenx plot \
   ~/simulations/run_001/state_history_*.json \
   reference_data/iter_baseline.json \
   --format pdf
@@ -2381,7 +2381,7 @@ torax plot \
 
 ## Unit System Standard
 
-**CRITICAL**: swift-TORAX uses a **consistent SI-based unit system** throughout the codebase to match physics models and prevent 1000× errors.
+**CRITICAL**: swift-Gotenx uses a **consistent SI-based unit system** throughout the codebase to match physics models and prevent 1000× errors.
 
 ### Standard Units
 
@@ -2443,7 +2443,7 @@ func logFinalState(_ summary: SimulationStateSummary) {
 
 ## Project Status & Implementation Progress
 
-swift-TORAX is in **late Phase 4 development** with core functionality operational and CLI integration complete.
+swift-Gotenx is in **late Phase 4 development** with core functionality operational and CLI integration complete.
 
 ### Architecture Alignment
 
@@ -2464,7 +2464,7 @@ The architecture has been designed to align with:
 5. ✅ Transport models (ConstantTransportModel, BohmGyroBohmTransportModel, **QLKNNTransportModel**)
 6. ✅ Source models (FusionPower with Bosch-Hale, OhmicHeating, IonElectronExchange, Bremsstrahlung)
 7. ✅ Configuration system (JSON loading, validation, hierarchical overrides)
-8. ✅ CLI executable (TORAXCLI with `run` and `plot` commands via ArgumentParser)
+8. ✅ CLI executable (GotenxCLI with `run` and `plot` commands via ArgumentParser)
 9. ✅ **SimulationOrchestrator**: Actor-based simulation management
 10. ✅ **SimulationRunner**: High-level runner integrating config with execution
 11. ✅ **Model factories**: TransportModelFactory, SourceModelFactory
@@ -2484,11 +2484,11 @@ The architecture has been designed to align with:
 Phase 4 included a critical unit system audit that corrected multiple 1000× potential errors:
 
 **Modified Files**:
-1. `Sources/TORAX/Core/CoreProfiles.swift` - Comments: keV → eV, 10²⁰ m^-3 → m^-3
-2. `Sources/TORAX/Configuration/BoundaryConfig.swift` - Removed eV→keV, m^-3→10²⁰ m^-3 conversions
-3. `Sources/TORAX/Configuration/ProfileConditions.swift` - Documented as intermediate representation
-4. `Sources/TORAX/Orchestration/SimulationRunner.swift` - Removed unit conversions in initial profile generation
-5. `Tests/TORAXTests/Configuration/UnitConversionTests.swift` - Updated expectations to match eV, m^-3 standard
+1. `Sources/Gotenx/Core/CoreProfiles.swift` - Comments: keV → eV, 10²⁰ m^-3 → m^-3
+2. `Sources/Gotenx/Configuration/BoundaryConfig.swift` - Removed eV→keV, m^-3→10²⁰ m^-3 conversions
+3. `Sources/Gotenx/Configuration/ProfileConditions.swift` - Documented as intermediate representation
+4. `Sources/Gotenx/Orchestration/SimulationRunner.swift` - Removed unit conversions in initial profile generation
+5. `Tests/GotenxTests/Configuration/UnitConversionTests.swift` - Updated expectations to match eV, m^-3 standard
 
 **Analysis Document**: `PHASE4_IMPLEMENTATION_REVIEW.md` - Complete unit system analysis
 
@@ -2515,7 +2515,7 @@ The simulator can now:
 swift build -c release
 
 # Run simulation
-.build/release/TORAXCLI run \
+.build/release/GotenxCLI run \
   --config examples/Configurations/iter_like.json \
   --output-dir results/ \
   --output-format netcdf \
@@ -2523,7 +2523,7 @@ swift build -c release
 
 # Output:
 # ═══════════════════════════════════════════════════
-# swift-TORAX v0.1.0
+# swift-Gotenx v0.1.0
 # Tokamak Core Transport Simulator for Apple Silicon
 # ═══════════════════════════════════════════════════
 #
@@ -2580,7 +2580,7 @@ swift build -c release
 
 ### Overview
 
-GotenxUI is a native Swift Charts-based visualization library for TORAX simulation data, providing both 2D and 3D (future) plotting capabilities for tokamak plasma diagnostics.
+GotenxUI is a native Swift Charts-based visualization library for Gotenx simulation data, providing both 2D and 3D (future) plotting capabilities for tokamak plasma diagnostics.
 
 **Module Structure**:
 ```
@@ -2592,11 +2592,11 @@ Sources/GotenxUI/
 │   └── PlotConfiguration.swift # Plot layout and styling
 ├── Views/
 │   ├── 2D/
-│   │   ├── ToraxPlotView.swift       # Main 2D plot grid
+│   │   ├── GotenxPlotView.swift       # Main 2D plot grid
 │   │   ├── SpatialPlotView.swift     # Profile charts (ρ axis)
 │   │   └── TimeSeriesPlotView.swift  # Time evolution
 │   └── 3D/ (future iOS 26.0+)
-│       └── ToraxPlot3DView.swift     # Chart3D integration
+│       └── GotenxPlot3DView.swift     # Chart3D integration
 ├── Configurations/
 │   ├── DefaultPlotConfig.swift   # 4×4 grid (16 subplots)
 │   ├── SimplePlotConfig.swift    # 2×2 grid (4 subplots)
@@ -2622,7 +2622,7 @@ Sources/GotenxUI/
 
 **Unit Conversion Strategy**:
 
-GotenxUI performs **display-only** unit conversion. Internal TORAX units (eV, m⁻³) are converted to user-friendly units (keV, 10²⁰ m⁻³) during `PlotData` initialization.
+GotenxUI performs **display-only** unit conversion. Internal Gotenx units (eV, m⁻³) are converted to user-friendly units (keV, 10²⁰ m⁻³) during `PlotData` initialization.
 
 ```swift
 /// Create PlotData from SimulationResult with unit conversion
@@ -2652,7 +2652,7 @@ let plotData = try PlotData(from: simulationResult)
 - ✅ PlotData model with unit conversion
 - ✅ PlotData3D model (iOS 26.0+ ready)
 - ⏳ PlotProperties and FigureProperties
-- ⏳ Basic ToraxPlotView (2D grid)
+- ⏳ Basic GotenxPlotView (2D grid)
 - ⏳ Time slider component
 
 **Phase 2: 2D Plot Rendering** (P0):
@@ -2669,7 +2669,7 @@ let plotData = try PlotData(from: simulationResult)
 - Zero value suppression
 
 **Phase 4: Chart3D Integration** (Future - iOS 26.0+):
-- ToraxPlot3DView with SurfacePlot
+- GotenxPlot3DView with SurfacePlot
 - Volumetric temperature/density visualization
 - Interactive camera controls (Chart3DPose)
 - PointMark3D for scatter plots
@@ -2680,7 +2680,7 @@ let plotData = try PlotData(from: simulationResult)
 
 ```swift
 @available(macOS 26.0, iOS 26.0, visionOS 26.0, *)
-struct ToraxPlot3DView: View {
+struct GotenxPlot3DView: View {
     let data: PlotData3D
     @State private var pose: Chart3DPose = .default
 
@@ -2719,10 +2719,10 @@ Chart3DPose(azimuth: .degrees(45), inclination: .degrees(30))
 
 ```bash
 # Future plotting command (Phase 2+)
-torax plot results/simulation.json --layout default
+gotenx plot results/simulation.json --layout default
 
 # 3D plotting (iOS 26.0+)
-torax plot results/simulation.json --mode 3d
+gotenx plot results/simulation.json --mode 3d
 ```
 
 ### Design Principles

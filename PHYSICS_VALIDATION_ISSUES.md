@@ -1,6 +1,6 @@
 # Physics Validation Issues and Recommendations
 
-このドキュメントは、swift-TORAX実装における物理的妥当性の問題点と推奨される対処方法をまとめたものです。
+このドキュメントは、swift-Gotenx実装における物理的妥当性の問題点と推奨される対処方法をまとめたものです。
 
 **作成日**: 2025-10-18
 **最終更新**: 2025-10-18
@@ -79,7 +79,7 @@ let Q_eV_per_m3s = Q_MW * 6.2415090744e24  // [eV/(m³·s)]
 
 #### Option A: PhysicsConstants に変換係数を追加（推奨）
 
-**Sources/TORAXPhysics/PhysicsConstants.swift に追加**:
+**Sources/GotenxPhysics/PhysicsConstants.swift に追加**:
 ```swift
 // MARK: - Power Density Conversions
 
@@ -121,7 +121,7 @@ let sourceCell = PhysicsConstants.megawattsToEvDensity(sources.ionHeating.value)
 
 **単体テスト追加**:
 ```swift
-// Tests/TORAXTests/Solver/Block1DCoeffsBuilderTests.swift に追加
+// Tests/GotenxTests/Solver/Block1DCoeffsBuilderTests.swift に追加
 
 @Test("Source term unit conversion is correct")
 func testSourceTermUnitConversion() throws {
@@ -314,7 +314,7 @@ ne_min = 1e20 × (1 - 0.9) = 1e19 m⁻³
 
 **必要な更新**:
 ```swift
-// Tests/TORAXTests/Solver/Block1DCoeffsBuilderTests.swift:176
+// Tests/GotenxTests/Solver/Block1DCoeffsBuilderTests.swift:176
 // Update expected floor value
 let densityFloor: Float = 1e19  // Updated from 1e18
 ```

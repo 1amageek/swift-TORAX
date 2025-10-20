@@ -1,4 +1,4 @@
-# swift-TORAX
+# swift-Gotenx
 
 A Swift implementation of Google DeepMind's [TORAX](https://github.com/google-deepmind/torax) tokamak core transport simulator, optimized for Apple Silicon using MLX-Swift. This differentiable, GPU-accelerated simulator solves coupled nonlinear PDEs describing fusion plasma transport in tokamaks.
 
@@ -24,12 +24,12 @@ A Swift implementation of Google DeepMind's [TORAX](https://github.com/google-de
 - Newton-Raphson solver with auto-differentiation
 - Geometry system (circular tokamak)
 - Configuration system (JSON loading and validation)
-- CLI executable (TORAXCLI)
+- CLI executable (GotenxCLI)
 - Actor-based orchestration
 - High-precision time accumulation (Double)
 - Conservation law enforcement
 
-✅ **Physics Models** (TORAXPhysics):
+✅ **Physics Models** (GotenxPhysics):
 - Fusion power (Bosch-Hale reactivity)
 - Ohmic heating
 - Ion-electron energy exchange
@@ -62,15 +62,15 @@ A Swift implementation of Google DeepMind's [TORAX](https://github.com/google-de
 
 **Optional**:
 - **ncdump** (part of NetCDF tools) for inspecting NetCDF output
-- **Python 3.11+** with original TORAX for comparison
+- **Python 3.11+** with Google DeepMind's TORAX for comparison
 
 ## Quick Start
 
 ### Installation
 
 ```bash
-git clone https://github.com/yourusername/swift-TORAX.git
-cd swift-TORAX
+git clone https://github.com/yourusername/swift-Gotenx.git
+cd swift-Gotenx
 swift build -c release
 ```
 
@@ -78,25 +78,25 @@ swift build -c release
 
 ```bash
 # Run with example configuration
-.build/release/TORAXCLI run \
+.build/release/GotenxCLI run \
   --config examples/Configurations/minimal.json \
-  --output-dir /tmp/torax_results \
+  --output-dir /tmp/gotenx_results \
   --output-format netcdf \
   --log-progress
 
 # Or install globally
 swift package experimental-install -c release
-torax run --config examples/Configurations/iter_like.json
+gotenx run --config examples/Configurations/iter_like.json
 ```
 
 ### Inspect Results
 
 ```bash
 # NetCDF output (recommended for scientific workflows)
-ncdump -h /tmp/torax_results/state_history_*.nc
+ncdump -h /tmp/gotenx_results/state_history_*.nc
 
 # JSON output (human-readable)
-cat /tmp/torax_results/state_history_*.json | jq .
+cat /tmp/gotenx_results/state_history_*.json | jq .
 ```
 
 ### Run Tests
@@ -106,9 +106,9 @@ cat /tmp/torax_results/state_history_*.json | jq .
 swift test
 
 # Run specific test suite
-swift test --filter TORAXTests
-swift test --filter TORAXPhysicsTests
-swift test --filter TORAXCLITests
+swift test --filter GotenxTests
+swift test --filter GotenxPhysicsTests
+swift test --filter GotenxCLITests
 
 # Verbose output
 swift test -v
@@ -117,9 +117,9 @@ swift test -v
 ## Repository Structure
 
 ```
-swift-TORAX/
+swift-Gotenx/
 ├── Sources/
-│   ├── TORAX/                      # Core library
+│   ├── Gotenx/                      # Core library
 │   │   ├── Configuration/          # Config loaders and validation
 │   │   ├── Conservation/           # Conservation law enforcement
 │   │   ├── Core/                   # CoreProfiles, EvaluatedArray, Geometry
@@ -133,22 +133,22 @@ swift-TORAX/
 │   │   ├── Transport/              # Transport model implementations
 │   │   └── Utilities/              # Helper utilities
 │   │
-│   ├── TORAXPhysics/               # Physics models (separate module)
+│   ├── GotenxPhysics/               # Physics models (separate module)
 │   │   ├── Heating/                # FusionPower, OhmicHeating, IonElectronExchange
 │   │   ├── Radiation/              # Bremsstrahlung
 │   │   ├── Neoclassical/           # SauterBootstrapModel
 │   │   └── Utilities/              # PhysicsConstants, PhysicsError
 │   │
-│   └── TORAXCLI/                   # CLI executable
+│   └── GotenxCLI/                   # CLI executable
 │       ├── Commands/               # RunCommand, PlotCommand, InteractiveMenu
 │       ├── Configuration/          # EnvironmentConfig
 │       ├── Output/                 # ProgressLogger, OutputWriter
 │       └── Utilities/              # DisplayUnits
 │
 ├── Tests/
-│   ├── TORAXTests/                 # Core library tests
-│   ├── TORAXPhysicsTests/          # Physics model tests
-│   └── TORAXCLITests/              # CLI tests
+│   ├── GotenxTests/                 # Core library tests
+│   ├── GotenxPhysicsTests/          # Physics model tests
+│   └── GotenxCLITests/              # CLI tests
 │
 ├── examples/
 │   └── Configurations/             # Example JSON configurations
@@ -161,29 +161,29 @@ swift-TORAX/
 
 ## CLI Usage
 
-The `torax` CLI provides commands for running simulations:
+The `gotenx` CLI provides commands for running simulations:
 
 ```bash
 # Get help
-torax --help
-torax run --help
+gotenx --help
+gotenx run --help
 
 # Run simulation with NetCDF output
-torax run \
+gotenx run \
   --config examples/Configurations/minimal.json \
   --output-dir ./results \
   --output-format netcdf \
   --log-progress
 
 # Run with debugging
-torax run \
+gotenx run \
   --config config.json \
   --no-compile \
   --enable-errors \
   --log-output
 
 # Quit immediately after completion (for scripts)
-torax run --config config.json --quit
+gotenx run --config config.json --quit
 ```
 
 ### Configuration Files
@@ -229,7 +229,7 @@ Configurations use JSON format with nested structure:
     "initialDt": 1e-5
   },
   "output": {
-    "directory": "/tmp/torax_results",
+    "directory": "/tmp/gotenx_results",
     "format": "netcdf"
   }
 }
@@ -262,7 +262,7 @@ Human-readable format for quick inspection and debugging.
 
 ## Unit System
 
-**CRITICAL**: swift-TORAX uses **SI-based units** internally:
+**CRITICAL**: swift-Gotenx uses **SI-based units** internally:
 
 | Quantity | Unit | Symbol | Notes |
 |----------|------|--------|-------|
@@ -281,7 +281,7 @@ See `CLAUDE.md` section "Unit System Standard" for detailed rationale.
 
 ### Numerical Precision (Float32 only)
 
-swift-TORAX uses **Float32** exclusively on GPU (Apple Silicon GPUs don't support Float64):
+swift-Gotenx uses **Float32** exclusively on GPU (Apple Silicon GPUs don't support Float64):
 
 - **Variable scaling** for Newton-Raphson conditioning
 - **High-precision time accumulation** using `Double` (CPU-only, 1 op/timestep)
@@ -355,11 +355,11 @@ All data structures are `Sendable`. `EvaluatedArray` is the only `@unchecked Sen
 ### P2 - Future
 - [ ] MHD models (sawteeth, neoclassical tearing modes)
 - [ ] Core-edge coupling
-- [ ] Benchmark suite vs. original TORAX
+- [ ] Benchmark suite vs. Google DeepMind's TORAX
 - [ ] Performance profiling
 - [ ] HDF5 output (optional, NetCDF is preferred)
 
-See `CLAUDE.md` for detailed roadmap aligned with [TORAX paper (arXiv:2406.06718v2)](https://arxiv.org/abs/2406.06718).
+See `CLAUDE.md` for detailed roadmap aligned with [Google DeepMind's TORAX paper (arXiv:2406.06718v2)](https://arxiv.org/abs/2406.06718).
 
 ## Contributing
 
@@ -374,8 +374,8 @@ MIT License. See `LICENSE` for details.
 
 ## References
 
-- Original TORAX: https://github.com/google-deepmind/torax
-- TORAX Paper: arXiv:2406.06718v2
+- Google DeepMind's TORAX: https://github.com/google-deepmind/torax
+- Google DeepMind's TORAX Paper: arXiv:2406.06718v2
 - MLX-Swift: https://github.com/ml-explore/mlx-swift
 - Swift Numerics: https://github.com/apple/swift-numerics
 - Swift Argument Parser: https://github.com/apple/swift-argument-parser

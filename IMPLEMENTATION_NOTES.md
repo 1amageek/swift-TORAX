@@ -1,6 +1,6 @@
 # Implementation Notes and Design Decisions
 
-This document clarifies design decisions and apparent inconsistencies in the swift-TORAX implementation.
+This document clarifies design decisions and apparent inconsistencies in the swift-Gotenx implementation.
 
 ## 1. Interpolation Methods: Coefficients vs Variables
 
@@ -350,9 +350,9 @@ Legend:
 ## References
 
 ### Related Files
-- `Sources/TORAX/Solver/Block1DCoeffsBuilder.swift` - Coefficient construction
-- `Sources/TORAX/Solver/LinearSolver.swift` - Time stepping and spatial operators
-- `Tests/TORAXTests/Integration/P0IntegrationTest.swift` - Integration test
+- `Sources/Gotenx/Solver/Block1DCoeffsBuilder.swift` - Coefficient construction
+- `Sources/Gotenx/Solver/LinearSolver.swift` - Time stepping and spatial operators
+- `Tests/GotenxTests/Integration/P0IntegrationTest.swift` - Integration test
 - `CLAUDE.md` - High-level architecture and design philosophy
 
 ### External References

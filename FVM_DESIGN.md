@@ -1,4 +1,4 @@
-# FVM Implementation Design for swift-TORAX
+# FVM Implementation Design for swift-Gotenx
 
 **Date**: 2025-10-18
 **Status**: Design Phase
@@ -21,7 +21,7 @@ Analysis of existing FVM implementation reveals **80% completion**. Critical mis
 ### ✅ Completed Components (80%)
 
 #### 1. CellVariable (100%)
-**File**: `Sources/TORAX/FVM/CellVariable.swift` (234 lines)
+**File**: `Sources/Gotenx/FVM/CellVariable.swift` (234 lines)
 
 **Features**:
 - ✅ Cell-centered values with EvaluatedArray
@@ -33,7 +33,7 @@ Analysis of existing FVM implementation reveals **80% completion**. Critical mis
 **Assessment**: **Complete and production-ready**
 
 #### 2. Block1DCoeffs Structure (100%)
-**File**: `Sources/TORAX/Solver/Block1DCoeffs.swift` (208 lines)
+**File**: `Sources/Gotenx/Solver/Block1DCoeffs.swift` (208 lines)
 
 **Features**:
 - ✅ Per-equation coefficients (Ti, Te, ne, psi)
@@ -44,7 +44,7 @@ Analysis of existing FVM implementation reveals **80% completion**. Critical mis
 **Assessment**: **Complete and correct**
 
 #### 3. Coefficient Builder (90%)
-**File**: `Sources/TORAX/Solver/Block1DCoeffsBuilder.swift` (313 lines)
+**File**: `Sources/Gotenx/Solver/Block1DCoeffsBuilder.swift` (313 lines)
 
 **Features**:
 - ✅ Per-equation coefficient construction
@@ -56,7 +56,7 @@ Analysis of existing FVM implementation reveals **80% completion**. Critical mis
 **Assessment**: **Functional but needs power-law scheme**
 
 #### 4. Equation Coefficients (100%)
-**File**: `Sources/TORAX/Solver/EquationCoeffs.swift`
+**File**: `Sources/Gotenx/Solver/EquationCoeffs.swift`
 
 **Features**:
 - ✅ Diffusion coefficients (dFace)
@@ -121,7 +121,7 @@ func computePowerLawWeighting(
 }
 ```
 
-**File to Create**: `Sources/TORAX/FVM/PowerLawScheme.swift`
+**File to Create**: `Sources/Gotenx/FVM/PowerLawScheme.swift`
 
 ---
 
@@ -193,7 +193,7 @@ func assembleMatrix(
 }
 ```
 
-**File to Create**: `Sources/TORAX/FVM/MatrixAssembler.swift`
+**File to Create**: `Sources/Gotenx/FVM/MatrixAssembler.swift`
 
 ---
 
@@ -242,7 +242,7 @@ func computeFluxes(
 }
 ```
 
-**File to Create**: `Sources/TORAX/FVM/FluxCalculation.swift`
+**File to Create**: `Sources/Gotenx/FVM/FluxCalculation.swift`
 
 ---
 
@@ -274,7 +274,7 @@ Rearranged:
 - ✅ NewtonRaphsonSolver: Has theta parameter (needs theta-aware residual)
 - ❌ Residual function: Needs explicit theta discretization
 
-**File to Modify**: `Sources/TORAX/Solver/LinearSolver.swift`, `NewtonRaphsonSolver.swift`
+**File to Modify**: `Sources/Gotenx/Solver/LinearSolver.swift`, `NewtonRaphsonSolver.swift`
 
 ---
 
@@ -294,9 +294,9 @@ Rearranged:
 **Estimated Effort**: 4-6 hours
 
 **Files**:
-- NEW: `Sources/TORAX/FVM/PowerLawScheme.swift`
-- MODIFY: `Sources/TORAX/Solver/Block1DCoeffsBuilder.swift`
-- NEW: `Tests/TORAXTests/FVM/PowerLawSchemeTests.swift`
+- NEW: `Sources/Gotenx/FVM/PowerLawScheme.swift`
+- MODIFY: `Sources/Gotenx/Solver/Block1DCoeffsBuilder.swift`
+- NEW: `Tests/GotenxTests/FVM/PowerLawSchemeTests.swift`
 
 ---
 
@@ -315,8 +315,8 @@ Rearranged:
 **Estimated Effort**: 6-8 hours
 
 **Files**:
-- NEW: `Sources/TORAX/FVM/MatrixAssembler.swift`
-- NEW: `Tests/TORAXTests/FVM/MatrixAssemblerTests.swift`
+- NEW: `Sources/Gotenx/FVM/MatrixAssembler.swift`
+- NEW: `Tests/GotenxTests/FVM/MatrixAssemblerTests.swift`
 
 ---
 
@@ -334,8 +334,8 @@ Rearranged:
 **Estimated Effort**: 3-4 hours
 
 **Files**:
-- NEW: `Sources/TORAX/FVM/FluxCalculation.swift`
-- NEW: `Tests/TORAXTests/FVM/FluxCalculationTests.swift`
+- NEW: `Sources/Gotenx/FVM/FluxCalculation.swift`
+- NEW: `Tests/GotenxTests/FVM/FluxCalculationTests.swift`
 
 ---
 
@@ -352,10 +352,10 @@ Rearranged:
 **Estimated Effort**: 4-5 hours
 
 **Files**:
-- MODIFY: `Sources/TORAX/Solver/LinearSolver.swift`
-- MODIFY: `Sources/TORAX/Solver/NewtonRaphsonSolver.swift`
-- MODIFY: `Sources/TORAX/FVM/MatrixAssembler.swift`
-- NEW: `Tests/TORAXTests/Solver/ThetaMethodTests.swift`
+- MODIFY: `Sources/Gotenx/Solver/LinearSolver.swift`
+- MODIFY: `Sources/Gotenx/Solver/NewtonRaphsonSolver.swift`
+- MODIFY: `Sources/Gotenx/FVM/MatrixAssembler.swift`
+- NEW: `Tests/GotenxTests/Solver/ThetaMethodTests.swift`
 
 ---
 
@@ -373,7 +373,7 @@ Rearranged:
 **Estimated Effort**: 6-8 hours
 
 **Files**:
-- NEW: `Tests/TORAXTests/Integration/FVMIntegrationTests.swift`
+- NEW: `Tests/GotenxTests/Integration/FVMIntegrationTests.swift`
 - NEW: `Benchmarks/FVMBenchmarks.swift`
 
 ---

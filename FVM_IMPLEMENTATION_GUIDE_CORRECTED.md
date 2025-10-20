@@ -1,10 +1,10 @@
-# TORAX Finite Volume Method (FVM) Implementation Guide
+# Gotenx Finite Volume Method (FVM) Implementation Guide
 
 **Version**: 2.0 (Corrected)
 **Date**: 2025-10-18
 **Status**: Verified against actual implementation
 
-This document provides accurate implementation details for TORAX's Finite Volume Method in Swift using MLX, verified against the actual codebase.
+This document provides accurate implementation details for Gotenx's Finite Volume Method in Swift using MLX, verified against the actual codebase.
 
 ---
 
@@ -25,7 +25,7 @@ This document provides accurate implementation details for TORAX's Finite Volume
 
 ## Overview
 
-TORAX uses a **Finite Volume Method (FVM)** for spatial discretization of 1D transport PDEs on a uniform grid in normalized toroidal flux coordinates (ρ̂). The temporal discretization uses the **theta method**, which provides a unified framework for explicit Euler (θ=0), Crank-Nicolson (θ=0.5), and implicit Euler (θ=1) schemes.
+Gotenx uses a **Finite Volume Method (FVM)** for spatial discretization of 1D transport PDEs on a uniform grid in normalized toroidal flux coordinates (ρ̂). The temporal discretization uses the **theta method**, which provides a unified framework for explicit Euler (θ=0), Crank-Nicolson (θ=0.5), and implicit Euler (θ=1) schemes.
 
 ### Generic Conservation Law
 
@@ -44,7 +44,7 @@ Where:
 
 ### Uniform 1D Grid
 
-TORAX divides the domain [0,1] in normalized toroidal flux coordinates (ρ̂) into **N cells**:
+Gotenx divides the domain [0,1] in normalized toroidal flux coordinates (ρ̂) into **N cells**:
 
 ```
 Grid spacing:     dρ̂ = 1/N
@@ -66,7 +66,7 @@ Cell faces:       ρ̂ᵢ₊₁/₂ where i = 0, 1, ..., N
 
 ### Structure Definition
 
-**Source**: `Sources/TORAX/FVM/CellVariable.swift`
+**Source**: `Sources/Gotenx/FVM/CellVariable.swift`
 
 ```swift
 /// Grid variable with boundary conditions for 1D finite volume method
@@ -401,7 +401,7 @@ public func calculateFluxes(
 
 ## Block1DCoeffs Structure
 
-**Source**: `Sources/TORAX/Solver/Block1DCoeffs.swift`
+**Source**: `Sources/Gotenx/Solver/Block1DCoeffs.swift`
 
 ### Actual Structure
 
@@ -621,7 +621,7 @@ let cellVar = CellVariable(
 )
 ```
 
-### Typical TORAX Boundary Conditions
+### Typical Gotenx Boundary Conditions
 
 | Variable | Left (ρ̂=0) | Right (ρ̂=1) |
 |----------|------------|--------------|
@@ -706,6 +706,6 @@ Key points for correct implementation:
 5. **Boundary conditions**: Set via optional Float parameters, validated by precondition
 
 This guide is verified against actual implementation in:
-- `Sources/TORAX/FVM/CellVariable.swift`
-- `Sources/TORAX/Solver/Block1DCoeffs.swift`
-- `Sources/TORAX/Solver/EquationCoeffs.swift`
+- `Sources/Gotenx/FVM/CellVariable.swift`
+- `Sources/Gotenx/Solver/Block1DCoeffs.swift`
+- `Sources/Gotenx/Solver/EquationCoeffs.swift`

@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-This document describes the design of conservation law enforcement and diagnostic systems for swift-TORAX. These features ensure long-term numerical accuracy and provide real-time monitoring of simulation health.
+This document describes the design of conservation law enforcement and diagnostic systems for swift-Gotenx. These features ensure long-term numerical accuracy and provide real-time monitoring of simulation health.
 
 **Key Features**:
 - **Conservation Enforcement**: Automatic correction of numerical drift in conserved quantities
@@ -75,7 +75,7 @@ After 20k steps: N = 0.99 × 10²¹ particles  (1% drift - UNPHYSICAL)
 ### 2.1 Module Structure
 
 ```
-Sources/TORAX/
+Sources/Gotenx/
 ├── Conservation/
 │   ├── ConservationLaw.swift          # Protocol definition
 │   ├── ParticleConservation.swift     # ∫ nₑ dV enforcement
@@ -92,7 +92,7 @@ Sources/TORAX/
 └── Orchestration/
     └── SimulationOrchestrator.swift   # Integration point
 
-Tests/TORAXTests/
+Tests/GotenxTests/
 ├── Conservation/
 │   ├── ParticleConservationTests.swift
 │   ├── EnergyConservationTests.swift
@@ -176,7 +176,7 @@ public struct TransportDiagnostics {
 
 ### 3.1 ConservationLaw Protocol
 
-**File**: `Sources/TORAX/Conservation/ConservationLaw.swift`
+**File**: `Sources/Gotenx/Conservation/ConservationLaw.swift`
 
 **Purpose**: Define interface for all conservation laws.
 
@@ -214,7 +214,7 @@ public struct ConservationResult: Sendable {
 
 ### 3.2 ParticleConservation
 
-**File**: `Sources/TORAX/Conservation/ParticleConservation.swift`
+**File**: `Sources/Gotenx/Conservation/ParticleConservation.swift`
 
 **Physics**: In a closed tokamak (no particle sources at boundaries), total particle number must be constant.
 
@@ -274,7 +274,7 @@ let ne_corrected = ne * correctionFactor
 
 ### 3.3 EnergyConservation
 
-**File**: `Sources/TORAX/Conservation/EnergyConservation.swift`
+**File**: `Sources/Gotenx/Conservation/EnergyConservation.swift`
 
 **Physics**: Total thermal energy (without sources/sinks)
 
@@ -307,7 +307,7 @@ let Ti_corrected = Ti * correctionFactor
 
 ### 3.4 ConservationEnforcer
 
-**File**: `Sources/TORAX/Conservation/ConservationEnforcer.swift`
+**File**: `Sources/Gotenx/Conservation/ConservationEnforcer.swift`
 
 **Purpose**: Orchestrate multiple conservation laws.
 
@@ -350,7 +350,7 @@ public func enforce(
 
 ### 4.1 DiagnosticResult
 
-**File**: `Sources/TORAX/Diagnostics/SimulationDiagnostics.swift`
+**File**: `Sources/Gotenx/Diagnostics/SimulationDiagnostics.swift`
 
 **Purpose**: Standardized format for all diagnostics.
 
@@ -382,7 +382,7 @@ public struct DiagnosticResult: Sendable {
 
 ### 4.2 JacobianDiagnostics
 
-**File**: `Sources/TORAX/Diagnostics/JacobianDiagnostics.swift`
+**File**: `Sources/Gotenx/Diagnostics/JacobianDiagnostics.swift`
 
 **Purpose**: Monitor Jacobian matrix conditioning.
 
@@ -462,7 +462,7 @@ public struct DiagnosticsConfig: Sendable {
 
 ### 4.3 TransportDiagnostics
 
-**File**: `Sources/TORAX/Diagnostics/TransportDiagnostics.swift`
+**File**: `Sources/Gotenx/Diagnostics/TransportDiagnostics.swift`
 
 **Purpose**: Validate transport coefficients.
 
@@ -503,7 +503,7 @@ let chiIon_max = chiIon.max().item(Float.self)
 
 ### 4.4 ConservationDiagnostics
 
-**File**: `Sources/TORAX/Diagnostics/ConservationDiagnostics.swift`
+**File**: `Sources/Gotenx/Diagnostics/ConservationDiagnostics.swift`
 
 **Purpose**: Monitor conservation drift (passive monitoring, no enforcement).
 
@@ -536,7 +536,7 @@ public static func diagnoseConservation(
 
 ### 4.5 DiagnosticsReport
 
-**File**: `Sources/TORAX/Diagnostics/DiagnosticsReport.swift`
+**File**: `Sources/Gotenx/Diagnostics/DiagnosticsReport.swift`
 
 **Purpose**: Aggregate all diagnostics for post-simulation analysis.
 
@@ -630,7 +630,7 @@ Critical Issues:
 
 ### 5.1 Modified Architecture
 
-**File**: `Sources/TORAX/Orchestration/SimulationOrchestrator.swift`
+**File**: `Sources/Gotenx/Orchestration/SimulationOrchestrator.swift`
 
 **New Properties**:
 ```swift
@@ -953,7 +953,7 @@ func testConservationOverhead() async throws {
 ### Phase 1: Conservation Module (Day 1 - 4 hours)
 
 **Tasks**:
-1. ✅ Create `Sources/TORAX/Conservation/` directory
+1. ✅ Create `Sources/Gotenx/Conservation/` directory
 2. ✅ Implement `ConservationLaw.swift` protocol
 3. ✅ Implement `ParticleConservation.swift`
 4. ✅ Implement `EnergyConservation.swift`
@@ -968,7 +968,7 @@ func testConservationOverhead() async throws {
 ### Phase 2: Diagnostics Module (Day 1 - 3 hours)
 
 **Tasks**:
-1. ✅ Create `Sources/TORAX/Diagnostics/` directory
+1. ✅ Create `Sources/Gotenx/Diagnostics/` directory
 2. ✅ Implement `SimulationDiagnostics.swift` (base)
 3. ✅ Implement `JacobianDiagnostics.swift`
 4. ✅ Implement `TransportDiagnostics.swift`
@@ -1015,7 +1015,7 @@ func testConservationOverhead() async throws {
 ### Example 1: Enable Particle Conservation
 
 ```swift
-import TORAX
+import Gotenx
 
 let config = try SimulationConfig.loadFromJSON("iter_baseline.json")
 let orchestrator = SimulationOrchestrator(config: config)
@@ -1148,9 +1148,9 @@ if kappa > 1e7 {
 - Higham, N. "Accuracy and Stability of Numerical Algorithms" (2002)
 - Trefethen, L. "Numerical Linear Algebra" (1997)
 
-### TORAX Documentation
-- TORAX Paper: arXiv:2406.06718v2
-- Original Python TORAX: https://github.com/google-deepmind/torax
+### Google DeepMind's TORAX Documentation
+- Google DeepMind's TORAX Paper: arXiv:2406.06718v2
+- Google DeepMind's TORAX: https://github.com/google-deepmind/torax
 
 ---
 
@@ -1301,7 +1301,7 @@ Where:
 - v = flow velocity
 - F = forces (pressure gradient, electromagnetic)
 
-**Note**: Flow velocity not yet evolved in swift-TORAX v0.1
+**Note**: Flow velocity not yet evolved in swift-Gotenx v0.1
 
 ---
 

@@ -976,7 +976,7 @@ struct QLKNNConfig: ModelSpecificConfig {
 **Implementation**:
 
 ```swift
-// Sources/TORAX/Configuration/TransportConfig.swift
+// Sources/Gotenx/Configuration/TransportConfig.swift
 
 public struct TransportConfig: Codable, Sendable, Equatable {
     public let modelType: String

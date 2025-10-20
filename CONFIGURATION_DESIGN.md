@@ -85,7 +85,7 @@ SimulationConfiguration (root)
 
 ```
 Sources/
-├── TORAX/
+├── Gotenx/
 │   └── Configuration/
 │       ├── SimulationConfiguration.swift      # Root configuration
 │       ├── RuntimeConfiguration.swift         # Runtime parameters
@@ -96,7 +96,7 @@ Sources/
 │       ├── NumericsConfiguration.swift        # Solver config
 │       └── ConfigurationValidator.swift       # Validation logic
 │
-└── torax-cli/
+└── gotenx-cli/
     ├── Configuration/
     │   ├── ConfigReaderFactory.swift          # ConfigReader creation
     │   ├── EnvironmentConfig.swift            # (existing)
@@ -111,13 +111,13 @@ Sources/
 ### 1. Root Configuration
 
 ```swift
-// Sources/TORAX/Configuration/SimulationConfiguration.swift
+// Sources/Gotenx/Configuration/SimulationConfiguration.swift
 
 import Foundation
 
 /// Root simulation configuration
 ///
-/// This structure represents the complete configuration for a TORAX simulation,
+/// This structure represents the complete configuration for a Gotenx simulation,
 /// loaded from JSON files and overridable via environment variables or CLI arguments.
 public struct SimulationConfiguration: Codable, Sendable {
     /// Runtime parameters (static + dynamic)
@@ -164,7 +164,7 @@ public struct SimulationConfiguration: Codable, Sendable {
 ### 2. Runtime Configuration (Static vs Dynamic)
 
 ```swift
-// Sources/TORAX/Configuration/RuntimeConfiguration.swift
+// Sources/Gotenx/Configuration/RuntimeConfiguration.swift
 
 import Foundation
 
@@ -354,7 +354,7 @@ public struct BoundaryConditionConfig: Codable, Sendable {
 ### 3. Transport, Source, Geometry Configurations
 
 ```swift
-// Sources/TORAX/Configuration/TransportConfiguration.swift
+// Sources/Gotenx/Configuration/TransportConfiguration.swift
 
 public struct TransportConfiguration: Codable, Sendable {
     /// Transport model type: "constant", "bohm-gyrobohm", "qlknn"
@@ -369,7 +369,7 @@ public struct TransportConfiguration: Codable, Sendable {
     }
 }
 
-// Sources/TORAX/Configuration/SourceConfiguration.swift
+// Sources/Gotenx/Configuration/SourceConfiguration.swift
 
 public struct SourceConfiguration: Codable, Sendable {
     /// Heating sources
@@ -418,7 +418,7 @@ public struct HeatingConfig: Codable, Sendable {
     }
 }
 
-// Sources/TORAX/Configuration/GeometryConfiguration.swift
+// Sources/Gotenx/Configuration/GeometryConfiguration.swift
 
 public struct GeometryConfiguration: Codable, Sendable {
     /// Geometry type: "circular", "shaped"
@@ -433,7 +433,7 @@ public struct GeometryConfiguration: Codable, Sendable {
     }
 }
 
-// Sources/TORAX/Configuration/TimeConfiguration.swift
+// Sources/Gotenx/Configuration/TimeConfiguration.swift
 
 public struct TimeConfiguration: Codable, Sendable {
     /// Initial time [s]
@@ -472,12 +472,12 @@ public struct TimeConfiguration: Codable, Sendable {
 ### ConfigReader Factory
 
 ```swift
-// Sources/torax-cli/Configuration/ConfigReaderFactory.swift
+// Sources/gotenx-cli/Configuration/ConfigReaderFactory.swift
 
 import Configuration
 import Foundation
 
-/// Factory for creating ConfigReader with TORAX provider hierarchy
+/// Factory for creating ConfigReader with Gotenx provider hierarchy
 struct ConfigReaderFactory {
     /// Create ConfigReader with standard TORAX provider hierarchy
     ///
@@ -494,8 +494,8 @@ struct ConfigReaderFactory {
         // Priority 1: Command line arguments
         providers.append(CommandLineArgumentsProvider())
 
-        // Priority 2: Environment variables with TORAX_ prefix
-        providers.append(EnvironmentVariablesProvider(prefix: "TORAX_"))
+        // Priority 2: Environment variables with GOTENX_ prefix
+        providers.append(EnvironmentVariablesProvider(prefix: "GOTENX_"))
 
         // Priority 3: JSON file (reloadable for interactive mode)
         let jsonProvider = try await ReloadingJSONProvider(path: configPath)
@@ -509,11 +509,11 @@ struct ConfigReaderFactory {
 ### Configuration Loader
 
 ```swift
-// Sources/torax-cli/Configuration/ConfigurationLoader.swift
+// Sources/gotenx-cli/Configuration/ConfigurationLoader.swift
 
 import Configuration
 import Foundation
-import TORAX
+import Gotenx
 
 /// Configuration loader with validation
 struct ConfigurationLoader {
@@ -549,7 +549,7 @@ struct ConfigurationLoader {
 ### Modified RunCommand
 
 ```swift
-// Sources/torax-cli/Commands/RunCommand.swift (key changes)
+// Sources/gotenx-cli/Commands/RunCommand.swift (key changes)
 
 struct RunCommand: AsyncParsableCommand {
     // ... existing options ...
@@ -635,7 +635,7 @@ struct RunCommand: AsyncParsableCommand {
 ### Modified InteractiveMenu with Reload
 
 ```swift
-// Sources/torax-cli/Commands/InteractiveMenu.swift (key changes)
+// Sources/gotenx-cli/Commands/InteractiveMenu.swift (key changes)
 
 struct InteractiveMenu {
     let logger: ProgressLogger
@@ -784,7 +784,7 @@ struct InteractiveMenu {
 torax run --config examples/basic.json
 
 # Override via environment variable
-export TORAX_RUNTIME_STATIC_MESH_NCELLS=200
+export GOTENX_RUNTIME_STATIC_MESH_NCELLS=200
 torax run --config examples/basic.json
 
 # Override via CLI argument
@@ -840,4 +840,4 @@ torax run --config examples/basic.json --log-progress
 3. **Hot Reload**: Change dynamic params without recompilation
 4. **Validation**: Centralized validation logic
 5. **Testability**: Easy to mock configurations in tests
-6. **TORAX Compatibility**: Mirrors original TORAX structure
+6. **Gotenx Compatibility**: Mirrors original TORAX structure

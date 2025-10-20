@@ -70,7 +70,7 @@ PowerBalance (新規構造体)
 #### 1. SourceCategory列挙型（新規）
 
 ```swift
-// Sources/TORAX/Sources/SourceCategory.swift
+// Sources/Gotenx/Sources/SourceCategory.swift
 
 /// Source categorization for power balance tracking
 ///
@@ -135,7 +135,7 @@ public enum SourceCategory: String, Sendable, Codable {
 #### 2. SourceMetadata構造体（新規）
 
 ```swift
-// Sources/TORAX/Sources/SourceMetadata.swift
+// Sources/Gotenx/Sources/SourceMetadata.swift
 
 /// Metadata for source term tracking
 ///
@@ -185,7 +185,7 @@ public struct SourceMetadata: Sendable, Equatable {
 #### 3. SourceTerms拡張（後方互換）
 
 ```swift
-// Sources/TORAX/Core/SourceTerms.swift
+// Sources/Gotenx/Core/SourceTerms.swift
 
 public struct SourceTerms: Sendable, Equatable {
     // 既存フィールド（変更なし）
@@ -220,7 +220,7 @@ public struct SourceTerms: Sendable, Equatable {
 #### 4. PowerBalance構造体（新規）
 
 ```swift
-// Sources/TORAX/Diagnostics/PowerBalance.swift
+// Sources/Gotenx/Diagnostics/PowerBalance.swift
 
 /// Detailed power balance components
 ///
@@ -287,7 +287,7 @@ public struct PowerBalance: Sendable, Codable, Equatable {
 #### Phase 4.1: SourceModel Protocol拡張（オプショナル）
 
 ```swift
-// Sources/TORAX/Sources/SourceModel.swift
+// Sources/Gotenx/Sources/SourceModel.swift
 
 public protocol SourceModel: Sendable {
     var name: String { get }
@@ -315,7 +315,7 @@ extension SourceModel {
 #### Phase 4.2: 個別SourceModelにcategory追加
 
 ```swift
-// Sources/TORAXPhysics/Sources/FusionPower.swift
+// Sources/GotenxPhysics/Sources/FusionPower.swift
 
 public struct FusionPower: SourceModel {
     public let name = "fusion"
@@ -362,7 +362,7 @@ public struct FusionPower: SourceModel {
 #### Phase 4.3: PowerBalanceComputer実装
 
 ```swift
-// Sources/TORAX/Diagnostics/PowerBalanceComputer.swift
+// Sources/Gotenx/Diagnostics/PowerBalanceComputer.swift
 
 public enum PowerBalanceComputer {
 
@@ -456,7 +456,7 @@ public enum PowerBalanceComputer {
 #### Phase 4.4: DerivedQuantitiesComputer統合
 
 ```swift
-// Sources/TORAX/Diagnostics/DerivedQuantitiesComputer.swift
+// Sources/Gotenx/Diagnostics/DerivedQuantitiesComputer.swift
 
 private static func computePowerBalance(
     sources: SourceTerms?,
@@ -562,7 +562,7 @@ CurrentMetrics (拡張)
 #### 1. CurrentMetrics拡張
 
 ```swift
-// Sources/TORAX/Diagnostics/CurrentMetrics.swift (新規)
+// Sources/Gotenx/Diagnostics/CurrentMetrics.swift (新規)
 
 /// Current density metrics
 ///
@@ -626,7 +626,7 @@ public struct CurrentMetrics: Sendable, Codable, Equatable {
 #### 2. CurrentDensityIntegrator実装
 
 ```swift
-// Sources/TORAX/Diagnostics/CurrentDensityIntegrator.swift (新規)
+// Sources/Gotenx/Diagnostics/CurrentDensityIntegrator.swift (新規)
 
 public enum CurrentDensityIntegrator {
 
@@ -775,7 +775,7 @@ public enum CurrentDensityIntegrator {
 #### 3. DerivedQuantitiesComputer統合
 
 ```swift
-// Sources/TORAX/Diagnostics/DerivedQuantitiesComputer.swift
+// Sources/Gotenx/Diagnostics/DerivedQuantitiesComputer.swift
 
 private static func computeCurrentMetrics(
     profiles: CoreProfiles,
@@ -822,7 +822,7 @@ private static func estimateCurrentGeometric(
 ### テスト戦略
 
 ```swift
-// Tests/TORAXTests/Diagnostics/CurrentDensityIntegratorTests.swift
+// Tests/GotenxTests/Diagnostics/CurrentDensityIntegratorTests.swift
 
 @Test("Flat current profile integration")
 func testFlatCurrentProfile() {
@@ -934,7 +934,7 @@ NumericalDiagnostics
 #### 1. CFLMetrics構造体（新規）
 
 ```swift
-// Sources/TORAX/Diagnostics/CFLMetrics.swift (新規)
+// Sources/Gotenx/Diagnostics/CFLMetrics.swift (新規)
 
 /// CFL stability metrics
 ///
@@ -986,7 +986,7 @@ public struct CFLMetrics: Sendable, Equatable {
 #### 2. CFLComputer実装
 
 ```swift
-// Sources/TORAX/Diagnostics/CFLComputer.swift (新規)
+// Sources/Gotenx/Diagnostics/CFLComputer.swift (新規)
 
 public enum CFLComputer {
 
@@ -1058,7 +1058,7 @@ public enum CFLComputer {
 #### 3. NumericalDiagnostics拡張
 
 ```swift
-// Sources/TORAX/Solver/NumericalDiagnostics.swift
+// Sources/Gotenx/Solver/NumericalDiagnostics.swift
 
 public struct NumericalDiagnostics: Sendable, Codable, Equatable {
     // 既存フィールド（変更なし）
@@ -1095,7 +1095,7 @@ public struct NumericalDiagnostics: Sendable, Codable, Equatable {
 #### 4. SimulationOrchestrator統合
 
 ```swift
-// Sources/TORAX/Orchestration/SimulationOrchestrator.swift
+// Sources/Gotenx/Orchestration/SimulationOrchestrator.swift
 
 private func updateStateWithDiagnostics(stepWallTime: Float) {
     var derived: DerivedQuantities? = nil
@@ -1169,7 +1169,7 @@ private func checkCFLStability(_ metrics: CFLMetrics) {
 ### テスト戦略
 
 ```swift
-// Tests/TORAXTests/Diagnostics/CFLComputerTests.swift
+// Tests/GotenxTests/Diagnostics/CFLComputerTests.swift
 
 @Test("CFL computation with typical transport coefficients")
 func testCFLComputation() {
@@ -1361,4 +1361,4 @@ Phase 4では、Phase 3で残された3つのTODO項目を完全に実装しま�
 - MHD解析への対応
 - 融合性能評価の信頼性向上
 
-これにより、swift-TORAXは研究グレードの精度と信頼性を獲得します。
+これにより、swift-Gotenxは研究グレードの精度と信頼性を獲得します。

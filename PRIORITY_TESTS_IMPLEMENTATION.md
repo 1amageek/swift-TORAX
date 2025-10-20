@@ -12,7 +12,7 @@ Following the detailed code review that confirmed all logic is correct, we imple
 
 ## Tests Implemented
 
-### File: `Tests/TORAXTests/Configuration/ConfigurationPriorityTests.swift`
+### File: `Tests/GotenxTests/Configuration/ConfigurationPriorityTests.swift`
 
 **Total Test Cases**: 11
 

@@ -1,4 +1,4 @@
-# TORAX Finite Volume Method (FVM) Implementation Guide
+# Gotenx Finite Volume Method (FVM) Implementation Guide
 
 This document provides comprehensive details for implementing TORAX's Finite Volume Method in Swift using MLX, based on research from the arXiv paper (arXiv:2406.06718v2) and the original TORAX codebase.
 

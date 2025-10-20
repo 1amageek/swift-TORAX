@@ -5,7 +5,7 @@
 
 ## Overview
 
-Completely migrated swift-TORAX to use **apple/swift-configuration** for hierarchical, type-safe configuration management. This replaces the previous manual configuration loading system with a production-ready framework that supports CLI arguments, environment variables, JSON files, and default values with clear override priority.
+Completely migrated swift-Gotenx to use **apple/swift-configuration** for hierarchical, type-safe configuration management. This replaces the previous manual configuration loading system with a production-ready framework that supports CLI arguments, environment variables, JSON files, and default values with clear override priority.
 
 ---
 
@@ -13,18 +13,18 @@ Completely migrated swift-TORAX to use **apple/swift-configuration** for hierarc
 
 ### 1. Core Infrastructure
 
-#### **ToraxConfigReader** (`Sources/TORAXCLI/Configuration/ToraxConfigReader.swift`)
+#### **GotenxConfigReader** (`Sources/GotenxCLI/Configuration/GotenxConfigReader.swift`)
 
 New actor-based configuration reader wrapping swift-configuration's `ConfigReader`:
 
 ```swift
-public actor ToraxConfigReader {
+public actor GotenxConfigReader {
     private let configReader: ConfigReader
 
     public static func create(
         jsonPath: String,
         cliOverrides: [String: String] = [:]
-    ) async throws -> ToraxConfigReader
+    ) async throws -> GotenxConfigReader
 
     public func fetchConfiguration() async throws -> SimulationConfiguration
 }
@@ -50,9 +50,9 @@ public actor ToraxConfigReader {
 
 ### 2. CLI Integration
 
-#### **RunCommand Updates** (`Sources/TORAXCLI/Commands/RunCommand.swift`)
+#### **RunCommand Updates** (`Sources/GotenxCLI/Commands/RunCommand.swift`)
 
-Replaced manual configuration loading with `ToraxConfigReader`:
+Replaced manual configuration loading with `GotenxConfigReader`:
 
 ```swift
 private func loadConfiguration(from path: String) async throws -> SimulationConfiguration {
@@ -63,7 +63,7 @@ private func loadConfiguration(from path: String) async throws -> SimulationConf
     }
     // ... more overrides
 
-    let configReader = try await ToraxConfigReader.create(
+    let configReader = try await GotenxConfigReader.create(
         jsonPath: path,
         cliOverrides: cliOverrides
     )
@@ -78,7 +78,7 @@ private func loadConfiguration(from path: String) async throws -> SimulationConf
 - Type-safe hierarchical key mapping
 - Reduced boilerplate code
 
-#### **InteractiveMenu Updates** (`Sources/TORAXCLI/Commands/InteractiveMenu.swift`)
+#### **InteractiveMenu Updates** (`Sources/GotenxCLI/Commands/InteractiveMenu.swift`)
 
 Fixed Builder pattern usage for configuration modifications:
 
@@ -89,7 +89,7 @@ Fixed Builder pattern usage for configuration modifications:
 
 ### 3. Compilation Cache
 
-#### **CompilationCache** (`Sources/TORAX/Compilation/CompilationCache.swift`)
+#### **CompilationCache** (`Sources/Gotenx/Compilation/CompilationCache.swift`)
 
 Memory-only MLX compilation cache for performance:
 
@@ -108,7 +108,7 @@ public actor CompilationCache {
 
 ### 4. Checkpoint System
 
-#### **SimulationCheckpoint** (`Sources/TORAX/IO/SimulationCheckpoint.swift`)
+#### **SimulationCheckpoint** (`Sources/Gotenx/IO/SimulationCheckpoint.swift`)
 
 Structure for NetCDF-based simulation restart:
 
@@ -136,7 +136,7 @@ public struct SimulationCheckpoint {
 Added comprehensive **Configuration System Architecture** section:
 
 - Hierarchical configuration priority explanation
-- `ToraxConfigReader` implementation details
+- `GotenxConfigReader` implementation details
 - Configuration structure diagrams
 - CLI integration patterns
 - Type conversion examples
@@ -159,21 +159,21 @@ Build complete! (0.11s)
 ```
 
 **Files Modified**:
-- `Sources/TORAXCLI/Configuration/ToraxConfigReader.swift` (new)
-- `Sources/TORAXCLI/Commands/RunCommand.swift`
-- `Sources/TORAXCLI/Commands/InteractiveMenu.swift`
-- `Sources/TORAX/Configuration/RestartConfig.swift` (new)
-- `Sources/TORAX/Configuration/MHDConfig.swift` (new)
-- `Sources/TORAX/Configuration/DynamicConfig.swift`
-- `Sources/TORAX/Configuration/SimulationConfiguration.swift`
-- `Sources/TORAX/Configuration/ConfigurationLoader.swift`
-- `Sources/TORAX/IO/SimulationCheckpoint.swift` (new)
-- `Sources/TORAX/Compilation/CompilationCache.swift` (new)
-- `Sources/TORAX/Physics/MHD/SawtoothModel.swift` (new)
+- `Sources/GotenxCLI/Configuration/GotenxConfigReader.swift` (new)
+- `Sources/GotenxCLI/Commands/RunCommand.swift`
+- `Sources/GotenxCLI/Commands/InteractiveMenu.swift`
+- `Sources/Gotenx/Configuration/RestartConfig.swift` (new)
+- `Sources/Gotenx/Configuration/MHDConfig.swift` (new)
+- `Sources/Gotenx/Configuration/DynamicConfig.swift`
+- `Sources/Gotenx/Configuration/SimulationConfiguration.swift`
+- `Sources/Gotenx/Configuration/ConfigurationLoader.swift`
+- `Sources/Gotenx/IO/SimulationCheckpoint.swift` (new)
+- `Sources/Gotenx/Compilation/CompilationCache.swift` (new)
+- `Sources/Gotenx/Physics/MHD/SawtoothModel.swift` (new)
 - `CLAUDE.md`
 
 **Tests Created**:
-- `Tests/TORAXTests/Configuration/ToraxConfigReaderTests.swift` (comprehensive integration tests)
+- `Tests/GotenxTests/Configuration/GotenxConfigReaderTests.swift` (comprehensive integration tests)
 
 ---
 
@@ -227,9 +227,9 @@ let jsonProvider = try await JSONProvider(filePath: FilePath(jsonPath))
 **Challenge**: `ConfigReader` doesn't have a `reload()` method
 
 **Solution**:
-- Deprecated `ToraxConfigReader.reload()` method
+- Deprecated `GotenxConfigReader.reload()` method
 - Use `ReloadingJSONProvider` for automatic reload (future enhancement)
-- Or create new `ToraxConfigReader` instance for manual reload
+- Or create new `GotenxConfigReader` instance for manual reload
 
 ### 5. Builder Pattern Immutability
 
@@ -278,7 +278,7 @@ builder.time.adaptive = currentConfig.time.adaptive
 ### 1. Basic Simulation Run
 
 ```bash
-swift run TORAXCLI run \
+swift run GotenxCLI run \
   --config Examples/Configurations/minimal.json \
   --quit
 ```
@@ -286,7 +286,7 @@ swift run TORAXCLI run \
 ### 2. CLI Overrides
 
 ```bash
-swift run TORAXCLI run \
+swift run GotenxCLI run \
   --config Examples/Configurations/minimal.json \
   --mesh-ncells 200 \
   --time-end 5.0 \
@@ -296,11 +296,11 @@ swift run TORAXCLI run \
 ### 3. Environment Variables
 
 ```bash
-export TORAX_MESH_NCELLS=150
-export TORAX_TIME_END=3.0
-export TORAX_OUTPUT_DIR=/scratch/torax_output
+export GOTENX_MESH_NCELLS=150
+export GOTENX_TIME_END=3.0
+export GOTENX_OUTPUT_DIR=/scratch/gotenx_output
 
-swift run TORAXCLI run \
+swift run GotenxCLI run \
   --config Examples/Configurations/minimal.json \
   --quit
 ```
@@ -309,10 +309,10 @@ swift run TORAXCLI run \
 
 ```bash
 # Environment: 150 cells
-export TORAX_MESH_NCELLS=150
+export GOTENX_MESH_NCELLS=150
 
 # CLI: 200 cells (wins)
-swift run TORAXCLI run \
+swift run GotenxCLI run \
   --config Examples/Configurations/minimal.json \
   --mesh-ncells 200 \
   --quit
@@ -330,7 +330,7 @@ swift run TORAXCLI run \
 ⏳ **Integration Tests**: Pending full simulation run
 
 **Test Files**:
-- `Tests/TORAXTests/Configuration/ToraxConfigReaderTests.swift`
+- `Tests/GotenxTests/Configuration/GotenxConfigReaderTests.swift`
 - `test_config_reader.swift` (manual verification)
 
 ---

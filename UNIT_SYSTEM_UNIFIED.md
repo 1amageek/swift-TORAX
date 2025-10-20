@@ -16,7 +16,7 @@ Successfully unified the unit system to **eV/m^-3** throughout the entire codeba
 
 ### 1. DynamicConfig.toProfileConditions() ✅
 
-**File**: `Sources/TORAX/Configuration/DynamicConfig.swift:87-106`
+**File**: `Sources/Gotenx/Configuration/DynamicConfig.swift:87-106`
 
 **Before** (with unit conversion):
 ```swift
@@ -64,7 +64,7 @@ func toProfileConditions() -> ProfileConditions {
 
 ### 2. ProfileConditions Type Definition ✅
 
-**File**: `Sources/TORAX/Configuration/ProfileConditions.swift:22-44`
+**File**: `Sources/Gotenx/Configuration/ProfileConditions.swift:22-44`
 
 **Before**:
 ```swift
@@ -97,7 +97,7 @@ public struct ProfileConditions: Sendable, Codable, Equatable {
 
 ### 3. UnitConversionTests ✅
 
-**File**: `Tests/TORAXTests/Configuration/UnitConversionTests.swift:94-144`
+**File**: `Tests/GotenxTests/Configuration/UnitConversionTests.swift:94-144`
 
 **Before** (expected keV/10^20 m^-3):
 ```swift
@@ -127,7 +127,7 @@ func testProfileConditionsUnits() {
 
 ### 4. CoreProfiles (No Change Required) ✅
 
-**File**: `Sources/TORAX/Core/CoreProfiles.swift:13-19`
+**File**: `Sources/Gotenx/Core/CoreProfiles.swift:13-19`
 
 Already correct:
 ```swift
@@ -147,8 +147,8 @@ public let electronDensity: EvaluatedArray
 ```bash
 $ swift build
 Building for debugging...
-[7/9] Emitting module TORAX
-[9/10] Linking torax
+[7/9] Emitting module Gotenx
+[9/10] Linking Gotenx
 Build complete! (3.11s)
 ```
 
@@ -233,9 +233,9 @@ Physics models expect eV/m^-3 (from PHYSICS_MODELS.md):
 
 ✅ Now ProfileConditions matches physics model expectations
 
-### 4. Consistency with Original TORAX
+### 4. Consistency with Original Gotenx
 
-Python TORAX uses eV/m^-3 as the runtime unit system:
+Python Gotenx uses eV/m^-3 as the runtime unit system:
 - ✅ Alignment with original design
 - ✅ Easier to compare with reference implementation
 
@@ -249,7 +249,7 @@ Python TORAX uses eV/m^-3 as the runtime unit system:
 
 **Verification**:
 ```bash
-$ grep -r "profileConditions\." Sources/TORAX/Orchestration/
+$ grep -r "profileConditions\." Sources/Gotenx/Orchestration/
 # Result: No matches
 ```
 
@@ -301,7 +301,7 @@ All runtime components use these units:
 
 **Rationale**:
 1. Consistency with physics models (eV/m^-3 expected)
-2. Alignment with original TORAX (Python)
+2. Alignment with original Gotenx (Python)
 3. Eliminates conversion overhead
 4. Reduces risk of unit-related bugs
 
@@ -414,7 +414,7 @@ The following items are optional and can be addressed when convenient:
 
 ## Conclusion
 
-The unit system unification for **TORAX core library** is **complete and tested**. The latent inconsistency between ProfileConditions (keV) and CoreProfiles (eV) has been resolved by standardizing on **eV/m^-3** throughout the runtime system.
+The unit system unification for **Gotenx core library** is **complete and tested**. The latent inconsistency between ProfileConditions (keV) and CoreProfiles (eV) has been resolved by standardizing on **eV/m^-3** throughout the runtime system.
 
 **Key Achievement**: Eliminated future risk of 1000× errors when profileConditions is used in the simulation pipeline.
 
@@ -437,10 +437,10 @@ The CLI output and plotting layers have been updated to properly convert interna
 - Added comprehensive test coverage (22 tests)
 
 **Files Modified**:
-- `Sources/torax-cli/Utilities/DisplayUnits.swift` - NEW: Conversion utilities
-- `Sources/torax-cli/Commands/PlotCommand.swift` - Added conversion documentation
-- `Sources/torax-cli/Output/ProgressLogger.swift` - Implemented display scaling
-- `Tests/torax-cliTests/DisplayUnitsTests.swift` - NEW: 22 comprehensive tests
+- `Sources/gotenx-cli/Utilities/DisplayUnits.swift` - NEW: Conversion utilities
+- `Sources/gotenx-cli/Commands/PlotCommand.swift` - Added conversion documentation
+- `Sources/gotenx-cli/Output/ProgressLogger.swift` - Implemented display scaling
+- `Tests/gotenx-cliTests/DisplayUnitsTests.swift` - NEW: 22 comprehensive tests
 
 **Impact**:
 - ✅ Users see correct scaled values (e.g., 1.0 keV instead of 1000.000 keV)
@@ -454,7 +454,7 @@ The CLI output and plotting layers have been updated to properly convert interna
 PedestalOutput struct now correctly documents units as eV/m^-3, consistent with CoreProfiles.
 
 **Files Modified**:
-- `Sources/TORAX/Protocols/PedestalModel.swift:6-21` - Updated PedestalOutput documentation
+- `Sources/Gotenx/Protocols/PedestalModel.swift:6-21` - Updated PedestalOutput documentation
 
 **Impact**:
 - ✅ Future pedestal implementations will use correct units

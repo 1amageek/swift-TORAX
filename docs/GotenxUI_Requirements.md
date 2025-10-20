@@ -26,7 +26,7 @@
 
 ### Purpose
 
-GotenxUI is a Swift Charts-based visualization library for TORAX tokamak plasma simulation data, providing native macOS/iOS/visionOS plotting capabilities with both 2D and 3D visualization modes.
+GotenxUI is a Swift Charts-based visualization library for Gotenx tokamak plasma simulation data, providing native macOS/iOS/visionOS plotting capabilities with both 2D and 3D visualization modes.
 
 ### Goals
 
@@ -35,7 +35,7 @@ GotenxUI is a Swift Charts-based visualization library for TORAX tokamak plasma 
 - **Multi-dimensional**: Support both 2D profiles and 3D volumetric visualization
 - **Platform Adaptive**: Automatically use best visualization for each platform
 - **Modularity**: Reusable components for custom visualizations
-- **TORAX Compatibility**: Match original matplotlib functionality
+- **Gotenx Compatibility**: Match original matplotlib functionality
 
 ### Platform Support Matrix
 
@@ -67,13 +67,13 @@ GotenxUI/
 │
 ├── Views/
 │   ├── 2D/
-│   │   ├── ToraxPlotView.swift           # Main 2D plot view
+│   │   ├── GotenxPlotView.swift           # Main 2D plot view
 │   │   ├── SpatialPlotView.swift         # Spatial profile charts
 │   │   ├── TimeSeriesPlotView.swift      # Time series charts
 │   │   └── TimeSliderView.swift          # Interactive slider
 │   │
 │   ├── 3D/
-│   │   ├── ToraxPlot3DView.swift         # Main 3D plot view
+│   │   ├── GotenxPlot3DView.swift         # Main 3D plot view
 │   │   ├── VolumetricPlotView.swift      # 3D surface/volume rendering
 │   │   ├── IsosurfaceView.swift          # Temperature isosurfaces
 │   │   └── Camera3DController.swift      # Camera manipulation
@@ -100,7 +100,7 @@ GotenxUI/
 ```swift
 // Package.swift
 dependencies: [
-    .target(name: "TORAX"),               // Core simulation data
+    .target(name: "Gotenx"),               // Core simulation data
 ]
 
 // Conditional imports
@@ -511,7 +511,7 @@ extension PlotData {
 
 ### Unit Conversion Strategy
 
-| Quantity | TORAX Internal | Display (2D) | Display (3D) |
+| Quantity | Gotenx Internal | Display (2D) | Display (3D) |
 |----------|---------------|--------------|--------------|
 | Temperature | eV | keV | keV |
 | Density | m⁻³ | 10²⁰ m⁻³ | 10²⁰ m⁻³ |
@@ -658,11 +658,11 @@ PlotConfigurations.magneticSurfaces3D = FigureProperties(
 
 ## User Interface Components
 
-### ToraxPlotView (2D)
+### GotenxPlotView (2D)
 
 ```swift
 @available(macOS 13.0, iOS 16.0, *)
-public struct ToraxPlotView: View {
+public struct GotenxPlotView: View {
     let data: PlotData
     let config: FigureProperties
     let comparisonData: PlotData?
@@ -696,11 +696,11 @@ public struct ToraxPlotView: View {
 }
 ```
 
-### ToraxPlot3DView (3D)
+### GotenxPlot3DView (3D)
 
 ```swift
 @available(visionOS 2.0, macOS 14.0, iOS 17.0, *)
-public struct ToraxPlot3DView: View {
+public struct GotenxPlot3DView: View {
     let data: PlotData3D
     let config: FigureProperties
 
@@ -786,15 +786,15 @@ public struct AdaptivePlotView: View {
         Group {
             #if os(visionOS)
             if displayMode == .auto || displayMode == .force3D {
-                ToraxPlot3DView(
+                GotenxPlot3DView(
                     data: PlotData3D(from: data),
                     config: config
                 )
             } else {
-                ToraxPlotView(data: data, config: config)
+                GotenxPlotView(data: data, config: config)
             }
             #else
-            ToraxPlotView(data: data, config: config)
+            GotenxPlotView(data: data, config: config)
             #endif
         }
         .toolbar {
@@ -820,7 +820,7 @@ public struct AdaptivePlotView: View {
 1. ✅ Package.swift integration (COMPLETE - macOS 26+, iOS 26+, visionOS 26+)
 2. `PlotData` model with unit conversion
 3. `PlotProperties` and `FigureProperties`
-4. Basic `ToraxPlotView` (2D)
+4. Basic `GotenxPlotView` (2D)
 5. Time slider component
 6. `SimplePlotConfig` (2×2 grid)
 
@@ -862,7 +862,7 @@ public struct AdaptivePlotView: View {
 **Deliverables** (when available):
 1. `PlotData3D` model
 2. Cylindrical grid generation from 1D profiles
-3. Basic `ToraxPlot3DView` using `Chart3D`
+3. Basic `GotenxPlot3DView` using `Chart3D`
 4. Camera controller with `Chart3DPose` binding
 5. Point cloud rendering with `PointMark3D`
 
@@ -910,11 +910,11 @@ public enum DisplayMode3D: Sendable
 
 // 2D Views
 @available(macOS 13.0, iOS 16.0, *)
-public struct ToraxPlotView: View
+public struct GotenxPlotView: View
 
 // 3D Views
 @available(visionOS 2.0, macOS 14.0, *)
-public struct ToraxPlot3DView: View
+public struct GotenxPlot3DView: View
 
 // Adaptive Views
 @available(macOS 13.0, iOS 16.0, *)
@@ -939,10 +939,10 @@ import GotenxUI
 import SwiftUI
 
 @main
-struct ToraxApp: App {
+struct GotenxApp: App {
     var body: some Scene {
         WindowGroup {
-            ToraxPlotView(
+            GotenxPlotView(
                 data: PlotData(from: simulationResult),
                 config: PlotConfigurations.default
             )
@@ -960,10 +960,10 @@ import GotenxUI
 import SwiftUI
 
 @main
-struct ToraxApp3D: App {
+struct GotenxApp3D: App {
     var body: some Scene {
         WindowGroup {
-            ToraxPlot3DView(
+            GotenxPlot3DView(
                 data: PlotData3D(from: simulationResult),
                 config: PlotConfigurations.volumetric3D
             )
@@ -978,7 +978,7 @@ struct ToraxApp3D: App {
 
 ```swift
 @main
-struct ToraxAppAdaptive: App {
+struct GotenxAppAdaptive: App {
     var body: some Scene {
         WindowGroup {
             AdaptivePlotView(
@@ -1068,11 +1068,11 @@ struct ToraxAppAdaptive: App {
 
 ## References
 
-1. **TORAX matplotlib**: `torax/_src/plotting/plotruns_lib.py`
+1. **Gotenx matplotlib**: `torax/_src/plotting/plotruns_lib.py`
 2. **Swift Charts**: https://developer.apple.com/documentation/charts
 3. **Chart3D**: https://developer.apple.com/documentation/charts/chart3d
 4. **RealityKit**: https://developer.apple.com/documentation/realitykit
-5. **TORAX paper**: arXiv:2406.06718v2
+5. **Google DeepMind's TORAX paper**: arXiv:2406.06718v2
 
 ---
 

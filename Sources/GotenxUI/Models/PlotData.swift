@@ -1,12 +1,12 @@
 // PlotData.swift
 // 2D simulation data container for plotting
 //
-// Converts TORAX simulation data to display units:
+// Converts Gotenx simulation data to display units:
 // - Temperature: eV → keV
 // - Density: m^-3 → 10^20 m^-3
 
 import Foundation
-import TORAX
+import Gotenx
 
 /// Complete simulation output data for 2D plotting
 public struct PlotData: Sendable {

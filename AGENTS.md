@@ -1,23 +1,23 @@
 # Repository Guidelines
-swift-TORAX is a SwiftPM workspace for a differentiable tokamak transport solver. Use this guide to navigate layout, tooling, and expectations before contributing.
+swift-Gotenx is a SwiftPM workspace for a differentiable tokamak transport solver. Use this guide to navigate layout, tooling, and expectations before contributing.
 
 ## Project Structure & Module Organization
-- `Sources/TORAX/Core`, `Solver`, `Transport`, `Orchestration`, `Configuration` hold runtime pipelines; keep files focused on one concept.
-- `Sources/TORAXPhysics/...` hosts heating, radiation, and neoclassical utilities feeding transport terms.
-- `Tests/TORAXTests/<Area>` mirrors source modules; `Tests/TORAXPhysicsTests` covers physics regressions.
+- `Sources/Gotenx/Core`, `Solver`, `Transport`, `Orchestration`, `Configuration` hold runtime pipelines; keep files focused on one concept.
+- `Sources/GotenxPhysics/...` hosts heating, radiation, and neoclassical utilities feeding transport terms.
+- `Tests/GotenxTests/<Area>` mirrors source modules; `Tests/GotenxPhysicsTests` covers physics regressions.
 - Root docs (`ARCHITECTURE.md`, `SOLVER_IMPLEMENTATION_STRATEGY.md`, `TEST_IMPLEMENTATION_PLAN.md`) capture design intent and planned tests—review before altering APIs.
 
 ## Build, Test & Development Commands
 - `swift package resolve` refreshes dependencies after toolchain changes.
 - `swift build` compiles targets and validates manifests.
 - `swift test` runs the Swift Testing suite; use `swift test --filter CellVariableTests/testFaceValueWithGradConstraint` for focus.
-- `swift run torax-cli --help` exercises the CLI stub when wiring orchestration changes.
+- `swift run gotenx-cli --help` exercises the CLI stub when wiring orchestration changes.
 
 ## Coding Style & Naming Conventions
 - Follow Swift API guidelines: four-space indent, soft 120-col limit, `CamelCase` types, `lowerCamelCase` members.
-- Keep physics constants in `Sources/TORAXPhysics/Utilities/PhysicsConstants.swift` with descriptive names like `bootstrapCurrentDensity`.
+- Keep physics constants in `Sources/GotenxPhysics/Utilities/PhysicsConstants.swift` with descriptive names like `bootstrapCurrentDensity`.
 - Structure large files with `// MARK: -` and document preconditions for `MLXArray` shapes.
-- Prefer value semantics; reserve `actor`s for `Sources/TORAX/Orchestration`.
+- Prefer value semantics; reserve `actor`s for `Sources/Gotenx/Orchestration`.
 
 ## Testing Guidelines
 - Tests use the Swift `Testing` package (`@Test`). Mirror source directories and suffix files `ComponentTests.swift`.

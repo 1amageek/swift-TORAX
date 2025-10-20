@@ -8,13 +8,13 @@
 
 ## Summary
 
-Successfully completed the **full unit system unification** across the entire codebase, including TORAX core library, CLI display layer, and Pedestal API. All components now consistently use **eV/m^-3** internally, with proper **display scaling** for user-facing output.
+Successfully completed the **full unit system unification** across the entire codebase, including Gotenx core library, CLI display layer, and Pedestal API. All components now consistently use **eV/m^-3** internally, with proper **display scaling** for user-facing output.
 
 ---
 
 ## Implementation Summary
 
-### Phase 1: TORAX Core Library (Previously Completed)
+### Phase 1: Gotenx Core Library (Previously Completed)
 
 ✅ **Internal Representation**: eV/m^-3 throughout
 
@@ -48,7 +48,7 @@ Successfully completed the **full unit system unification** across the entire co
 
 ### 1. DisplayUnits.swift
 
-**Path**: `Sources/torax-cli/Utilities/DisplayUnits.swift`
+**Path**: `Sources/gotenx-cli/Utilities/DisplayUnits.swift`
 
 **Purpose**: Centralized display unit conversion utilities
 
@@ -76,7 +76,7 @@ let displayStats = stats.toDisplayUnits()  // Converts eV → keV
 
 ### 2. DisplayUnitsTests.swift
 
-**Path**: `Tests/torax-cliTests/DisplayUnitsTests.swift`
+**Path**: `Tests/gotenx-cliTests/DisplayUnitsTests.swift`
 
 **Coverage**: 22 comprehensive tests
 
@@ -96,7 +96,7 @@ let displayStats = stats.toDisplayUnits()  // Converts eV → keV
 
 ### 1. PlotCommand.swift
 
-**Path**: `Sources/torax-cli/Commands/PlotCommand.swift`
+**Path**: `Sources/gotenx-cli/Commands/PlotCommand.swift`
 
 **Changes**:
 - Added comments to axis labels indicating display units
@@ -124,7 +124,7 @@ ylabel: "Density (10^20 m^-3)",  // Display units (converted from internal m^-3)
 
 ### 2. ProgressLogger.swift
 
-**Path**: `Sources/torax-cli/Output/ProgressLogger.swift`
+**Path**: `Sources/gotenx-cli/Output/ProgressLogger.swift`
 
 **Changes**:
 - Modified `logFinalState()` to apply display conversions
@@ -164,7 +164,7 @@ func logFinalState(_ state: SimulationStateSummary) {
 
 ### 3. PedestalModel.swift
 
-**Path**: `Sources/TORAX/Protocols/PedestalModel.swift`
+**Path**: `Sources/Gotenx/Protocols/PedestalModel.swift`
 
 **Changes**:
 - Updated PedestalOutput documentation
@@ -211,26 +211,26 @@ public struct PedestalOutput: Sendable, Equatable {
 **Path**: `Package.swift`
 
 **Changes**:
-- Added `torax-cliTests` test target
+- Added `gotenx-cliTests` test target
 - Enabled testing for CLI utilities
 
 **Before**:
 ```swift
 .testTarget(
-    name: "TORAXPhysicsTests",
-    dependencies: ["TORAX", "TORAXPhysics"]
+    name: "GotenxPhysicsTests",
+    dependencies: ["Gotenx", "GotenxPhysics"]
 ),
 ```
 
 **After**:
 ```swift
 .testTarget(
-    name: "TORAXPhysicsTests",
-    dependencies: ["TORAX", "TORAXPhysics"]
+    name: "GotenxPhysicsTests",
+    dependencies: ["Gotenx", "GotenxPhysics"]
 ),
 .testTarget(
-    name: "torax-cliTests",
-    dependencies: ["torax-cli"]
+    name: "gotenx-cliTests",
+    dependencies: ["gotenx-cli"]
 ),
 ```
 
@@ -245,8 +245,8 @@ public struct PedestalOutput: Sendable, Equatable {
 ```bash
 $ swift build
 Building for debugging...
-[11/14] Compiling torax_cli DisplayUnits.swift
-[12/14] Linking torax
+[11/14] Compiling gotenx_cli DisplayUnits.swift
+[12/14] Linking Gotenx
 Build complete! (3.80s)
 ```
 
@@ -315,7 +315,7 @@ Test run with 7 tests in 1 suite passed after 0.001 seconds.
 
 **Internal Units** (eV/m^-3):
 - ✅ Consistent with physics models
-- ✅ Alignment with original TORAX (Python)
+- ✅ Alignment with original Gotenx (Python)
 - ✅ Eliminates conversion overhead in computation
 - ✅ Reduces risk of conversion bugs in physics code
 
@@ -360,7 +360,7 @@ Display Output:
 **Problem**: Users saw misleading values
 
 ```bash
-$ torax run config.json
+$ Gotenx run config.json
 ...
 Final State Summary
 ═══════════════════════════════════════════════════
@@ -376,7 +376,7 @@ Ion Temperature (keV):        # ❌ Label says keV
 **Solution**: Users see correctly scaled values
 
 ```bash
-$ torax run config.json
+$ Gotenx run config.json
 ...
 Final State Summary
 ═══════════════════════════════════════════════════
@@ -442,9 +442,9 @@ All documentation has been updated:
 
 ## Conclusion
 
-The unit system unification is **fully complete** across the entire swift-TORAX codebase:
+The unit system unification is **fully complete** across the entire swift-Gotenx codebase:
 
-1. ✅ **TORAX Core Library**: Consistent eV/m^-3 internal representation
+1. ✅ **Gotenx Core Library**: Consistent eV/m^-3 internal representation
 2. ✅ **CLI Display Layer**: Proper keV/10^20 m^-3 display conversion
 3. ✅ **Pedestal API**: Consistent eV/m^-3 (ready for future implementation)
 4. ✅ **Test Coverage**: 29 tests validating both internal and display units
