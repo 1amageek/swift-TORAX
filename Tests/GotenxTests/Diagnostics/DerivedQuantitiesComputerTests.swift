@@ -134,7 +134,7 @@ struct DerivedQuantitiesComputerTests {
 
         // Create mock source terms with heating power and metadata
         let nCells = 10
-        let heatingProfile = [Float](repeating: 1e6, count: nCells)  // 1 MW/m^3
+        let heatingProfile = [Float](repeating: 1.0, count: nCells)  // 1 MW/m³
 
         // Phase 4a: Create metadata for accurate power balance
         let auxiliaryMetadata = SourceMetadata(
@@ -176,7 +176,7 @@ struct DerivedQuantitiesComputerTests {
         let profiles = createFlatProfiles(nCells: 10, Ti: 10000, Te: 10000, ne: 1e20)
 
         // High heating power → lower τE
-        let highHeating = [Float](repeating: 5e6, count: 10)  // 5 MW/m^3
+        let highHeating = [Float](repeating: 5.0, count: 10)  // 5 MW/m³
         let metadataHigh = SourceMetadataCollection(entries: [
             SourceMetadata(
                 modelName: "test_high_heating",
@@ -200,7 +200,7 @@ struct DerivedQuantitiesComputerTests {
         )
 
         // Low heating power → higher τE
-        let lowHeating = [Float](repeating: 1e6, count: 10)  // 1 MW/m^3
+        let lowHeating = [Float](repeating: 1.0, count: 10)  // 1 MW/m³
         let metadataLow = SourceMetadataCollection(entries: [
             SourceMetadata(
                 modelName: "test_low_heating",
@@ -273,8 +273,8 @@ struct DerivedQuantitiesComputerTests {
             )
         ])
         let sources = SourceTerms(
-            ionHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 1e6, count: 10))),
-            electronHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 1e6, count: 10))),
+            ionHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 1.0, count: 10))),  // 1 MW/m³
+            electronHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 1.0, count: 10))),  // 1 MW/m³
             particleSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
             currentSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
             metadata: metadata
@@ -326,8 +326,8 @@ struct DerivedQuantitiesComputerTests {
             )
         ])
         let sources = SourceTerms(
-            ionHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 2e6, count: 10))),
-            electronHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 3e6, count: 10))),
+            ionHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 2.0, count: 10))),  // 2 MW/m³
+            electronHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 3.0, count: 10))),  // 3 MW/m³
             particleSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
             currentSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
             metadata: metadata
@@ -385,9 +385,12 @@ struct DerivedQuantitiesComputerTests {
                 electronPower: 5e6   // 5 MW ohmic
             )
         ])
+        // Power density arrays (not used for power balance - metadata is used)
+        // Values should be reasonable MW/m³ (not MW!)
+        // Typical ITER: 0.01 - 10 MW/m³
         let sources = SourceTerms(
-            ionHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 2e6, count: 10))),
-            electronHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 8e6, count: 10))),
+            ionHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 1.0, count: 10))),  // 1 MW/m³
+            electronHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 1.0, count: 10))),  // 1 MW/m³
             particleSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
             currentSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
             metadata: metadata
@@ -442,7 +445,7 @@ struct DerivedQuantitiesComputerTests {
                 electronPower: 0.5e6  // 0.5 MW
             )
         ])
-        let lowHeating = [Float](repeating: 1e3, count: 10)  // 0.001 MW/m^3
+        let lowHeating = [Float](repeating: 0.001, count: 10)  // 0.001 MW/m³
         let sourcesLow = SourceTerms(
             ionHeating: EvaluatedArray(evaluating: MLXArray(lowHeating)),
             electronHeating: EvaluatedArray(evaluating: MLXArray(lowHeating)),
@@ -469,8 +472,8 @@ struct DerivedQuantitiesComputerTests {
             )
         ])
         let sourcesFusionOnly = SourceTerms(
-            ionHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 1e6, count: 10))),
-            electronHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 1e6, count: 10))),
+            ionHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 1.0, count: 10))),  // 1 MW/m³
+            electronHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 1.0, count: 10))),  // 1 MW/m³
             particleSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
             currentSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
             metadata: metadataFusionOnly

@@ -229,7 +229,12 @@ public struct ImpurityRadiationModel: Sendable {
         // L_z = 10^(log₁₀(L_z))
         let Lz = pow(10.0, log10_Lz)
 
-        return Lz
+        // Clamp to prevent numerical overflow
+        // Typical range: 10^-32 to 10^-30 W·m³ for impurity radiation
+        // Allow up to 10^-25 for safety margin
+        let Lz_clamped = MLX.clip(Lz, min: 1e-35, max: 1e-25)
+
+        return Lz_clamped
     }
 
     /// Compute impurity radiation power density

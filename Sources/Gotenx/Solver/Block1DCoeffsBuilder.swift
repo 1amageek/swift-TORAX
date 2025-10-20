@@ -288,8 +288,10 @@ private func buildFluxEquationCoeffs(
     )
 
     // 3. Total current source: bootstrap + external
-    let J_external = sources.currentSource.value  // [nCells]
-    let sourceCell = J_bootstrap + J_external  // [nCells]
+    // Note: J_bootstrap is in A/m², J_external is in MA/m²
+    // Convert J_bootstrap to MA/m² before adding
+    let J_external = sources.currentSource.value  // [MA/m²]
+    let sourceCell = J_bootstrap / 1e6 + J_external  // [MA/m²]
 
     // Source matrix coefficient
     let sourceMatCell = MLXArray.zeros([nCells])  // [nCells]
@@ -492,9 +494,11 @@ private func computeBootstrapCurrent(
     let epsilon = geometry.radii.value / geometry.majorRadius
     let C_BS = 1.0 - epsilon
 
-    // Bootstrap current density: J_BS = C_BS * (∇P) / B_φ
+    // Bootstrap current density: J_BS = C_BS * |∇P| / B_φ
     // Units: [Pa/m] / [T] = [A/m²]
-    let J_BS = C_BS * gradP / geometry.toroidalField
+    // Note: Use absolute value of gradient since pressure decreases outward (∇P < 0)
+    // but bootstrap current is positive
+    let J_BS = C_BS * abs(gradP) / geometry.toroidalField
 
     // Clamp to physical range [0, 10 MA/m²]
     let J_BS_clamped = minimum(maximum(J_BS, MLXArray(0.0)), MLXArray(1e7))

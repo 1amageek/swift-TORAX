@@ -457,25 +457,63 @@ public enum DerivedQuantitiesComputer {
         transport: TransportCoefficients?
     ) -> (I_plasma: Float, I_bootstrap: Float, f_bootstrap: Float) {
 
-        // TODO: Integrate current density from profiles
-        // For now, return rough estimates
+        // Compute plasma current from poloidal flux gradient
+        let psi = profiles.poloidalFlux.value
+        let geometricFactors = GeometricFactors.from(geometry: geometry)
 
-        let a = geometry.minorRadius
-        let R0 = geometry.majorRadius
-        let Bt = geometry.toroidalField
+        // Check if we have meaningful flux data
+        let psiRange = MLX.max(psi).item(Float.self) - MLX.min(psi).item(Float.self)
 
-        // Estimate plasma current from geometry (Ip ~ a * Bt / (q * μ0 * R0))
-        let q_edge: Float = 3.0  // Typical edge safety factor
-        let mu0: Float = 4.0 * .pi * 1e-7
+        if psiRange > 0.01 {
+            // Compute current density: j_∥ ≈ (1/μ₀R) * ∂ψ/∂r
+            let nCells = psi.shape[0]
+            let df = psi[1...] - psi[..<(nCells - 1)]
+            let dr = geometricFactors.cellDistances.value + 1e-10
+            let grad_psi_faces = df / dr
 
-        let I_plasma = (a * Bt) / (q_edge * mu0 * R0) * 1e-6  // [MA]
+            // Interpolate gradient to cell centers
+            let grad0 = grad_psi_faces[0..<1]
+            let left = grad_psi_faces[0..<(nCells - 2)]
+            let right = grad_psi_faces[1..<(nCells - 1)]
+            let gradInterior = (left + right) / 2.0
+            let gradN = grad_psi_faces[(nCells - 2)..<(nCells - 1)]
+            let grad_psi = concatenated([grad0, gradInterior, gradN], axis: 0)
 
-        // Bootstrap fraction: typical range 0.2-0.5 for ITER-like plasmas
-        let f_bootstrap: Float = 0.3  // Rough estimate
+            let mu0: Float = 4.0 * .pi * 1e-7
+            let R0 = geometry.majorRadius
+            let j_parallel = grad_psi / (mu0 * R0)  // [A/m²]
 
-        let I_bootstrap = I_plasma * f_bootstrap  // [MA]
+            // Integrate over cross-section: I = ∫ j dA
+            // For circular geometry, use cell volumes divided by 2πR
+            // Volume = 2π²Rr²Δr → dA ≈ Volume / (2πR)
+            let volumes = geometricFactors.cellVolumes.value  // [nCells]
 
-        return (I_plasma, I_bootstrap, f_bootstrap)
+            // Current density × area element
+            let I_elements = abs(j_parallel) * volumes / (2.0 * Float.pi * R0)  // [A·m]
+
+            // Total current
+            let I_total = I_elements.sum().item(Float.self)  // [A]
+            let I_plasma = I_total * 1e-6  // [MA]
+
+            // Bootstrap fraction: typical range 0.2-0.5 for ITER-like plasmas
+            let f_bootstrap: Float = 0.3  // Rough estimate
+            let I_bootstrap = I_plasma * f_bootstrap  // [MA]
+
+            return (I_plasma, I_bootstrap, f_bootstrap)
+        } else {
+            // Fallback: Estimate from geometry when flux is not available
+            let a = geometry.minorRadius
+            let Bt = geometry.toroidalField
+            let q_edge: Float = 3.0  // Typical edge safety factor
+            let mu0: Float = 4.0 * .pi * 1e-7
+            let R0 = geometry.majorRadius
+
+            let I_plasma = (a * Bt) / (q_edge * mu0 * R0) * 1e-6  // [MA]
+            let f_bootstrap: Float = 0.3
+            let I_bootstrap = I_plasma * f_bootstrap
+
+            return (I_plasma, I_bootstrap, f_bootstrap)
+        }
     }
 
     // MARK: - Triple Product

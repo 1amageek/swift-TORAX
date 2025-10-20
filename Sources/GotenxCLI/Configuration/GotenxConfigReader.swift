@@ -78,11 +78,16 @@ public actor GotenxConfigReader {
         let time = try await fetchTimeConfig()
         let output = try await fetchOutputConfig()
 
-        return SimulationConfiguration(
+        let config = SimulationConfiguration(
             runtime: runtime,
             time: time,
             output: output
         )
+
+        // Validate complete configuration
+        try ConfigurationValidator.validate(config)
+
+        return config
     }
 
     /// Reload configuration by creating a new GotenxConfigReader
