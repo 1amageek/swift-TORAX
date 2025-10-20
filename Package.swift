@@ -6,9 +6,9 @@ import PackageDescription
 let package = Package(
     name: "swift-TORAX",
     platforms: [
-        .macOS(.v15),
-        .iOS(.v18),
-        .visionOS(.v2)
+        .macOS(.v26),
+        .iOS(.v26),
+        .visionOS(.v26)
     ],
     products: [
         // Products define the executables and libraries a package produces, making them visible to other packages.
@@ -19,6 +19,10 @@ let package = Package(
         .library(
             name: "TORAXPhysics",
             targets: ["TORAXPhysics"]
+        ),
+        .library(
+            name: "GotenxUI",
+            targets: ["GotenxUI"]
         ),
         .executable(
             name: "TORAXCLI",
@@ -72,12 +76,21 @@ let package = Package(
             ]
         ),
 
+        // GotenxUI: Swift Charts-based visualization library
+        .target(
+            name: "GotenxUI",
+            dependencies: [
+                "TORAX",
+            ]
+        ),
+
         // CLI executable target
         .executableTarget(
             name: "TORAXCLI",
             dependencies: [
                 "TORAX",
                 "TORAXPhysics",
+                "GotenxUI",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "SwiftNetCDF", package: "SwiftNetCDF"),
             ]
@@ -88,8 +101,10 @@ let package = Package(
             dependencies: [
                 "TORAX",
                 "TORAXPhysics",
+                "TORAXCLI",  // Added: ToraxConfigReader tests need TORAXCLI
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "ConfigurationTesting", package: "swift-configuration"),
+                .product(name: "SwiftNetCDF", package: "SwiftNetCDF"),
             ]
         ),
         .testTarget(
@@ -103,6 +118,13 @@ let package = Package(
             name: "TORAXCLITests",
             dependencies: [
                 "TORAXCLI",
+            ]
+        ),
+        .testTarget(
+            name: "GotenxUITests",
+            dependencies: [
+                "GotenxUI",
+                "TORAX",
             ]
         ),
     ]

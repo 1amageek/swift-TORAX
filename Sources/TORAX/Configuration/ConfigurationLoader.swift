@@ -101,6 +101,8 @@ public struct ConfigurationLoader: Sendable {
         builder.runtime.dynamic.transport = baseConfig.runtime.dynamic.transport
         builder.runtime.dynamic.sources = baseConfig.runtime.dynamic.sources
         builder.runtime.dynamic.pedestal = baseConfig.runtime.dynamic.pedestal
+        builder.runtime.dynamic.mhd = baseConfig.runtime.dynamic.mhd
+        builder.runtime.dynamic.restart = baseConfig.runtime.dynamic.restart
 
         builder.time.start = baseConfig.time.start
         builder.time.end = baseConfig.time.end
@@ -218,7 +220,7 @@ public struct ConfigurationOverrides: Sendable {
 
 /// Extension to support builder from existing config
 extension MeshConfig {
-    func toBuilder() -> SimulationConfiguration.MeshBuilder {
+    public func toBuilder() -> SimulationConfiguration.MeshBuilder {
         var builder = SimulationConfiguration.MeshBuilder()
         builder.nCells = self.nCells
         builder.majorRadius = self.majorRadius

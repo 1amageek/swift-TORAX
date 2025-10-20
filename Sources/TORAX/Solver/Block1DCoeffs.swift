@@ -140,15 +140,42 @@ public struct GeometricFactors: Sendable {
         let nFaces = nCells + 1
         let dr = geometry.dr  // Assumes uniform spacing
 
-        // Radial coordinates (uniform grid assumption)
-        let rCell = MLXArray(0..<nCells).asType(.float32) * dr + dr / 2.0  // [nCells]
-        let rFace = MLXArray(0..<nFaces).asType(.float32) * dr              // [nFaces]
+        // Validate geometry shape consistency
+        let radiiShape = geometry.radii.shape[0]
+        let g0Shape = geometry.g0.shape[0]
+
+        guard radiiShape == nCells else {
+            fatalError("""
+                GeometricFactors.from: Geometry.radii shape mismatch.
+                Expected radii.shape[0] = \(nCells) (nCells)
+                Got radii.shape[0] = \(radiiShape)
+                This indicates inconsistent Geometry construction.
+                """)
+        }
+
+        guard g0Shape == nFaces else {
+            fatalError("""
+                GeometricFactors.from: Geometry.g0 shape mismatch.
+                Expected g0.shape[0] = \(nFaces) (nCells + 1, face-centered)
+                Got g0.shape[0] = \(g0Shape)
+                This indicates incorrect Geometry construction.
+                Use createGeometry(from:) or Geometry(config:) to ensure correct shapes.
+                """)
+        }
+
+        // Use existing radii from geometry (ensures consistency)
+        let rCell = geometry.radii.value  // [nCells]
+
+        // Face radii: uniformly spaced from 0 to minorRadius
+        let rFace = MLXArray(0..<nFaces).asType(.float32) * dr  // [nFaces]
 
         // Cell volumes (2π R₀ Δr for cylindrical geometry)
-        let cellVolumes = MLXArray.full([nCells], values: MLXArray(2.0 * Float.pi * geometry.majorRadius * dr))
+        let volumeValue: Float = 2.0 * Float.pi * geometry.majorRadius * dr
+        let cellVolumes = MLXArray.full([nCells], values: MLXArray(volumeValue))
 
         // Face areas (2π R₀ - constant)
-        let faceAreas = MLXArray.full([nFaces], values: MLXArray(2.0 * Float.pi * geometry.majorRadius))
+        let areaValue: Float = 2.0 * Float.pi * geometry.majorRadius
+        let faceAreas = MLXArray.full([nFaces], values: MLXArray(areaValue))
 
         // Cell distances (uniform grid: all equal to dr)
         let cellDistances = MLXArray.full([nCells - 1], values: MLXArray(dr))

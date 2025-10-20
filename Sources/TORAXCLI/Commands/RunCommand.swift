@@ -234,44 +234,63 @@ struct RunCommand: AsyncParsableCommand {
 
         // Interactive menu (unless --quit specified)
         if !quit {
-            try await interactiveMenu(logger: logger)
+            try await interactiveMenu(
+                logger: logger,
+                config: simulationConfig,
+                configPath: resolvedConfigPath,
+                result: result
+            )
         }
     }
 
     // MARK: - Configuration Loading
 
-    /// Load configuration from JSON file with CLI overrides
+    /// Load configuration using ToraxConfigReader with hierarchical overrides
+    ///
+    /// Override priority (highest to lowest):
+    /// 1. CLI arguments
+    /// 2. Environment variables (TORAX_*)
+    /// 3. JSON configuration file
+    /// 4. Default values
     private func loadConfiguration(from path: String) async throws -> SimulationConfiguration {
-        // Load base configuration from JSON
-        var config = try await ConfigurationLoader.loadFromJSON(path)
+        // Build CLI overrides map (only include explicitly specified values)
+        var cliOverrides: [String: String] = [:]
 
-        // Apply CLI overrides (only if explicitly specified)
-        let overrides = ConfigurationOverrides(
-            meshNCells: meshNcells,
-            meshMajorRadius: meshMajorRadius.map { Float($0) },
-            meshMinorRadius: meshMinorRadius.map { Float($0) },
-            timeEnd: timeEnd.map { Float($0) },
-            initialDt: initialDt.map { Float($0) },
-            outputDirectory: outputDir  // Only set if user specified --output-dir
-        )
-
-        // Check if any overrides are present
-        let hasOverrides = meshNcells != nil ||
-                          meshMajorRadius != nil ||
-                          meshMinorRadius != nil ||
-                          timeEnd != nil ||
-                          initialDt != nil ||
-                          outputDir != nil
-
-        if hasOverrides {
-            print("  Applying CLI overrides...")
-            config = try ConfigurationLoader.loadWithOverrides(
-                baseConfig: config,
-                overrides: overrides
-            )
+        if let value = meshNcells {
+            cliOverrides["runtime.static.mesh.nCells"] = String(value)
+        }
+        if let value = meshMajorRadius {
+            cliOverrides["runtime.static.mesh.majorRadius"] = String(value)
+        }
+        if let value = meshMinorRadius {
+            cliOverrides["runtime.static.mesh.minorRadius"] = String(value)
+        }
+        if let value = timeEnd {
+            cliOverrides["time.end"] = String(value)
+        }
+        if let value = initialDt {
+            cliOverrides["time.initialDt"] = String(value)
+        }
+        if let value = outputDir {
+            cliOverrides["output.directory"] = value
         }
 
-        return config
+        // Create ToraxConfigReader with hierarchical configuration
+        let configReader = try await ToraxConfigReader.create(
+            jsonPath: path,
+            cliOverrides: cliOverrides
+        )
+
+        // Log override sources if any CLI args were specified
+        if !cliOverrides.isEmpty {
+            print("  Applying hierarchical configuration:")
+            print("    1. CLI arguments (\(cliOverrides.count) override\(cliOverrides.count == 1 ? "" : "s"))")
+            print("    2. Environment variables (TORAX_*)")
+            print("    3. JSON file: \(path)")
+        }
+
+        // Fetch complete configuration
+        return try await configReader.fetchConfiguration()
     }
 
     // MARK: - Helper Methods
@@ -355,11 +374,19 @@ struct RunCommand: AsyncParsableCommand {
         print("Output directory: \(directory) (\(source))")
     }
 
-    private func interactiveMenu(logger: ProgressLogger) async throws {
+    private func interactiveMenu(
+        logger: ProgressLogger,
+        config: SimulationConfiguration,
+        configPath: String,
+        result: SimulationResult
+    ) async throws {
         var menu = InteractiveMenu(
             logger: logger,
             plotConfig: plotConfig,
-            referenceRun: referenceRun
+            referenceRun: referenceRun,
+            config: config,
+            configPath: configPath,
+            lastResult: result
         )
 
         try await menu.run()

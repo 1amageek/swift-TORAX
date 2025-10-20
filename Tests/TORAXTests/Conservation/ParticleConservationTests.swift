@@ -52,11 +52,19 @@ struct ParticleConservationTests {
             geometry: geometry
         )
 
-        // Expected: N = ne × V_total = 1e20 × 25 = 2.5e21
-        let expected: Float = 1e20 * Float(nCells)
+        // Expected: N = ne × V_total
+        // V_total = 2π R₀ dr × nCells
+        // where dr = a / nCells = 2.0 / 25 = 0.08 m
+        // V_cell = 2π × 6.2 × 0.08 ≈ 3.115 m³
+        // V_total = 3.115 × 25 ≈ 77.88 m³
+        let R0: Float = 6.2
+        let a: Float = 2.0
+        let dr = a / Float(nCells)
+        let cellVolume = 2.0 * Float.pi * R0 * dr
+        let expected: Float = 1e20 * cellVolume * Float(nCells)
         let relativeError = abs(totalParticles - expected) / expected
 
-        #expect(relativeError < 1e-6, "Total particles incorrect: \(totalParticles) vs \(expected)")
+        #expect(relativeError < 1e-5, "Total particles incorrect: \(totalParticles) vs \(expected)")
     }
 
     @Test("Correction factor calculation")

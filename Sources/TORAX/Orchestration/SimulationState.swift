@@ -12,6 +12,8 @@ import Numerics
 /// **Design Principle**: Apple Silicon GPU does NOT support Float64 (Double).
 /// All numeric types must be Float32 for GPU compatibility and architectural consistency.
 public struct SimulationState: Sendable {
+    // MARK: - Core State (Always Present)
+
     /// Current plasma profiles
     public let profiles: CoreProfiles
 
@@ -78,18 +80,63 @@ public struct SimulationState: Sendable {
     /// Statistics
     public var statistics: SimulationStatistics
 
+    // MARK: - Extended Physics State (Phase 1: Optional)
+
+    /// Transport coefficients (χ, D, v)
+    ///
+    /// **Phase 1**: Always nil (not yet captured)
+    /// **Phase 3**: Populated from transport models
+    public let transport: TransportCoefficients?
+
+    /// Source terms (heating, current drive)
+    ///
+    /// **Phase 1**: Always nil (not yet captured)
+    /// **Phase 3**: Populated from source models
+    public let sources: SourceTerms?
+
+    /// Geometry configuration
+    ///
+    /// **Phase 1**: Always nil (use from config instead)
+    /// **Phase 2**: Populated for convenience
+    public let geometry: Geometry?
+
+    /// Derived scalar quantities (τE, Q, βN, etc.)
+    ///
+    /// **Phase 1**: Always nil (not yet computed)
+    /// **Phase 2**: Computed from profiles
+    /// **Phase 3**: Computed from profiles + transport + sources
+    public let derived: DerivedQuantities?
+
+    /// Numerical diagnostics (convergence, conservation)
+    ///
+    /// **Phase 1**: Always nil (not yet tracked)
+    /// **Phase 2**: Captured from solver
+    public let diagnostics: NumericalDiagnostics?
+
+    // MARK: - Initialization
+
     public init(
         profiles: CoreProfiles,
         timeAccumulator: Double = 0.0,
         dt: Float = 1e-4,
         step: Int = 0,
-        statistics: SimulationStatistics = SimulationStatistics()
+        statistics: SimulationStatistics = SimulationStatistics(),
+        transport: TransportCoefficients? = nil,
+        sources: SourceTerms? = nil,
+        geometry: Geometry? = nil,
+        derived: DerivedQuantities? = nil,
+        diagnostics: NumericalDiagnostics? = nil
     ) {
         self.profiles = profiles
         self.timeAccumulator = timeAccumulator
         self.dt = dt
         self.step = step
         self.statistics = statistics
+        self.transport = transport
+        self.sources = sources
+        self.geometry = geometry
+        self.derived = derived
+        self.diagnostics = diagnostics
     }
 
     /// Create updated state (legacy compatibility)
@@ -100,14 +147,24 @@ public struct SimulationState: Sendable {
         time: Float? = nil,
         dt: Float? = nil,
         step: Int? = nil,
-        statistics: SimulationStatistics? = nil
+        statistics: SimulationStatistics? = nil,
+        transport: TransportCoefficients?? = nil,
+        sources: SourceTerms?? = nil,
+        geometry: Geometry?? = nil,
+        derived: DerivedQuantities?? = nil,
+        diagnostics: NumericalDiagnostics?? = nil
     ) -> SimulationState {
         SimulationState(
             profiles: profiles ?? self.profiles,
             timeAccumulator: time.map { Double($0) } ?? self.timeAccumulator,
             dt: dt ?? self.dt,
             step: step ?? self.step,
-            statistics: statistics ?? self.statistics
+            statistics: statistics ?? self.statistics,
+            transport: transport ?? self.transport,
+            sources: sources ?? self.sources,
+            geometry: geometry ?? self.geometry,
+            derived: derived ?? self.derived,
+            diagnostics: diagnostics ?? self.diagnostics
         )
     }
 
@@ -120,6 +177,11 @@ public struct SimulationState: Sendable {
     ///   - dt: Timestep duration [s]
     ///   - profiles: Updated plasma profiles
     ///   - statistics: Updated statistics (optional)
+    ///   - transport: Updated transport coefficients (Phase 3)
+    ///   - sources: Updated source terms (Phase 3)
+    ///   - geometry: Geometry configuration (Phase 2)
+    ///   - derived: Derived quantities (Phase 2)
+    ///   - diagnostics: Numerical diagnostics (Phase 2)
     /// - Returns: New state with accumulated time
     ///
     /// ## Example
@@ -135,7 +197,12 @@ public struct SimulationState: Sendable {
     public func advanced(
         by dt: Float,
         profiles: CoreProfiles,
-        statistics: SimulationStatistics? = nil
+        statistics: SimulationStatistics? = nil,
+        transport: TransportCoefficients? = nil,
+        sources: SourceTerms? = nil,
+        geometry: Geometry? = nil,
+        derived: DerivedQuantities? = nil,
+        diagnostics: NumericalDiagnostics? = nil
     ) -> SimulationState {
         // Validate timestep
         guard dt.isFinite else {
@@ -158,7 +225,12 @@ public struct SimulationState: Sendable {
             timeAccumulator: newTimeAccumulator,
             dt: dt,
             step: step + 1,
-            statistics: statistics ?? self.statistics
+            statistics: statistics ?? self.statistics,
+            transport: transport ?? self.transport,
+            sources: sources ?? self.sources,
+            geometry: geometry ?? self.geometry,
+            derived: derived ?? self.derived,
+            diagnostics: diagnostics ?? self.diagnostics
         )
     }
 }
@@ -279,13 +351,47 @@ extension SerializableProfiles {
 // MARK: - Time Point
 
 /// Single time point in simulation
+///
+/// **Phase 1**: Only time and profiles captured
+/// **Phase 2**: Derived quantities and diagnostics added
+/// **Phase 3**: Transport and source terms added
 public struct TimePoint: Sendable, Codable {
     public let time: Float
     public let profiles: SerializableProfiles
 
-    public init(time: Float, profiles: SerializableProfiles) {
+    /// Derived scalar quantities (Phase 2+)
+    public let derived: DerivedQuantities?
+
+    /// Numerical diagnostics (Phase 2+)
+    public let diagnostics: NumericalDiagnostics?
+
+    public init(
+        time: Float,
+        profiles: SerializableProfiles,
+        derived: DerivedQuantities? = nil,
+        diagnostics: NumericalDiagnostics? = nil
+    ) {
         self.time = time
         self.profiles = profiles
+        self.derived = derived
+        self.diagnostics = diagnostics
+    }
+}
+
+// MARK: - SimulationState to TimePoint Conversion
+
+extension SimulationState {
+    /// Convert simulation state to time point for time series capture
+    ///
+    /// **Phase 1**: Only captures time and profiles
+    /// **Phase 2**: Captures derived quantities and diagnostics
+    public func toTimePoint() -> TimePoint {
+        TimePoint(
+            time: time,
+            profiles: profiles.toSerializable(),
+            derived: derived,
+            diagnostics: diagnostics
+        )
     }
 }
 

@@ -48,6 +48,8 @@ extension SimulationConfiguration {
         public var time: TimeBuilder = .init()
         public var output: OutputBuilder = .init()
 
+        public init() {}
+
         public func build() -> SimulationConfiguration {
             SimulationConfiguration(
                 runtime: runtime.build(),
@@ -112,13 +114,17 @@ extension SimulationConfiguration {
         public var transport: TransportConfig = TransportConfig(modelType: "constant")
         public var sources: SourcesConfig = .default
         public var pedestal: PedestalConfig? = nil
+        public var mhd: MHDConfig = .default
+        public var restart: RestartConfig = .default
 
         public func build() -> DynamicConfig {
             DynamicConfig(
                 boundaries: boundaries,
                 transport: transport,
                 sources: sources,
-                pedestal: pedestal
+                pedestal: pedestal,
+                mhd: mhd,
+                restart: restart
             )
         }
     }

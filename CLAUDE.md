@@ -61,6 +61,409 @@ for value in criticalValues {
 
 **Key decision rule**: If the operation needs to be part of a computation graph for auto-differentiation or should run on GPU, use MLX. For scalar special functions or complex numbers, use Swift Numerics.
 
+## Configuration System Architecture
+
+### Overview
+
+swift-TORAX uses **swift-configuration** for hierarchical, type-safe configuration management. The system provides a clear separation between different configuration sources with well-defined override priority.
+
+### Hierarchical Configuration Priority
+
+Configuration values are resolved in the following priority order (highest to lowest):
+
+1. **CLI Arguments** (highest priority)
+   - Passed via command-line flags like `--mesh-ncells 200`
+   - Mapped to hierarchical keys: `runtime.static.mesh.nCells`
+
+2. **Environment Variables**
+   - Prefixed with `TORAX_` (e.g., `TORAX_MESH_NCELLS=150`)
+   - Automatically converted by `EnvironmentVariablesProvider`
+
+3. **JSON Configuration File**
+   - Loaded via `JSONProvider` with `FilePath` type
+   - Standard simulation configuration format
+
+4. **Default Values** (lowest priority)
+   - Hardcoded defaults in configuration structs
+
+### ToraxConfigReader Implementation
+
+```swift
+import Configuration
+import Foundation
+import SystemPackage
+
+/// TORAX-specific ConfigReader wrapper
+public actor ToraxConfigReader {
+    private let configReader: ConfigReader
+
+    /// Create with hierarchical providers
+    public static func create(
+        jsonPath: String,
+        cliOverrides: [String: String] = [:]
+    ) async throws -> ToraxConfigReader {
+        var providers: [any ConfigProvider] = []
+
+        // IMPORTANT: ConfigReader uses FIRST-MATCH priority order
+        // First provider in array has HIGHEST priority
+
+        // Priority 1 (highest): CLI arguments
+        if !cliOverrides.isEmpty {
+            let configValues = cliOverrides.mapValues {
+                ConfigValue(.string($0), isSecret: false)
+            }
+            providers.append(
+                InMemoryProvider(values: configValues)
+            )
+        }
+
+        // Priority 2: Environment variables
+        providers.append(
+            EnvironmentVariablesProvider()
+        )
+
+        // Priority 3 (lowest): JSON file
+        let jsonProvider = try await JSONProvider(filePath: FilePath(jsonPath))
+        providers.append(jsonProvider)
+
+        let reader = ConfigReader(providers: providers)
+        return ToraxConfigReader(configReader: reader)
+    }
+
+    /// Fetch complete SimulationConfiguration
+    public func fetchConfiguration() async throws -> SimulationConfiguration {
+        let runtime = try await fetchRuntimeConfig()
+        let time = try await fetchTimeConfig()
+        let output = try await fetchOutputConfig()
+
+        return SimulationConfiguration(
+            runtime: runtime,
+            time: time,
+            output: output
+        )
+    }
+}
+```
+
+### Configuration Structure
+
+```swift
+/// Root simulation configuration
+public struct SimulationConfiguration: Codable, Sendable {
+    public let runtime: RuntimeConfiguration
+    public let time: TimeConfiguration
+    public let output: OutputConfiguration
+}
+
+/// Runtime configuration (static + dynamic)
+public struct RuntimeConfiguration: Codable, Sendable {
+    public let static: StaticConfig      // Triggers recompilation
+    public let dynamic: DynamicConfig    // Hot-reloadable
+}
+
+/// Static parameters (trigger MLX recompilation)
+public struct StaticConfig: Codable, Sendable {
+    public let mesh: MeshConfig
+    public let evolution: EvolutionConfig  // Which PDEs to solve
+    public let solver: SolverConfig
+    public let scheme: SchemeConfig
+}
+
+/// Dynamic parameters (no recompilation)
+public struct DynamicConfig: Codable, Sendable {
+    public let boundaries: BoundaryConfig
+    public let transport: TransportConfig
+    public let sources: SourcesConfig
+    public let pedestal: PedestalConfig?
+    public let mhd: MHDConfig
+    public let restart: RestartConfig
+}
+```
+
+### CLI Integration
+
+**RunCommand** uses `ToraxConfigReader` to apply CLI overrides:
+
+```swift
+private func loadConfiguration(from path: String) async throws -> SimulationConfiguration {
+    // Build CLI overrides map
+    var cliOverrides: [String: String] = [:]
+
+    if let value = meshNcells {
+        cliOverrides["runtime.static.mesh.nCells"] = String(value)
+    }
+    if let value = timeEnd {
+        cliOverrides["time.end"] = String(value)
+    }
+    // ... more overrides
+
+    // Create hierarchical config reader
+    let configReader = try await ToraxConfigReader.create(
+        jsonPath: path,
+        cliOverrides: cliOverrides
+    )
+
+    return try await configReader.fetchConfiguration()
+}
+```
+
+### Configuration Reloading
+
+**IMPORTANT**: `ConfigReader` does not have a `reload()` method. To reload configuration:
+
+1. **For static changes**: Create a new `ToraxConfigReader` instance
+2. **For dynamic hot-reload**: Use `ReloadingJSONProvider` instead of `JSONProvider`
+
+```swift
+// Option 1: Manual reload (recreate reader)
+let newReader = try await ToraxConfigReader.create(
+    jsonPath: configPath,
+    cliOverrides: cliOverrides
+)
+let newConfig = try await newReader.fetchConfiguration()
+
+// Option 2: Automatic reload (future enhancement)
+let reloadingProvider = try await ReloadingJSONProvider(
+    filePath: FilePath(jsonPath),
+    pollInterval: .seconds(5)
+)
+// Add to ServiceGroup for background monitoring
+```
+
+### Configuration Key Mapping
+
+| CLI Flag | Hierarchical Key | Type |
+|----------|------------------|------|
+| `--mesh-ncells` | `runtime.static.mesh.nCells` | Int |
+| `--mesh-major-radius` | `runtime.static.mesh.majorRadius` | Double |
+| `--mesh-minor-radius` | `runtime.static.mesh.minorRadius` | Double |
+| `--time-end` | `time.end` | Double |
+| `--initial-dt` | `time.initialDt` | Double |
+| `--output-dir` | `output.directory` | String |
+| `--output-format` | `output.format` | Enum |
+
+### Type Conversion
+
+swift-configuration handles type conversion automatically:
+
+```swift
+// String → Int
+let nCells = try await configReader.fetchInt(
+    forKey: "runtime.static.mesh.nCells",
+    default: 100
+)
+
+// String → Double
+let majorRadius = try await configReader.fetchDouble(
+    forKey: "runtime.static.mesh.majorRadius",
+    default: 3.0
+)
+
+// String → Bool
+let evolveIonHeat = try await configReader.fetchBool(
+    forKey: "runtime.static.evolution.ionTemperature",
+    default: true
+)
+
+// String → Enum (via RawRepresentable)
+let geometryType = try await configReader.fetchString(
+    forKey: "runtime.static.mesh.geometryType",
+    default: "circular"
+)
+```
+
+### JSON Configuration Example
+
+```json
+{
+  "runtime": {
+    "static": {
+      "mesh": {
+        "nCells": 100,
+        "majorRadius": 6.2,
+        "minorRadius": 2.0,
+        "toroidalField": 5.3,
+        "geometryType": "circular"
+      },
+      "evolution": {
+        "ionTemperature": true,
+        "electronTemperature": true,
+        "electronDensity": true,
+        "poloidalFlux": false
+      }
+    },
+    "dynamic": {
+      "boundaries": {
+        "ionTemperature": 100.0,
+        "electronTemperature": 100.0,
+        "electronDensity": 1e19
+      },
+      "transport": {
+        "modelType": "bohmGyrobohm"
+      },
+      "sources": {
+        "ohmicHeating": true,
+        "fusionPower": true
+      }
+    }
+  },
+  "time": {
+    "start": 0.0,
+    "end": 2.0,
+    "initialDt": 0.001,
+    "adaptive": {
+      "enabled": true,
+      "safetyFactor": 0.9,
+      "minDt": 1e-6,
+      "maxDt": 0.1
+    }
+  },
+  "output": {
+    "directory": "/tmp/torax_results",
+    "format": "netcdf",
+    "saveInterval": 0.01
+  }
+}
+```
+
+### Environment Variable Format
+
+```bash
+# Mesh configuration
+export TORAX_MESH_NCELLS=150
+export TORAX_MESH_MAJOR_RADIUS=6.5
+export TORAX_MESH_MINOR_RADIUS=2.1
+
+# Time configuration
+export TORAX_TIME_END=3.0
+export TORAX_TIME_INITIAL_DT=0.0005
+
+# Output configuration
+export TORAX_OUTPUT_DIR=/scratch/torax_output
+export TORAX_OUTPUT_FORMAT=netcdf
+
+# Run with environment overrides
+swift run TORAXCLI run --config examples/Configurations/minimal.json
+```
+
+### Validation Strategy
+
+Configuration validation happens at **fetch time**, not file load time:
+
+```swift
+public func fetchConfiguration() async throws -> SimulationConfiguration {
+    let runtime = try await fetchRuntimeConfig()
+    let time = try await fetchTimeConfig()
+    let output = try await fetchOutputConfig()
+
+    let config = SimulationConfiguration(
+        runtime: runtime,
+        time: time,
+        output: output
+    )
+
+    // Validate complete configuration
+    try ConfigurationValidator.validate(config)
+
+    return config
+}
+```
+
+**Validation Rules**:
+- `nCells > 0`: Mesh must have positive cells
+- `majorRadius > minorRadius`: Tokamak geometry constraint
+- `time.end > time.start`: Valid time range
+- `initialDt > 0`: Positive timestep
+- Aspect ratio: `1.0 < majorRadius/minorRadius < 10.0`
+
+### Best Practices
+
+1. **Use Hierarchical Keys**: Always use dotted notation for nested config
+   ```swift
+   "runtime.static.mesh.nCells"  // ✅ Correct
+   "mesh_ncells"                  // ❌ Wrong
+   ```
+
+2. **Type Safety**: Let swift-configuration handle type conversion
+   ```swift
+   let value = try await configReader.fetchInt(forKey: "...")  // ✅
+   let value = Int(try await configReader.fetchString(...))    // ❌
+   ```
+
+3. **Defaults**: Always provide sensible defaults
+   ```swift
+   try await configReader.fetchInt(forKey: "nCells", default: 100)  // ✅
+   try await configReader.fetchInt(forKey: "nCells")                 // ❌ Can throw
+   ```
+
+4. **Validation**: Validate after fetching, not during
+   ```swift
+   let config = try await configReader.fetchConfiguration()
+   try ConfigurationValidator.validate(config)  // ✅
+   ```
+
+5. **Immutability**: Configuration structs are immutable - use Builder for modifications
+   ```swift
+   var builder = SimulationConfiguration.Builder()
+   builder.time.end = 5.0
+   let newConfig = builder.build()  // ✅
+   ```
+
+### Common Pitfalls
+
+❌ **DON'T**: Add providers in reverse priority order (lowest first)
+```swift
+providers.append(JSONProvider(...))          // JSON (lowest)
+providers.append(EnvironmentVariablesProvider())  // Env
+providers.append(InMemoryProvider(...))      // CLI (highest)
+// ❌ WRONG - ConfigReader uses FIRST-MATCH priority!
+```
+
+✅ **DO**: Add providers in priority order (highest first)
+```swift
+providers.append(InMemoryProvider(...))      // CLI (highest)
+providers.append(EnvironmentVariablesProvider())  // Env
+providers.append(JSONProvider(...))          // JSON (lowest)
+// ✅ CORRECT - First provider has highest priority
+```
+
+❌ **DON'T**: Mix ConfigValue constructors
+```swift
+ConfigValue("100", isSecret: false)  // ❌ Wrong - expects ConfigContent
+```
+
+✅ **DO**: Use ConfigContent enum
+```swift
+ConfigValue(.string("100"), isSecret: false)  // ✅ Correct
+```
+
+❌ **DON'T**: Use String for FilePath
+```swift
+JSONProvider(filePath: "/path/to/config.json")  // ❌ Type error
+```
+
+✅ **DO**: Use SystemPackage.FilePath
+```swift
+import SystemPackage
+JSONProvider(filePath: FilePath("/path/to/config.json"))  // ✅
+```
+
+❌ **DON'T**: Expect reload() on ConfigReader
+```swift
+configReader.reload()  // ❌ Method doesn't exist
+```
+
+✅ **DO**: Create new reader or use ReloadingJSONProvider
+```swift
+let newReader = try await ToraxConfigReader.create(...)  // ✅
+```
+
+### References
+
+- **swift-configuration**: https://github.com/apple/swift-configuration
+- **DeepWiki Docs**: https://deepwiki.com/apple/swift-configuration
+- **TORAX Config Examples**: `Examples/Configurations/`
+
 ## ⚠️ CRITICAL: Apple Silicon GPU Precision Constraints
 
 ### Hardware Limitations
@@ -1402,6 +1805,114 @@ let coeffs = cache.getOrCompute(
 | Actor | Thread-safe reference | Mutable state management | SimulationOrchestrator |
 | Synchronous cache | `@unchecked Sendable` with locks | CoeffsCache | CoeffsCache |
 
+## SwiftUI Preview Best Practices (@Previewable and #Preview)
+
+### Critical Rule: @Previewable Declaration Order
+
+**IMPORTANT**: When using `@Previewable` in SwiftUI previews, tagged declarations **MUST** appear at the beginning (root scope) of the `#Preview` body closure.
+
+### How #Preview Works Internally
+
+The `#Preview` macro generates an embedded SwiftUI view where:
+1. `@Previewable`-tagged declarations become **properties on the generated view**
+2. All remaining statements form the **view's body**
+
+This is why declaration order matters—Swift needs to know which declarations are view properties before processing the body.
+
+### ✅ CORRECT Usage
+
+```swift
+#Preview("Time Slider") {
+    // ✅ @Previewable declarations FIRST (at root scope)
+    @Previewable @State var timeIndex = 0
+    @Previewable @State var isPlaying = false
+
+    // ✅ Other declarations AFTER @Previewable
+    let sampleData = PlotData(
+        rho: [0.0, 0.5, 1.0],
+        time: [0.0, 0.5, 1.0, 1.5, 2.0],
+        Ti: Array(repeating: [1.0, 2.0, 3.0], count: 5),
+        // ...
+    )
+
+    // ✅ View construction
+    TimeSlider(data: sampleData, timeIndex: $timeIndex)
+        .padding()
+}
+```
+
+### ❌ INCORRECT Usage (Compilation Error)
+
+```swift
+#Preview("Time Slider") {
+    // ❌ WRONG: Non-@Previewable declaration before @Previewable
+    let sampleData = PlotData(...)
+
+    // ❌ ERROR: '@Previewable' items must be at the beginning of the preview block
+    @Previewable @State var timeIndex = 0
+
+    TimeSlider(data: sampleData, timeIndex: $timeIndex)
+        .padding()
+}
+```
+
+**Error message you'll see:**
+```
+error: '@Previewable' items must be at the beginning of the preview block (from macro 'Preview')
+```
+
+### Multiple @Previewable Declarations
+
+When you need multiple dynamic properties, declare them all at the beginning:
+
+```swift
+#Preview("Complex Preview") {
+    // ✅ All @Previewable declarations grouped at the top
+    @Previewable @State var temperature: Float = 10.0
+    @Previewable @State var density: Float = 5.0
+    @Previewable @State var timeIndex: Int = 0
+    @Previewable @State var isAnimating: Bool = false
+
+    // ✅ Static data after @Previewable
+    let geometry = GeometryParams.iterLike
+    let config = PlotConfiguration.tempDensityProfile
+
+    // ✅ View
+    VStack {
+        ToraxPlotView(data: plotData, config: config)
+        PlaybackControls(data: plotData, timeIndex: $timeIndex)
+    }
+}
+```
+
+### Why This Matters for GotenxUI
+
+GotenxUI components (ToraxPlotView, TimeSlider, PlaybackControls) often require `@State` bindings for interactive features:
+- Time index selection
+- Playback controls
+- Camera angle adjustments (3D plots)
+- Interactive data exploration
+
+**Always follow the @Previewable-first pattern** to avoid compilation errors.
+
+### Key Takeaways
+
+1. ✅ **@Previewable declarations = FIRST** in `#Preview` body
+2. ✅ **Other declarations (let, var) = AFTER** @Previewable
+3. ✅ **View construction = LAST**
+4. ❌ **Never mix** @Previewable with non-@Previewable declarations
+5. 📚 **Official docs**: https://developer.apple.com/documentation/swiftui/previewable()
+
+### Minimum Platform Requirements
+
+- iOS 17.0+
+- iPadOS 17.0+
+- macOS 14.0+
+- Mac Catalyst 17.0+
+- tvOS 17.0+
+- visionOS 1.0+
+- watchOS 10.0+
+
 ## Architecture Philosophy
 
 ### TORAX Core Concepts (from original Python/JAX implementation)
@@ -2065,6 +2576,179 @@ swift build -c release
 12. Core-edge coupling
 13. Benchmark suite against original TORAX
 
+## GotenxUI: Swift Charts Visualization Module
+
+### Overview
+
+GotenxUI is a native Swift Charts-based visualization library for TORAX simulation data, providing both 2D and 3D (future) plotting capabilities for tokamak plasma diagnostics.
+
+**Module Structure**:
+```
+Sources/GotenxUI/
+├── Models/
+│   ├── PlotData.swift          # 2D simulation data with unit conversion
+│   ├── PlotData3D.swift        # 3D volumetric data (iOS 26.0+)
+│   ├── PlotType.swift          # Spatial/TimeSeries/Volumetric
+│   └── PlotConfiguration.swift # Plot layout and styling
+├── Views/
+│   ├── 2D/
+│   │   ├── ToraxPlotView.swift       # Main 2D plot grid
+│   │   ├── SpatialPlotView.swift     # Profile charts (ρ axis)
+│   │   └── TimeSeriesPlotView.swift  # Time evolution
+│   └── 3D/ (future iOS 26.0+)
+│       └── ToraxPlot3DView.swift     # Chart3D integration
+├── Configurations/
+│   ├── DefaultPlotConfig.swift   # 4×4 grid (16 subplots)
+│   ├── SimplePlotConfig.swift    # 2×2 grid (4 subplots)
+│   └── SourcesPlotConfig.swift   # 3×2 grid (6 subplots)
+└── Utilities/
+    ├── DataTransform.swift       # Unit conversions
+    └── ColorScheme.swift         # Color palettes
+```
+
+### Platform Requirements
+
+**Current (2D Charts)**:
+- macOS 13.0+
+- iOS 16.0+
+- visionOS 2.0+
+
+**Future (Chart3D)**:
+- macOS 26.0+
+- iOS 26.0+
+- visionOS 26.0+
+
+### Data Model: PlotData
+
+**Unit Conversion Strategy**:
+
+GotenxUI performs **display-only** unit conversion. Internal TORAX units (eV, m⁻³) are converted to user-friendly units (keV, 10²⁰ m⁻³) during `PlotData` initialization.
+
+```swift
+/// Create PlotData from SimulationResult with unit conversion
+let plotData = try PlotData(from: simulationResult)
+
+// Automatic conversions:
+// Temperature: eV → keV (÷ 1000)
+// Density: m⁻³ → 10²⁰ m⁻³ (÷ 1e20)
+```
+
+**Supported Variables** (30+ total):
+
+| Category | Variables | Units | Plot Type |
+|----------|-----------|-------|-----------|
+| **Temperature** | Ti, Te | keV | Spatial |
+| **Density** | ne, ni | 10²⁰ m⁻³ | Spatial |
+| **Current Density** | j_total, j_ohmic, j_bootstrap, j_ECRH | MA/m² | Spatial |
+| **Magnetic** | q, s (shear), ψ | -, -, Wb | Spatial |
+| **Transport** | χ_i, χ_e, D | m²/s | Spatial |
+| **Sources** | Q_ohmic, Q_fusion, P_ICRH, P_ECRH | MW/m³ | Spatial |
+| **Powers** | P_aux, P_ohmic, P_alpha, P_rad | MW | Time Series |
+| **Metrics** | Q_fusion (gain), W_thermal | -, MJ | Time Series |
+
+### Implementation Phases
+
+**Phase 1: Core 2D Infrastructure** (P0 - Complete):
+- ✅ PlotData model with unit conversion
+- ✅ PlotData3D model (iOS 26.0+ ready)
+- ⏳ PlotProperties and FigureProperties
+- ⏳ Basic ToraxPlotView (2D grid)
+- ⏳ Time slider component
+
+**Phase 2: 2D Plot Rendering** (P0):
+- SpatialPlotView (LineMark for profiles)
+- TimeSeriesPlotView (time evolution)
+- Color scheme management
+- Legend and axis labels
+- Comparison plots (2 runs)
+
+**Phase 3: 2D Configurations** (P1):
+- DefaultPlotConfig (4×4, 16 subplots)
+- SourcesPlotConfig (3×2, 6 subplots)
+- Percentile filtering
+- Zero value suppression
+
+**Phase 4: Chart3D Integration** (Future - iOS 26.0+):
+- ToraxPlot3DView with SurfacePlot
+- Volumetric temperature/density visualization
+- Interactive camera controls (Chart3DPose)
+- PointMark3D for scatter plots
+
+### Chart3D API (iOS 26.0+)
+
+**IMPORTANT**: Chart3D requires iOS 26.0+. The actual API differs from initial requirements:
+
+```swift
+@available(macOS 26.0, iOS 26.0, visionOS 26.0, *)
+struct ToraxPlot3DView: View {
+    let data: PlotData3D
+    @State private var pose: Chart3DPose = .default
+
+    var body: some View {
+        Chart3D {
+            SurfacePlot(x: "R", y: "Z", z: "φ") { r, phi in
+                interpolateTemperature(r: r, phi: phi, data: data)
+            }
+            .foregroundStyle(.heightBased)
+            .metalness(0.3)  // PBR material properties
+            .roughness(0.7)
+        }
+        .chart3DPose($pose)  // Interactive rotation
+        .chart3DCameraProjection(.perspective)
+    }
+}
+```
+
+**Chart3DPose** (not as documented in requirements):
+```swift
+// Actual API
+Chart3DPose(azimuth: .degrees(45), inclination: .degrees(30))
+
+// NOT: rotation, elevation, distance (these don't exist)
+```
+
+**Available Symbol Shapes**:
+- `.sphere`, `.cube`, `.cylinder`, `.cone`
+
+**Surface Styles**:
+- `.heightBased` - Color by Y-axis height
+- `.normalBased` - Color by surface normal
+- `.heightBased(Gradient, yRange:)` - Custom gradient
+
+### CLI Integration
+
+```bash
+# Future plotting command (Phase 2+)
+torax plot results/simulation.json --layout default
+
+# 3D plotting (iOS 26.0+)
+torax plot results/simulation.json --mode 3d
+```
+
+### Design Principles
+
+1. **2D First**: Focus on Swift Charts 2D (macOS 13.0+, iOS 16.0+)
+2. **3D Ready**: PlotData3D prepared for Chart3D when iOS 26.0 releases
+3. **Type Safety**: All data wrapped in `Sendable` structs
+4. **Unit Clarity**: Display units (keV, 10²⁰ m⁻³) ≠ internal units (eV, m⁻³)
+5. **Performance**: Lazy evaluation, data decimation for >1000 points
+
+### Common Pitfalls
+
+❌ **DON'T**: Assume Chart3D is available on current OS versions
+❌ **DON'T**: Mix internal units (eV) with display units (keV) in calculations
+❌ **DON'T**: Use Chart3DPose with `rotation`, `elevation`, `distance` (these properties don't exist)
+
+✅ **DO**: Use `@available(iOS 26.0, *)` for all Chart3D code
+✅ **DO**: Convert units only in PlotData initialization
+✅ **DO**: Use actual Chart3DPose API: `azimuth` and `inclination`
+
+## Design Documentation
+
+For detailed design specifications and implementation guidelines:
+
+- **[Visualization System Design](docs/VISUALIZATION_DESIGN.md)**: Comprehensive visualization architecture, researcher requirements analysis, data flow, dashboard designs, and implementation roadmap
+
 ## References
 
 - Original TORAX: https://github.com/google-deepmind/torax
@@ -2074,3 +2758,5 @@ swift build -c release
 - swift-numerics: https://github.com/apple/swift-numerics
 - swift-numerics Documentation: https://deepwiki.com/apple/swift-numerics
 - swift-argument-parser: https://github.com/apple/swift-argument-parser
+- Swift Charts: https://developer.apple.com/documentation/charts
+- Chart3D (iOS 26.0+): https://developer.apple.com/documentation/charts/chart3d

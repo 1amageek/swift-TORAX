@@ -344,6 +344,60 @@ extension FusionPower {
     }
 }
 
+// MARK: - Phase 4a: Metadata Computation
+
+extension FusionPower {
+
+    /// Phase 4a: Compute source metadata for power balance tracking
+    ///
+    /// - Parameters:
+    ///   - profiles: Current plasma profiles
+    ///   - geometry: Geometry for volume integration
+    /// - Returns: Source metadata with fusion power components
+    /// - Throws: PhysicsError if computation fails
+    public func computeMetadata(
+        profiles: CoreProfiles,
+        geometry: Geometry
+    ) throws -> SourceMetadata {
+
+        let P_fusion_watts = try compute(
+            ne: profiles.electronDensity.value,
+            Ti: profiles.ionTemperature.value
+        )
+
+        // Compute alpha energy deposition split based on electron temperature
+        let Te = profiles.electronTemperature.value
+        let ionFraction = computeAlphaIonFraction(Te: Te)
+
+        // Split fusion power between ions and electrons [W/m^3]
+        let P_ion_density = P_fusion_watts * ionFraction
+        let P_electron_density = P_fusion_watts * (Float(1.0) - ionFraction)
+
+        // Volume integration: ∫ P dV → [W/m^3] × [m^3] = [W]
+        let cellVolumes = GeometricFactors.from(geometry: geometry).cellVolumes.value
+
+        let P_ion_total = (P_ion_density * cellVolumes).sum()
+        let P_electron_total = (P_electron_density * cellVolumes).sum()
+        let P_fusion_total = (P_fusion_watts * cellVolumes).sum()
+        eval(P_ion_total, P_electron_total, P_fusion_total)
+
+        let ionPower = P_ion_total.item(Float.self)
+        let electronPower = P_electron_total.item(Float.self)
+        let fusionPower = P_fusion_total.item(Float.self)
+
+        // Alpha power is 20% of total fusion power (D-T: 3.5 MeV / 17.6 MeV)
+        let alphaPower = fusionPower * 0.2
+
+        return SourceMetadata(
+            modelName: "fusion_power",
+            category: .fusion,
+            ionPower: ionPower,
+            electronPower: electronPower,
+            alphaPower: alphaPower
+        )
+    }
+}
+
 // MARK: - Diagnostic Output
 
 extension FusionPower {

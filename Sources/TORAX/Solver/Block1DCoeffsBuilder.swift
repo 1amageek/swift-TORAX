@@ -257,6 +257,9 @@ private func buildDensityEquationCoeffs(
 ///
 /// This can be rewritten as a diffusion-like equation with current sources.
 ///
+/// **Implementation Update**: Now uses temperature-dependent Spitzer resistivity
+/// and bootstrap current from pressure gradients.
+///
 /// - Returns: Coefficients for psi equation
 private func buildFluxEquationCoeffs(
     transport: TransportCoefficients,
@@ -268,16 +271,25 @@ private func buildFluxEquationCoeffs(
     let nCells = geometry.nCells
     let nFaces = nCells + 1
 
-    // For poloidal flux evolution, diffusion comes from resistivity
-    // η_∥ is parallel resistivity
-    let eta_parallel = Float(1e-7)  // Typical plasma resistivity (Ω·m)
-    let dFace = MLXArray.full([nFaces], values: MLXArray(eta_parallel))  // [nFaces]
+    // 1. Temperature-dependent resistivity (Spitzer formula with neoclassical correction)
+    let eta_cell = computeSpitzerResistivity(
+        Te: profiles.electronTemperature.value,
+        geometry: geometry
+    )
+    let dFace = interpolateToFaces(eta_cell, mode: .harmonic)  // [nFaces]
 
     // No convection for flux
     let vFace = MLXArray.zeros([nFaces])  // [nFaces]
 
-    // Source: current drive (bootstrap + external)
-    let sourceCell = sources.currentSource.value  // [nCells]
+    // 2. Bootstrap current from pressure gradients
+    let J_bootstrap = computeBootstrapCurrent(
+        profiles: profiles,
+        geometry: geometry
+    )
+
+    // 3. Total current source: bootstrap + external
+    let J_external = sources.currentSource.value  // [nCells]
+    let sourceCell = J_bootstrap + J_external  // [nCells]
 
     // Source matrix coefficient
     let sourceMatCell = MLXArray.zeros([nCells])  // [nCells]
@@ -385,4 +397,155 @@ private func interpolateToFaces(_ cellValues: MLXArray, mode: InterpolationMode)
     let result = MLXArray(faceValues)
 
     return result
+}
+
+// MARK: - Current Diffusion Helpers
+
+/// Compute Spitzer resistivity with neoclassical correction
+///
+/// **Formula**:
+/// ```
+/// η_Spitzer = 5.2 × 10⁻⁵ * Z_eff * ln(Λ) / T_e^(3/2)  [Ω·m]
+/// η_neo = η_Spitzer * (1 + 1.46 * √ε)  [neoclassical correction]
+/// ```
+///
+/// **Parameters**:
+/// - Te: Electron temperature [eV], shape [nCells]
+/// - geometry: Tokamak geometry
+///
+/// **Returns**: Resistivity [Ω·m], shape [nCells]
+///
+/// **References**:
+/// - Spitzer & Härm, "Transport Phenomena in a Completely Ionized Gas", Phys. Rev. 89, 977 (1953)
+/// - NRL Plasma Formulary (2019)
+///
+/// **Implementation Note**:
+/// Uses default Zeff = 1.5 (typical for ITER with low-Z impurities).
+/// Future enhancement: extract Zeff from TransportParameters.params if available.
+private func computeSpitzerResistivity(
+    Te: MLXArray,
+    geometry: Geometry
+) -> MLXArray {
+    // Default parameters (consistent with OhmicHeating.swift)
+    let Zeff: Float = 1.5        // Effective charge (deuterium + low-Z impurities)
+    let coulombLog: Float = 17.0  // Coulomb logarithm (typical for tokamak core)
+
+    // Spitzer resistivity: η = 5.2e-5 * Zeff * ln(Λ) / T_e^(3/2)
+    let eta_spitzer = 5.2e-5 * Zeff * coulombLog / pow(Te, 1.5)
+
+    // Neoclassical correction for trapped particles
+    // Inverse aspect ratio: ε = r/R₀
+    let epsilon = geometry.radii.value / geometry.majorRadius
+
+    // Trapped particle correction factor: f_trap ≈ 1 + 1.46 * √ε
+    let ft = 1.0 + 1.46 * sqrt(epsilon)
+
+    // Neoclassical resistivity
+    let eta_neo = eta_spitzer * ft
+
+    return eta_neo
+}
+
+/// Compute bootstrap current from pressure gradients
+///
+/// **Physics**: Bootstrap current is self-generated current from pressure gradients
+/// and trapped particle effects. It's crucial for tokamak steady-state operation.
+///
+/// **Simplified Sauter Formula**:
+/// ```
+/// J_BS = C_BS * (∇P) / B_φ
+/// where C_BS ≈ (1 - ε) [simplified coefficient]
+/// ```
+///
+/// **Parameters**:
+/// - profiles: Current core profiles
+/// - geometry: Tokamak geometry
+///
+/// **Returns**: Bootstrap current density [A/m²], shape [nCells]
+///
+/// **References**:
+/// - Sauter et al., "Neoclassical conductivity and bootstrap current formulas", PoP 6, 2834 (1999)
+///
+/// **Implementation Note**:
+/// This is a simplified version of the full Sauter formula.
+/// Full implementation requires collisionality and multiple ion species.
+private func computeBootstrapCurrent(
+    profiles: CoreProfiles,
+    geometry: Geometry
+) -> MLXArray {
+    let Ti = profiles.ionTemperature.value
+    let Te = profiles.electronTemperature.value
+    let ne = profiles.electronDensity.value
+
+    // Compute total pressure: P = n_e (T_i + T_e) * e
+    // Units: [m⁻³] * [eV] * [1.602e-19 J/eV] = [Pa]
+    let P = ne * (Ti + Te) * UnitConversions.eV
+
+    // Compute pressure gradient: ∇P
+    // Units: [Pa/m]
+    let geoFactors = GeometricFactors.from(geometry: geometry)
+    let gradP = computeGradient(P, cellDistances: geoFactors.cellDistances.value)
+
+    // Simplified bootstrap coefficient
+    // Full Sauter formula depends on collisionality, trapped fraction, etc.
+    // Here we use: C_BS ≈ (1 - ε)
+    let epsilon = geometry.radii.value / geometry.majorRadius
+    let C_BS = 1.0 - epsilon
+
+    // Bootstrap current density: J_BS = C_BS * (∇P) / B_φ
+    // Units: [Pa/m] / [T] = [A/m²]
+    let J_BS = C_BS * gradP / geometry.toroidalField
+
+    // Clamp to physical range [0, 10 MA/m²]
+    let J_BS_clamped = minimum(maximum(J_BS, MLXArray(0.0)), MLXArray(1e7))
+
+    return J_BS_clamped
+}
+
+/// Compute gradient with epsilon regularization
+///
+/// **Formula**: ∇f ≈ (f[i+1] - f[i]) / Δr
+///
+/// **Parameters**:
+/// - profile: Profile values [nCells]
+/// - cellDistances: Distance between cell centers [nCells-1]
+///
+/// **Returns**: Gradient at cell centers [nCells]
+///
+/// **Implementation**:
+/// - Interior cells: central differencing
+/// - Boundary cells: one-sided differencing
+/// - Epsilon regularization prevents division by zero
+private func computeGradient(_ profile: MLXArray, cellDistances: MLXArray) -> MLXArray {
+    let nCells = profile.shape[0]
+
+    // Compute differences: Δf = f[i+1] - f[i]
+    let df = profile[1...] - profile[..<(nCells - 1)]  // [nCells-1]
+
+    // Add epsilon to prevent division by zero
+    let dr_safe = cellDistances + 1e-10  // [nCells-1]
+
+    // Gradient at interior faces
+    let gradFaces = df / dr_safe  // [nCells-1]
+
+    // Interpolate to cell centers (GPU-first, no CPU transfer)
+    // - Boundary cells: use nearest face value
+    // - Interior cells: average of adjacent faces
+
+    // Left boundary cell (i=0): use gradFaces[0]
+    let gradCell0 = gradFaces[0..<1]  // [1]
+
+    // Interior cells (i=1...nCells-2): average of adjacent faces
+    // gradCell[i] = (gradFaces[i-1] + gradFaces[i]) / 2
+    let leftFaces = gradFaces[0..<(nCells - 2)]   // [nCells-2]
+    let rightFaces = gradFaces[1..<(nCells - 1)]  // [nCells-2]
+    let gradInterior = (leftFaces + rightFaces) / 2.0  // [nCells-2]
+
+    // Right boundary cell (i=nCells-1): use gradFaces[nCells-2]
+    let gradCellN = gradFaces[(nCells - 2)..<(nCells - 1)]  // [1]
+
+    // Concatenate: [1] + [nCells-2] + [1] = [nCells]
+    let gradCells = concatenated([gradCell0, gradInterior, gradCellN], axis: 0)
+
+    return gradCells
 }

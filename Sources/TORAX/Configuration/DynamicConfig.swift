@@ -9,6 +9,7 @@ import Foundation
 /// - Boundary conditions
 /// - Source parameters
 /// - Transport coefficients
+/// - MHD model parameters
 public struct DynamicConfig: Codable, Sendable, Equatable {
     /// Boundary conditions (can be time-dependent)
     public let boundaries: BoundaryConfig
@@ -22,28 +23,42 @@ public struct DynamicConfig: Codable, Sendable, Equatable {
     /// Pedestal configuration (optional)
     public let pedestal: PedestalConfig?
 
+    /// MHD models configuration
+    public let mhd: MHDConfig
+
+    /// Restart configuration
+    public let restart: RestartConfig
+
     public init(
         boundaries: BoundaryConfig,
         transport: TransportConfig,
         sources: SourcesConfig = .default,
-        pedestal: PedestalConfig? = nil
+        pedestal: PedestalConfig? = nil,
+        mhd: MHDConfig = .default,
+        restart: RestartConfig = .default
     ) {
         self.boundaries = boundaries
         self.transport = transport
         self.sources = sources
         self.pedestal = pedestal
+        self.mhd = mhd
+        self.restart = restart
     }
 
     /// Convenience initializer with default transport
     public init(
         boundaries: BoundaryConfig,
         sources: SourcesConfig = .default,
-        pedestal: PedestalConfig? = nil
+        pedestal: PedestalConfig? = nil,
+        mhd: MHDConfig = .default,
+        restart: RestartConfig = .default
     ) {
         self.boundaries = boundaries
         self.transport = TransportConfig(modelType: "constant")
         self.sources = sources
         self.pedestal = pedestal
+        self.mhd = mhd
+        self.restart = restart
     }
 }
 
