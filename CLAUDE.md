@@ -2407,17 +2407,33 @@ BoundaryConditions (eV, m^-3)
     ↓ no conversion
 CoreProfiles (eV, m^-3)
     ↓ no conversion
-Physics Models (eV, m^-3)
-    ↓ internal conversions only when needed
-Results (eV, m^-3)
+Physics Models (W/m³ or MW/m³ for heating)
+    ↓ return SourceTerms [MW/m³]
+CompositeSourceModel [MW/m³]
+    ↓ aggregates all sources
+Block1DCoeffsBuilder
+    ↓ CONVERTS: MW/m³ → eV/(m³·s)
+    ↓ (factor: 6.2415×10²⁴)
+PDE Solver [eV/(m³·s)]
+    ↓ solves equations
+Results CoreProfiles (eV, m^-3)
 ```
 
-### Why eV and m^-3?
+**Critical**: SourceTerms uses **MW/m³** for heating (plasma physics standard). Conversion to **eV/(m³·s)** (PDE solver units) happens exclusively in `Block1DCoeffsBuilder` via `UnitConversions.megawattsToEvDensity()`. This centralization prevents unit mixing bugs.
 
-1. **Physics model consistency**: All physics models (`FusionPower`, `IonElectronExchange`, `OhmicHeating`, `Bremsstrahlung`) expect eV and m^-3
-2. **No conversion errors**: Zero-conversion data flow eliminates 1000× bugs
-3. **TORAX compatibility**: Original Python TORAX uses eV and m^-3 internally
+### Why eV and m^-3 for CoreProfiles?
+
+1. **Physics model consistency**: All physics models (`FusionPower`, `IonElectronExchange`, `OhmicHeating`, `Bremsstrahlung`) use eV and m^-3 for profiles
+2. **Centralized conversion**: Single conversion point (Block1DCoeffsBuilder) eliminates distributed conversion bugs
+3. **TORAX compatibility**: Original Python TORAX uses similar unit boundaries
 4. **Type safety**: Units enforced through documentation and validation
+
+### Why MW/m³ for SourceTerms?
+
+1. **Plasma physics standard**: Heating is universally reported in MW/m³ in tokamak literature
+2. **Aggregation safety**: CompositeSourceModel can safely add sources (all same unit)
+3. **Barrier pattern**: Block1DCoeffsBuilder acts as single conversion barrier to solver domain
+4. **Error prevention**: Prevents unit mixing when combining multiple sources (ECRH + Fusion + Ohmic)
 
 ### Display Units (Output Only)
 

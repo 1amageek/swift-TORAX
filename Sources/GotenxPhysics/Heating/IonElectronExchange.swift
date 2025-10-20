@@ -112,6 +112,43 @@ public struct IonElectronExchange: Sendable {
         let lnLambda = computeCoulombLogarithm(ne: ne, Te: Te)
         return PhysicsConstants.collisionFrequencyPrefactor * ne * Zeff * lnLambda / pow(Te, Float(1.5))
     }
+
+    /// Compute source metadata for power balance tracking
+    ///
+    /// Ion-electron exchange is energy conservative: power transferred to ions
+    /// equals power removed from electrons (and vice versa).
+    ///
+    /// - Parameters:
+    ///   - profiles: Current plasma profiles
+    ///   - geometry: Geometry for volume integration
+    /// - Returns: Source metadata with ion-electron exchange power
+    /// - Throws: PhysicsError if computation fails
+    public func computeMetadata(
+        profiles: CoreProfiles,
+        geometry: Geometry
+    ) throws -> SourceMetadata {
+
+        let Q_ie_watts = try compute(
+            ne: profiles.electronDensity.value,
+            Te: profiles.electronTemperature.value,
+            Ti: profiles.ionTemperature.value
+        )
+
+        // Volume integration: ∫ Q dV → [W/m³] × [m³] = [W]
+        let cellVolumes = GeometricFactors.from(geometry: geometry).cellVolumes.value
+        let P_ie_total = (Q_ie_watts * cellVolumes).sum()
+        eval(P_ie_total)
+
+        let exchangePower = P_ie_total.item(Float.self)
+
+        // Positive = heating ions, negative = heating electrons
+        return SourceMetadata(
+            modelName: "ion_electron_exchange",
+            category: .other,  // Energy transfer, not a source
+            ionPower: exchangePower,
+            electronPower: -exchangePower  // Energy conserved
+        )
+    }
 }
 
 // MARK: - Source Model Protocol Conformance

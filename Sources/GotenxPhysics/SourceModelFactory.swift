@@ -50,6 +50,68 @@ public struct SourceModelFactory {
             sources["bremsstrahlung"] = BremsstrahlungSource()
         }
 
+        // Add ECRH if enabled
+        if let ecrhConfig = config.ecrh {
+            let params = SourceParameters(
+                modelType: "ecrh",
+                params: [
+                    "total_power": ecrhConfig.totalPower,
+                    "deposition_rho": ecrhConfig.depositionRho,
+                    "deposition_width": ecrhConfig.depositionWidth,
+                    "launch_angle": ecrhConfig.launchAngle ?? 0.0,
+                    "frequency": ecrhConfig.frequency ?? 0.0,
+                    "current_drive": ecrhConfig.currentDriveEnabled ? 1.0 : 0.0
+                ]
+            )
+            do {
+                sources["ecrh"] = try ECRHSource(params: params)
+            } catch {
+                print("⚠️  Warning: Failed to initialize ECRH source: \(error)")
+            }
+        }
+
+        // Add Gas Puff if enabled
+        if let gasPuffConfig = config.gasPuff {
+            let params = SourceParameters(
+                modelType: "gasPuff",
+                params: [
+                    "puff_rate": gasPuffConfig.puffRate,
+                    "penetration_depth": gasPuffConfig.penetrationDepth
+                ]
+            )
+            do {
+                sources["gasPuff"] = try GasPuffSource(params: params)
+            } catch {
+                print("⚠️  Warning: Failed to initialize Gas Puff source: \(error)")
+            }
+        }
+
+        // Add Impurity Radiation if enabled
+        if let impurityConfig = config.impurityRadiation {
+            // Encode species as atomic number
+            let atomicNumber: Float
+            switch impurityConfig.species.lowercased() {
+            case "carbon": atomicNumber = 6
+            case "neon": atomicNumber = 10
+            case "argon": atomicNumber = 18
+            case "tungsten": atomicNumber = 74
+            default: atomicNumber = 18
+            }
+
+            let params = SourceParameters(
+                modelType: "impurityRadiation",
+                params: [
+                    "impurity_fraction": impurityConfig.impurityFraction,
+                    "atomic_number": atomicNumber
+                ]
+            )
+            do {
+                sources["impurityRadiation"] = try ImpurityRadiationSource(params: params)
+            } catch {
+                print("⚠️  Warning: Failed to initialize Impurity Radiation source: \(error)")
+            }
+        }
+
         // Return composite model combining all sources
         return CompositeSourceModel(sources: sources)
     }
@@ -76,11 +138,20 @@ public struct SourceModelFactory {
             case "bremsstrahlung":
                 sources[name] = BremsstrahlungSource(params: params)
 
+            case "ecrh":
+                sources[name] = try ECRHSource(params: params)
+
+            case "gasPuff":
+                sources[name] = try GasPuffSource(params: params)
+
+            case "impurityRadiation":
+                sources[name] = try ImpurityRadiationSource(params: params)
+
             default:
                 throw ConfigurationError.invalidValue(
                     key: "source.modelType",
                     value: params.modelType,
-                    reason: "Unknown source model type. Valid types: ohmic, fusion, ionElectronExchange, bremsstrahlung"
+                    reason: "Unknown source model type. Valid types: ohmic, fusion, ionElectronExchange, bremsstrahlung, ecrh, gasPuff, impurityRadiation"
                 )
             }
         }
@@ -113,11 +184,57 @@ public struct SourceModelFactory {
         case "bremsstrahlung":
             return BremsstrahlungSource()
 
+        case "ecrh":
+            if let params = params {
+                return try ECRHSource(params: params)
+            } else {
+                // Use default ECRH configuration
+                let defaultParams = SourceParameters(
+                    modelType: "ecrh",
+                    params: [
+                        "total_power": 20e6,
+                        "deposition_rho": 0.5,
+                        "deposition_width": 0.1
+                    ]
+                )
+                return try ECRHSource(params: defaultParams)
+            }
+
+        case "gasPuff":
+            if let params = params {
+                return try GasPuffSource(params: params)
+            } else {
+                // Use default Gas Puff configuration
+                let defaultParams = SourceParameters(
+                    modelType: "gasPuff",
+                    params: [
+                        "puff_rate": 1e21,
+                        "penetration_depth": 0.1
+                    ]
+                )
+                return try GasPuffSource(params: defaultParams)
+            }
+
+        case "impurityRadiation":
+            if let params = params {
+                return try ImpurityRadiationSource(params: params)
+            } else {
+                // Use default Impurity Radiation configuration
+                let defaultParams = SourceParameters(
+                    modelType: "impurityRadiation",
+                    params: [
+                        "impurity_fraction": 0.001,
+                        "atomic_number": 18  // Argon
+                    ]
+                )
+                return try ImpurityRadiationSource(params: defaultParams)
+            }
+
         default:
             throw ConfigurationError.invalidValue(
                 key: "sourceName",
                 value: name,
-                reason: "Unknown source model name. Valid names: ohmic, fusion, ionElectronExchange, bremsstrahlung"
+                reason: "Unknown source model name. Valid names: ohmic, fusion, ionElectronExchange, bremsstrahlung, ecrh, gasPuff, impurityRadiation"
             )
         }
     }

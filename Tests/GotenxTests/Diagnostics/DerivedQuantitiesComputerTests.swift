@@ -132,14 +132,25 @@ struct DerivedQuantitiesComputerTests {
         let geometry = createTestGeometry()
         let profiles = createFlatProfiles(nCells: 10, Ti: 10000, Te: 10000, ne: 1e20)
 
-        // Create mock source terms with heating power
+        // Create mock source terms with heating power and metadata
         let nCells = 10
         let heatingProfile = [Float](repeating: 1e6, count: nCells)  // 1 MW/m^3
+
+        // Phase 4a: Create metadata for accurate power balance
+        let auxiliaryMetadata = SourceMetadata(
+            modelName: "test_auxiliary",
+            category: .auxiliary,
+            ionPower: 10e6,      // 10 MW total ion heating
+            electronPower: 10e6  // 10 MW total electron heating
+        )
+        let metadata = SourceMetadataCollection(entries: [auxiliaryMetadata])
+
         let sources = SourceTerms(
             ionHeating: EvaluatedArray(evaluating: MLXArray(heatingProfile)),
             electronHeating: EvaluatedArray(evaluating: MLXArray(heatingProfile)),
             particleSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: nCells))),
-            currentSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: nCells)))
+            currentSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: nCells))),
+            metadata: metadata
         )
 
         let derived = DerivedQuantitiesComputer.compute(
@@ -166,11 +177,20 @@ struct DerivedQuantitiesComputerTests {
 
         // High heating power → lower τE
         let highHeating = [Float](repeating: 5e6, count: 10)  // 5 MW/m^3
+        let metadataHigh = SourceMetadataCollection(entries: [
+            SourceMetadata(
+                modelName: "test_high_heating",
+                category: .auxiliary,
+                ionPower: 50e6,   // 50 MW
+                electronPower: 50e6
+            )
+        ])
         let sourcesHigh = SourceTerms(
             ionHeating: EvaluatedArray(evaluating: MLXArray(highHeating)),
             electronHeating: EvaluatedArray(evaluating: MLXArray(highHeating)),
             particleSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
-            currentSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10)))
+            currentSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
+            metadata: metadataHigh
         )
 
         let derivedHigh = DerivedQuantitiesComputer.compute(
@@ -181,11 +201,20 @@ struct DerivedQuantitiesComputerTests {
 
         // Low heating power → higher τE
         let lowHeating = [Float](repeating: 1e6, count: 10)  // 1 MW/m^3
+        let metadataLow = SourceMetadataCollection(entries: [
+            SourceMetadata(
+                modelName: "test_low_heating",
+                category: .auxiliary,
+                ionPower: 10e6,   // 10 MW
+                electronPower: 10e6
+            )
+        ])
         let sourcesLow = SourceTerms(
             ionHeating: EvaluatedArray(evaluating: MLXArray(lowHeating)),
             electronHeating: EvaluatedArray(evaluating: MLXArray(lowHeating)),
             particleSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
-            currentSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10)))
+            currentSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
+            metadata: metadataLow
         )
 
         let derivedLow = DerivedQuantitiesComputer.compute(
@@ -235,11 +264,20 @@ struct DerivedQuantitiesComputerTests {
         let geometry = createTestGeometry()
         let profiles = createFlatProfiles(nCells: 10, Ti: 10000, Te: 10000, ne: 1e20)
 
+        let metadata = SourceMetadataCollection(entries: [
+            SourceMetadata(
+                modelName: "test_heating",
+                category: .auxiliary,
+                ionPower: 10e6,
+                electronPower: 10e6
+            )
+        ])
         let sources = SourceTerms(
             ionHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 1e6, count: 10))),
             electronHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 1e6, count: 10))),
             particleSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
-            currentSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10)))
+            currentSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
+            metadata: metadata
         )
 
         let derived = DerivedQuantitiesComputer.compute(
@@ -266,11 +304,33 @@ struct DerivedQuantitiesComputerTests {
         let geometry = createTestGeometry()
         let profiles = createFlatProfiles(nCells: 10, Ti: 10000, Te: 10000, ne: 1e20)
 
+        let metadata = SourceMetadataCollection(entries: [
+            SourceMetadata(
+                modelName: "test_fusion",
+                category: .fusion,
+                ionPower: 15e6,
+                electronPower: 25e6,
+                alphaPower: 8e6
+            ),
+            SourceMetadata(
+                modelName: "test_auxiliary",
+                category: .auxiliary,
+                ionPower: 5e6,
+                electronPower: 10e6
+            ),
+            SourceMetadata(
+                modelName: "test_ohmic",
+                category: .ohmic,
+                ionPower: 2e6,
+                electronPower: 3e6
+            )
+        ])
         let sources = SourceTerms(
             ionHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 2e6, count: 10))),
             electronHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 3e6, count: 10))),
             particleSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
-            currentSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10)))
+            currentSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
+            metadata: metadata
         )
 
         let derived = DerivedQuantitiesComputer.compute(
@@ -295,5 +355,132 @@ struct DerivedQuantitiesComputerTests {
 
         // Total power should be positive
         #expect(totalPower > 0)
+    }
+
+    @Test("Fusion gain Q calculation")
+    func testFusionGain() {
+        let geometry = createTestGeometry()
+        let profiles = createFlatProfiles(nCells: 10, Ti: 15000, Te: 15000, ne: 1.5e20)
+
+        // Create sources with significant fusion power
+        // Simulate ITER-like scenario: Q = 10 (P_fusion = 500 MW, P_input = 50 MW)
+        let metadata = SourceMetadataCollection(entries: [
+            SourceMetadata(
+                modelName: "test_fusion",
+                category: .fusion,
+                ionPower: 200e6,     // 200 MW ion heating from fusion
+                electronPower: 300e6, // 300 MW electron heating from fusion
+                alphaPower: 100e6    // 100 MW alpha power
+            ),
+            SourceMetadata(
+                modelName: "test_auxiliary",
+                category: .auxiliary,
+                ionPower: 20e6,      // 20 MW auxiliary
+                electronPower: 20e6  // 20 MW auxiliary
+            ),
+            SourceMetadata(
+                modelName: "test_ohmic",
+                category: .ohmic,
+                ionPower: 5e6,       // 5 MW ohmic
+                electronPower: 5e6   // 5 MW ohmic
+            )
+        ])
+        let sources = SourceTerms(
+            ionHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 2e6, count: 10))),
+            electronHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 8e6, count: 10))),
+            particleSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
+            currentSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
+            metadata: metadata
+        )
+
+        let derived = DerivedQuantitiesComputer.compute(
+            profiles: profiles,
+            geometry: geometry,
+            sources: sources
+        )
+
+        // Expected values:
+        // P_fusion = 500 MW (200 + 300)
+        // P_auxiliary = 40 MW (20 + 20)
+        // P_ohmic = 10 MW (5 + 5)
+        // Q = 500 / (40 + 10) = 10.0 (ITER target!)
+
+        #expect(abs(derived.P_fusion - 500.0) < 0.1)
+        #expect(abs(derived.P_auxiliary - 40.0) < 0.1)
+        #expect(abs(derived.P_ohmic - 10.0) < 0.1)
+        #expect(abs(derived.P_alpha - 100.0) < 0.1)
+
+        // Q_fusion should be exactly 10.0
+        let expectedQ: Float = 500.0 / 50.0  // = 10.0
+        #expect(abs(derived.Q_fusion - expectedQ) < 0.01)
+
+        // Verify Q is in ITER target range
+        #expect(derived.Q_fusion >= 9.0)
+        #expect(derived.Q_fusion <= 11.0)
+    }
+
+    @Test("Fusion gain edge cases")
+    func testFusionGainEdgeCases() {
+        let geometry = createTestGeometry()
+
+        // Case 1: No sources → Q = 0
+        let profilesNoHeating = createFlatProfiles(nCells: 10, Ti: 1000, Te: 1000, ne: 1e19)
+        let derivedNoHeating = DerivedQuantitiesComputer.compute(
+            profiles: profilesNoHeating,
+            geometry: geometry,
+            sources: nil
+        )
+        #expect(derivedNoHeating.Q_fusion == 0)
+
+        // Case 2: Very low heating with metadata
+        let profilesLowHeating = createFlatProfiles(nCells: 10, Ti: 5000, Te: 5000, ne: 5e19)
+        let metadataLow = SourceMetadataCollection(entries: [
+            SourceMetadata(
+                modelName: "test_low_power",
+                category: .auxiliary,
+                ionPower: 0.5e6,     // 0.5 MW
+                electronPower: 0.5e6  // 0.5 MW
+            )
+        ])
+        let lowHeating = [Float](repeating: 1e3, count: 10)  // 0.001 MW/m^3
+        let sourcesLow = SourceTerms(
+            ionHeating: EvaluatedArray(evaluating: MLXArray(lowHeating)),
+            electronHeating: EvaluatedArray(evaluating: MLXArray(lowHeating)),
+            particleSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
+            currentSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
+            metadata: metadataLow
+        )
+        let derivedLow = DerivedQuantitiesComputer.compute(
+            profiles: profilesLowHeating,
+            geometry: geometry,
+            sources: sourcesLow
+        )
+        // No fusion power → Q = 0
+        #expect(derivedLow.Q_fusion == 0)
+
+        // Case 3: Only fusion power, no external heating → Q → ∞ (clamped to 100)
+        let metadataFusionOnly = SourceMetadataCollection(entries: [
+            SourceMetadata(
+                modelName: "test_fusion_only",
+                category: .fusion,
+                ionPower: 100e6,
+                electronPower: 100e6,
+                alphaPower: 40e6
+            )
+        ])
+        let sourcesFusionOnly = SourceTerms(
+            ionHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 1e6, count: 10))),
+            electronHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 1e6, count: 10))),
+            particleSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
+            currentSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
+            metadata: metadataFusionOnly
+        )
+        let derivedFusionOnly = DerivedQuantitiesComputer.compute(
+            profiles: profilesLowHeating,
+            geometry: geometry,
+            sources: sourcesFusionOnly
+        )
+        // No external heating → Q = 0 (by definition)
+        #expect(derivedFusionOnly.Q_fusion == 0)
     }
 }

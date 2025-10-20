@@ -125,6 +125,39 @@ public struct Bremsstrahlung: Sendable {
         // Return lazy MLXArray - caller will eval() when needed
         return result
     }
+
+    /// Compute source metadata for power balance tracking
+    ///
+    /// - Parameters:
+    ///   - profiles: Current plasma profiles
+    ///   - geometry: Geometry for volume integration
+    /// - Returns: Source metadata with Bremsstrahlung radiation power (negative)
+    /// - Throws: PhysicsError if computation fails
+    public func computeMetadata(
+        profiles: CoreProfiles,
+        geometry: Geometry
+    ) throws -> SourceMetadata {
+
+        let P_brems_watts = try compute(
+            ne: profiles.electronDensity.value,
+            Te: profiles.electronTemperature.value
+        )
+
+        // Volume integration: ∫ P dV → [W/m³] × [m³] = [W]
+        let cellVolumes = GeometricFactors.from(geometry: geometry).cellVolumes.value
+        let P_brems_total = (P_brems_watts * cellVolumes).sum()
+        eval(P_brems_total)
+
+        let bremsPower = P_brems_total.item(Float.self)
+
+        // Bremsstrahlung is a power loss (negative value)
+        return SourceMetadata(
+            modelName: "bremsstrahlung",
+            category: .radiation,
+            ionPower: 0,  // Only affects electrons
+            electronPower: bremsPower  // Already negative from compute()
+        )
+    }
 }
 
 // MARK: - Source Model Protocol Conformance

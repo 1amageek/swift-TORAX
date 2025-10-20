@@ -1,12 +1,31 @@
 # Gotenx Visualization System Design
 
-**Version**: 1.0
+**Version**: 1.1
 **Date**: 2025-01-20
-**Status**: Design Document
+**Status**: Implementation Active
 
 ## Executive Summary
 
 This document defines the comprehensive visualization system for swift-Gotenx, designed from the perspective of tokamak fusion researchers. The system provides multi-scale, multi-physics visualization capabilities ranging from real-time monitoring to detailed post-processing analysis.
+
+### Implementation Status (2025-01-20)
+
+| Phase | Component | Status | Completion |
+|-------|-----------|--------|------------|
+| **Phase 1-3** | Simulation Core | ✅ Operational | 90% |
+| └─ Data Infrastructure | SimulationState extensions | ✅ Complete | 100% |
+| └─ Derived Quantities | DerivedQuantitiesComputer | ✅ Functional | 90% |
+| └─ Diagnostics | NumericalDiagnosticsCollector | ✅ Functional | 90% |
+| └─ Sampling System | SamplingConfig + 3-tier strategy | ✅ Complete | 100% |
+| **Phase 4** | GUI Application | ⏳ In Progress | 0% |
+| └─ GotenxApp | Main SwiftUI app | ⏳ Planned | 0% |
+| └─ Dashboard | 12-chart spatial profiles | ⏳ Planned | 0% |
+| └─ Time Series | 0D scalar monitoring | ⏳ Planned | 0% |
+| └─ ViewModel | Async simulation runner | ⏳ Planned | 0% |
+| **Phase 5** | Chart3D Integration | 🔒 Blocked | 0% |
+| └─ 3D Volumetric | Requires iOS 26.0+ | 🔒 Future | 0% |
+
+**Current Focus**: Phase 4 implementation (GUI Application with Swift Charts 2D)
 
 ### Design Principles
 
@@ -15,6 +34,7 @@ This document defines the comprehensive visualization system for swift-Gotenx, d
 3. **Real-time Capable**: Critical monitoring during simulation execution
 4. **Interactive**: Time evolution, parameter comparison, drill-down analysis
 5. **Unit Consistency**: Proper unit conversions with clear documentation
+6. **Incremental Implementation**: Build on existing solid foundation (Phase 1-3)
 
 ---
 
@@ -1991,6 +2011,443 @@ return SimulationState(..., transport: nil)
 // Phase 3: Populated
 return SimulationState(..., transport: computedTransport)
 ```
+
+---
+
+## 11. Phase 4: GUI Application Implementation Plan
+
+### 11.1 Architecture Overview
+
+**Goal**: Create a complete macOS/iOS application that integrates simulation execution with real-time Chart visualization.
+
+```
+GotenxApp (SwiftUI App)
+    ├── ContentView (TabView)
+    │   ├── Tab 1: DashboardView (12 spatial profile charts)
+    │   ├── Tab 2: TimeSeriesDashboard (6-8 scalar time series charts)
+    │   ├── Tab 3: ConfigurationView (simulation parameters)
+    │   └── Tab 4: SimulationControlView (run/pause/stop)
+    │
+    └── SimulationViewModel (@Observable)
+        ├── SimulationRunner (async execution)
+        ├── PlotData (spatial profiles)
+        ├── TimeSeriesData (scalar metrics)
+        └── Progress monitoring (real-time updates)
+```
+
+### 11.2 Implementation Timeline
+
+#### Week 1: Foundation (Days 1-2)
+
+**Day 1: Project Structure**
+```swift
+// Package.swift additions
+.executableTarget(
+    name: "GotenxApp",
+    dependencies: [
+        "Gotenx",
+        "GotenxPhysics",
+        "GotenxUI"
+    ],
+    resources: [.process("Resources")]
+)
+```
+
+**Files to create**:
+```
+Sources/GotenxApp/
+├── GotenxApp.swift              # @main App entry point
+├── ContentView.swift            # Tab navigation
+├── Views/
+│   ├── DashboardView.swift      # 12-chart grid (4×3)
+│   ├── TimeSeriesDashboard.swift  # 0D scalar charts
+│   ├── ConfigurationView.swift  # Parameter editor
+│   └── SimulationControlView.swift  # Run controls
+├── ViewModels/
+│   └── SimulationViewModel.swift  # Business logic
+└── Resources/
+    └── DefaultConfig.json       # Default simulation config
+```
+
+**Day 2: Core ViewModel**
+```swift
+@Observable
+@MainActor
+class SimulationViewModel {
+    // State
+    var plotData: PlotData?
+    var timeSeriesData: [DerivedQuantities] = []
+    var progress: Double = 0.0
+    var isRunning: Bool = false
+    var errorMessage: String?
+
+    // Configuration
+    var config: SimulationConfiguration = .default
+
+    // Simulation runner
+    private var runner: SimulationRunner?
+
+    func runSimulation() async {
+        isRunning = true
+        progress = 0.0
+        errorMessage = nil
+
+        do {
+            // Initialize models
+            let transport = try TransportModelFactory.create(
+                type: config.runtime.dynamic.transport.modelType,
+                params: config.runtime.dynamic.transport.params
+            )
+            let sources = try SourceModelFactory.createModels(
+                config: config.runtime.dynamic.sources
+            )
+
+            // Create runner
+            runner = SimulationRunner(config: config)
+            try await runner?.initialize(
+                transportModel: transport,
+                sourceModels: sources
+            )
+
+            // Run with progress callback
+            let result = try await runner?.run { fraction, progressInfo in
+                await MainActor.run {
+                    self.progress = Double(fraction)
+                    // Update time series in real-time
+                    if let state = progressInfo.currentState {
+                        self.updateTimeSeriesData(from: state)
+                    }
+                }
+            }
+
+            // Final update
+            if let result = result {
+                self.plotData = try PlotData(from: result)
+                self.timeSeriesData = result.timeSeries?.compactMap { $0.derived } ?? []
+            }
+
+            isRunning = false
+        } catch {
+            errorMessage = error.localizedDescription
+            isRunning = false
+        }
+    }
+
+    func cancelSimulation() {
+        // TODO: Implement cancellation
+        isRunning = false
+    }
+
+    private func updateTimeSeriesData(from state: SimulationState) {
+        if let derived = state.derived {
+            timeSeriesData.append(derived)
+        }
+    }
+}
+```
+
+#### Week 2: Dashboard Views (Days 3-5)
+
+**Day 3: DashboardView (Spatial Profiles)**
+```swift
+struct DashboardView: View {
+    let plotData: PlotData
+    @State private var timeIndex: Int = 0
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // 4×3 Grid of spatial profile charts
+            ScrollView {
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible()), count: 3),
+                    spacing: 16
+                ) {
+                    // Row 1: Core Plasma
+                    TemperatureDensityChart(data: plotData, timeIndex: timeIndex)
+                    CurrentDensityChart(data: plotData, timeIndex: timeIndex)
+                    SafetyFactorChart(data: plotData, timeIndex: timeIndex)
+
+                    // Row 2: Transport
+                    TransportCoeffsChart(data: plotData, timeIndex: timeIndex)
+                    HeatSourcesChart(data: plotData, timeIndex: timeIndex)
+                    ParticleDiffusionChart(data: plotData, timeIndex: timeIndex)
+
+                    // Row 3: Current Drive
+                    CurrentProfileChart(data: plotData, timeIndex: timeIndex)
+                    BootstrapChart(data: plotData, timeIndex: timeIndex)
+                    OhmicChart(data: plotData, timeIndex: timeIndex)
+
+                    // Row 4: Advanced
+                    MagneticShearChart(data: plotData, timeIndex: timeIndex)
+                    PressureGradientChart(data: plotData, timeIndex: timeIndex)
+                    FluxSurfaceChart(data: plotData, timeIndex: timeIndex)
+                }
+                .padding()
+            }
+
+            // Shared time slider
+            TimeSlider(
+                timeIndex: $timeIndex,
+                maxIndex: plotData.nTime - 1,
+                timeValues: plotData.time
+            )
+            .padding()
+
+            // Playback controls
+            PlaybackControls(
+                timeIndex: $timeIndex,
+                maxIndex: plotData.nTime - 1
+            )
+            .padding(.bottom)
+        }
+    }
+}
+```
+
+**Day 4: TimeSeriesDashboard (0D Scalars)**
+```swift
+struct TimeSeriesDashboard: View {
+    let scalarData: [DerivedQuantities]
+    let time: [Float]
+
+    @State private var selectedCategory: Category = .corePlasma
+
+    enum Category: String, CaseIterable {
+        case corePlasma = "Core Plasma"
+        case energy = "Energy & Power"
+        case confinement = "Confinement"
+        case current = "Current Drive"
+        case fusion = "Fusion Performance"
+        case beta = "Beta Limits"
+    }
+
+    var body: some View {
+        VStack {
+            // Category selector
+            Picker("Category", selection: $selectedCategory) {
+                ForEach(Category.allCases, id: \.self) { cat in
+                    Text(cat.rawValue).tag(cat)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding()
+
+            // Charts for selected category
+            ScrollView {
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible()), count: 2),
+                    spacing: 16
+                ) {
+                    switch selectedCategory {
+                    case .corePlasma:
+                        CoreTemperatureChart(data: scalarData, time: time)
+                        CoreDensityChart(data: scalarData, time: time)
+                        VolumeAveragedChart(data: scalarData, time: time)
+
+                    case .energy:
+                        ThermalEnergyChart(data: scalarData, time: time)
+                        PowerBalanceChart(data: scalarData, time: time)
+
+                    case .confinement:
+                        TauEChart(data: scalarData, time: time)
+                        HFactorChart(data: scalarData, time: time)
+                        TripleProductChart(data: scalarData, time: time)
+
+                    case .current:
+                        PlasmaCurrentChart(data: scalarData, time: time)
+                        BootstrapFractionChart(data: scalarData, time: time)
+
+                    case .fusion:
+                        FusionPowerChart(data: scalarData, time: time)
+                        QChart(data: scalarData, time: time)
+
+                    case .beta:
+                        BetaNChart(data: scalarData, time: time)
+                        BetaLimitChart(data: scalarData, time: time)
+                    }
+                }
+                .padding()
+            }
+        }
+    }
+}
+```
+
+**Example Chart Implementation**:
+```swift
+struct CoreTemperatureChart: View {
+    let data: [DerivedQuantities]
+    let time: [Float]
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            Text("Core Temperature")
+                .font(.headline)
+
+            Chart {
+                ForEach(Array(zip(time, data)), id: \.0) { t, d in
+                    LineMark(
+                        x: .value("Time", t),
+                        y: .value("Ti", d.Ti_core / 1000.0)  // eV → keV
+                    )
+                    .foregroundStyle(.red)
+                    .symbol(.circle)
+
+                    LineMark(
+                        x: .value("Time", t),
+                        y: .value("Te", d.Te_core / 1000.0)  // eV → keV
+                    )
+                    .foregroundStyle(.blue)
+                    .symbol(.square)
+                }
+            }
+            .chartXAxisLabel("Time [s]")
+            .chartYAxisLabel("Temperature [keV]")
+            .chartLegend(position: .top) {
+                HStack(spacing: 16) {
+                    Label("Ion", systemImage: "circle.fill")
+                        .foregroundStyle(.red)
+                    Label("Electron", systemImage: "square.fill")
+                        .foregroundStyle(.blue)
+                }
+                .font(.caption)
+            }
+            .frame(height: 200)
+        }
+        .padding()
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(8)
+    }
+}
+```
+
+**Day 5: Integration & Testing**
+- Wire up TabView navigation
+- Test real-time updates during simulation
+- Add error handling UI
+- Implement configuration editor
+
+### 11.3 Technical Specifications
+
+#### Data Flow Architecture
+
+```
+User Action (Run Button)
+    ↓
+SimulationViewModel.runSimulation()
+    ↓
+SimulationRunner.run(progressCallback:)
+    ↓ (async updates every 100ms)
+Progress Callback
+    ↓
+MainActor.run { update UI }
+    ↓
+SwiftUI automatic re-render
+    ↓
+Charts display updated
+```
+
+#### Memory Management
+
+**Challenge**: Keep full simulation history in memory for interactive scrubbing
+
+**Solution**: 3-tier sampling strategy (already implemented in `SamplingConfig`)
+
+```swift
+// Balanced configuration (recommended)
+let samplingConfig = SamplingConfig.balanced
+// Memory: ~3 MB for 20k steps
+// - Scalars: Every step (2.7 MB)
+// - Profiles: Every 100 steps (320 KB)
+```
+
+#### Performance Targets
+
+| Scenario | Target | Measurement |
+|----------|--------|-------------|
+| **Time slider scrubbing** | 60 FPS | Time to render chart at new timeIndex |
+| **Chart zoom/pan** | 60 FPS | SwiftUI drawing performance |
+| **Real-time update** | 10 Hz | Progress callback frequency |
+| **Tab switching** | <100ms | Navigation animation |
+
+### 11.4 Platform-Specific Considerations
+
+#### macOS
+
+**Window Management**:
+```swift
+@main
+struct GotenxApp: App {
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+                .frame(minWidth: 1200, minHeight: 900)
+        }
+        #if os(macOS)
+        .defaultSize(width: 1400, height: 1000)
+        .commands {
+            CommandGroup(replacing: .newItem) {
+                Button("New Simulation") {
+                    // Action
+                }
+                .keyboardShortcut("n")
+            }
+        }
+        #endif
+    }
+}
+```
+
+**Export Functionality**:
+```swift
+// PDF export of current dashboard
+Button("Export Dashboard") {
+    let renderer = ImageRenderer(content: DashboardView(plotData: plotData))
+    renderer.scale = 2.0  // Retina
+    if let pdf = renderer.pdf {
+        // Save to file
+    }
+}
+```
+
+#### iOS
+
+**Touch Optimizations**:
+- Larger tap targets for time slider
+- Pinch-to-zoom for charts
+- Swipe gestures for tab navigation
+
+**Layout Adaptations**:
+```swift
+@Environment(\.horizontalSizeClass) var sizeClass
+
+var columns: [GridItem] {
+    sizeClass == .compact ? [GridItem(.flexible())] : Array(repeating: GridItem(.flexible()), count: 3)
+}
+```
+
+### 11.5 Future Enhancements (Post-Phase 4)
+
+1. **Multi-run comparison**: Overlay 2-3 simulation results
+2. **Snapshot save/load**: Save current state for later inspection
+3. **Parameter sensitivity**: Vary single parameter, show impact
+4. **Export animations**: Save time evolution as MP4
+5. **Collaborative viewing**: SharePlay for remote collaboration
+
+### 11.6 Success Criteria
+
+Phase 4 is considered complete when:
+
+- ✅ User can launch GotenxApp on macOS
+- ✅ User can configure simulation parameters in UI
+- ✅ User can start simulation and see real-time progress
+- ✅ User can view 12 spatial profile charts with time slider
+- ✅ User can view 6-8 scalar time series charts
+- ✅ Time slider scrubbing is smooth (>30 FPS)
+- ✅ Charts display correct units (keV, 10²⁰ m⁻³, etc.)
+- ✅ App handles simulation errors gracefully
+- ✅ Memory usage <100 MB for typical 20k-step simulation
+- ✅ App compiles without warnings on macOS 13+ and iOS 16+
 
 ---
 

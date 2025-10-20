@@ -81,6 +81,19 @@ public struct DerivedQuantities: Sendable, Codable, Equatable {
     /// **Added**: For complete Q = P_fusion / (P_auxiliary + P_ohmic) calculation
     public let P_ohmic: Float
 
+    /// Fusion gain Q = P_fusion / P_input
+    ///
+    /// **Definition**: Q = P_fusion / (P_auxiliary + P_ohmic)
+    ///
+    /// **Key values**:
+    /// - Q = 1: Breakeven (fusion power equals input power)
+    /// - Q = 10: ITER design target
+    /// - Q = ∞: Ignition (self-sustaining fusion)
+    ///
+    /// **Note**: Alpha power (P_alpha) is NOT included in P_input since it's
+    /// internally generated. Only external heating (auxiliary + ohmic) counts.
+    public let Q_fusion: Float
+
     // MARK: - Confinement Metrics
 
     /// Energy confinement time [s]
@@ -143,6 +156,7 @@ public struct DerivedQuantities: Sendable, Codable, Equatable {
         P_alpha: Float,
         P_auxiliary: Float,
         P_ohmic: Float,
+        Q_fusion: Float,
         tau_E: Float,
         tau_E_scaling: Float,
         H_factor: Float,
@@ -168,6 +182,7 @@ public struct DerivedQuantities: Sendable, Codable, Equatable {
         self.P_alpha = P_alpha
         self.P_auxiliary = P_auxiliary
         self.P_ohmic = P_ohmic
+        self.Q_fusion = Q_fusion
         self.tau_E = tau_E
         self.tau_E_scaling = tau_E_scaling
         self.H_factor = H_factor
@@ -203,6 +218,7 @@ extension DerivedQuantities {
         P_alpha: 0,
         P_auxiliary: 0,
         P_ohmic: 0,
+        Q_fusion: 0,
         tau_E: 0,
         tau_E_scaling: 0,
         H_factor: 0,

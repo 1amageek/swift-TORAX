@@ -15,7 +15,7 @@ public struct SourceTerms: Sendable, Equatable {
     /// Electron heating [MW/m^3]
     public let electronHeating: EvaluatedArray
 
-    /// Particle source [10^20/m^3/s]
+    /// Particle source [m^-3/s]
     public let particleSource: EvaluatedArray
 
     /// Current source [MA/m^2]
@@ -34,6 +34,82 @@ public struct SourceTerms: Sendable, Equatable {
         currentSource: EvaluatedArray,
         metadata: SourceMetadataCollection? = nil
     ) {
+        #if DEBUG
+        // ═══════════════════════════════════════════════════════════════
+        // DEFENSE LAYER: Detect unit errors early (Debug builds only)
+        // ═══════════════════════════════════════════════════════════════
+
+        // Validate array shapes
+        let nCells = ionHeating.shape[0]
+        precondition(electronHeating.shape[0] == nCells,
+                    "SourceTerms: electron heating shape mismatch (expected \(nCells), got \(electronHeating.shape[0]))")
+        precondition(particleSource.shape[0] == nCells,
+                    "SourceTerms: particle source shape mismatch (expected \(nCells), got \(particleSource.shape[0]))")
+        precondition(currentSource.shape[0] == nCells,
+                    "SourceTerms: current source shape mismatch (expected \(nCells), got \(currentSource.shape[0]))")
+
+        // Validate heating units (should be MW/m³, NOT eV/(m³·s))
+        // Typical ITER values: 0.01 - 1 MW/m³ average
+        // Total ~40 MW over ~1000 m³ volume → ~0.04 MW/m³ average
+        // Allow up to 1000 MW/m³ for localized peaks (10000× safety margin)
+        //
+        // If values are ~1e24, likely returned eV/(m³·s) instead of MW/m³!
+        let maxIonHeating = ionHeating.value.max().item(Float.self)
+        let maxElectronHeating = electronHeating.value.max().item(Float.self)
+
+        precondition(maxIonHeating < 1000.0,
+            """
+            SourceTerms: Suspicious ion heating value: \(maxIonHeating) MW/m³
+
+            If this value is ~1e24, you likely returned eV/(m³·s) instead of MW/m³!
+
+            EXPECTED: Physics models return MW/m³
+            ACTUAL: You may have converted to eV/(m³·s)
+
+            FIX: Return MW/m³ from your SourceModel.computeTerms()
+            Conversion to eV/(m³·s) happens in Block1DCoeffsBuilder, not in physics models.
+            """)
+
+        precondition(maxElectronHeating < 1000.0,
+            """
+            SourceTerms: Suspicious electron heating value: \(maxElectronHeating) MW/m³
+
+            If this value is ~1e24, you likely returned eV/(m³·s) instead of MW/m³!
+
+            EXPECTED: Physics models return MW/m³
+            ACTUAL: You may have converted to eV/(m³·s)
+
+            FIX: Return MW/m³ from your SourceModel.computeTerms()
+            Conversion to eV/(m³·s) happens in Block1DCoeffsBuilder, not in physics models.
+            """)
+
+        // Validate particle source units (should be m^-3/s)
+        // ITER gas puff: ~1e21 particles/s over ~1000 m³ → ~1e18 m^-3/s average
+        // Allow up to 1e20 m^-3/s for localized injection
+        let maxParticleSource = abs(particleSource.value).max().item(Float.self)
+
+        precondition(maxParticleSource < 1e20,
+            """
+            SourceTerms: Suspicious particle source value: \(maxParticleSource) m^-3/s
+
+            Typical range: 1e16 - 1e19 m^-3/s
+            If value is much larger, check your calculation.
+            """)
+
+        // Validate current density (should be MA/m²)
+        // ITER: ~15 MA total current, ~30 m² cross-section → ~0.5 MA/m² average
+        // Allow up to 100 MA/m² for localized current drive
+        let maxCurrentSource = abs(currentSource.value).max().item(Float.self)
+
+        precondition(maxCurrentSource < 100.0,
+            """
+            SourceTerms: Suspicious current source value: \(maxCurrentSource) MA/m²
+
+            Typical range: 0.01 - 10 MA/m²
+            If value is much larger, check your calculation.
+            """)
+        #endif
+
         self.ionHeating = ionHeating
         self.electronHeating = electronHeating
         self.particleSource = particleSource

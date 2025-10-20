@@ -67,6 +67,7 @@ public enum DerivedQuantitiesComputer {
             P_alpha: advancedMetrics.P_alpha,
             P_auxiliary: advancedMetrics.P_auxiliary,
             P_ohmic: advancedMetrics.P_ohmic,
+            Q_fusion: advancedMetrics.Q_fusion,
             tau_E: advancedMetrics.tau_E,
             tau_E_scaling: advancedMetrics.tau_E_scaling,
             H_factor: advancedMetrics.H_factor,
@@ -235,11 +236,19 @@ public enum DerivedQuantitiesComputer {
             tau_E: confinement.tau_E
         )
 
+        // 6. Fusion gain Q = P_fusion / P_input
+        let Q_fusion = computeFusionGain(
+            P_fusion: powers.P_fusion,
+            P_auxiliary: powers.P_auxiliary,
+            P_ohmic: powers.P_ohmic
+        )
+
         return AdvancedMetrics(
             P_fusion: powers.P_fusion,
             P_alpha: powers.P_alpha,
             P_auxiliary: powers.P_auxiliary,
             P_ohmic: powers.P_ohmic,
+            Q_fusion: Q_fusion,
             tau_E: confinement.tau_E,
             tau_E_scaling: confinement.tau_E_scaling,
             H_factor: confinement.H_factor,
@@ -267,37 +276,46 @@ public enum DerivedQuantitiesComputer {
             return (0, 0, 0, 0)
         }
 
-        // Integrate power densities over volume
-        let ionHeating = sources.ionHeating.value
-        let electronHeating = sources.electronHeating.value
+        // Phase 4a: Require metadata for accurate power balance
+        guard let metadata = sources.metadata else {
+            #if DEBUG
+            // Debug builds: Fail fast to catch missing metadata
+            preconditionFailure(
+                """
+                SourceTerms.metadata is required for accurate power balance computation.
 
-        // Total heating power: ∫ (Q_i + Q_e) dV [MW/m^3 * m^3 = MW]
-        let totalHeating = ((ionHeating + electronHeating) * volumes).sum()
-        eval(totalHeating)
+                Phase 3 fixed-ratio estimation has been deprecated due to inaccuracy.
+                All SourceModel implementations must provide SourceMetadata.
 
-        // For now, split heating into components based on typical fractions
-        // TODO: Track individual source contributions properly
-        let P_total = totalHeating.item(Float.self)
+                Fix: Update SourceModel to return SourceTerms with metadata:
+                    let metadata = SourceMetadata(
+                        modelName: "your_model",
+                        category: .fusion/.auxiliary/.ohmic,
+                        ionPower: computed_ion_power,
+                        electronPower: computed_electron_power
+                    )
+                    return SourceTerms(..., metadata: SourceMetadataCollection(entries: [metadata]))
+                """
+            )
+            #else
+            // Release builds: Print warning and return zeros
+            print(
+                """
+                ⚠️ Warning: SourceTerms.metadata is nil - power balance will be inaccurate.
+                Returning zero power values. Update SourceModel to provide metadata.
+                """
+            )
+            return (0, 0, 0, 0)
+            #endif
+        }
 
-        // Estimate fusion power from electron heating (fusion heats electrons primarily)
-        let electronFraction = (electronHeating * volumes).sum() / (totalHeating + 1e-10)
-        eval(electronFraction)
-        let frac = electronFraction.item(Float.self)
+        // Convert from W to MW
+        let P_fusion = metadata.fusionPower / 1e6       // [W] → [MW]
+        let P_alpha = metadata.alphaPower / 1e6         // [W] → [MW]
+        let P_auxiliary = metadata.auxiliaryPower / 1e6 // [W] → [MW]
+        let P_ohmic = metadata.ohmicPower / 1e6         // [W] → [MW]
 
-        // Rough estimate: fusion contributes ~50% of electron heating in burning plasma
-        let P_fusion = P_total * frac * 0.5
-
-        // Alpha power: ~20% of fusion power (DT reaction: 3.5 MeV alpha / 17.6 MeV total)
-        let P_alpha = P_fusion * 0.2
-
-        // Ohmic power: integrated from current density and resistivity
-        // For now, estimate as ~10% of total power
-        let P_ohmic = P_total * 0.1
-
-        // Auxiliary power: remaining power
-        let P_auxiliary = P_total - P_fusion - P_ohmic
-
-        return (max(0, P_fusion), max(0, P_alpha), max(0, P_auxiliary), max(0, P_ohmic))
+        return (P_fusion, P_alpha, P_auxiliary, P_ohmic)
     }
 
     // MARK: - Confinement Metrics
@@ -310,9 +328,10 @@ public enum DerivedQuantitiesComputer {
     ) -> (tau_E: Float, tau_E_scaling: Float, H_factor: Float) {
 
         // Energy confinement time: τE = W / P_loss
-        // P_loss = P_input - P_fusion (since fusion is internal source)
+        // P_loss = P_input + P_alpha (external heating + alpha particle heating)
+        // Note: P_fusion is NOT included in P_loss (it's already counted via P_alpha)
         let P_input = powers.P_auxiliary + powers.P_ohmic
-        let P_loss = P_input + powers.P_alpha  // Alpha power heats plasma
+        let P_loss = P_input + powers.P_alpha  // Total heating power
 
         let tau_E: Float
         if P_loss > 1e-6 {
@@ -489,6 +508,48 @@ public enum DerivedQuantitiesComputer {
 
         return n_T_tau
     }
+
+    // MARK: - Fusion Gain
+
+    /// Compute fusion gain Q = P_fusion / P_input
+    ///
+    /// **Definition**: Q = P_fusion / (P_auxiliary + P_ohmic)
+    ///
+    /// **Physics**:
+    /// - Q < 1: More input power than fusion power (typical for small devices)
+    /// - Q = 1: Breakeven (fusion power equals input power)
+    /// - Q = 5-10: High-performance operation (ITER target: Q = 10)
+    /// - Q → ∞: Ignition (self-sustaining fusion, no external heating needed)
+    ///
+    /// **Note**: Alpha power (P_alpha) is NOT counted as input since it's internally
+    /// generated. Only external heating sources count toward P_input.
+    ///
+    /// - Parameters:
+    ///   - P_fusion: Total fusion power [MW]
+    ///   - P_auxiliary: Auxiliary heating power [MW]
+    ///   - P_ohmic: Ohmic heating power [MW]
+    /// - Returns: Fusion gain Q (dimensionless)
+    private static func computeFusionGain(
+        P_fusion: Float,
+        P_auxiliary: Float,
+        P_ohmic: Float
+    ) -> Float {
+        // Input power = external heating only (exclude alpha power)
+        let P_input = P_auxiliary + P_ohmic
+
+        // Handle edge cases
+        guard P_input > 1e-6 else {
+            // No input power: return 0 (avoid division by zero)
+            return 0
+        }
+
+        // Fusion gain
+        let Q = P_fusion / P_input
+
+        // Clamp to reasonable range [0, 100]
+        // Q > 100 is unrealistic and likely indicates numerical issues
+        return max(0, min(Q, 100))
+    }
 }
 
 // MARK: - Internal Data Structures
@@ -498,6 +559,7 @@ private struct AdvancedMetrics {
     let P_alpha: Float
     let P_auxiliary: Float
     let P_ohmic: Float
+    let Q_fusion: Float
     let tau_E: Float
     let tau_E_scaling: Float
     let H_factor: Float

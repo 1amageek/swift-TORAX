@@ -133,6 +133,52 @@ public struct OhmicHeating: Sendable {
 
         return eta_Spitzer * f_trap
     }
+
+    /// Compute source metadata for power balance tracking
+    ///
+    /// - Parameters:
+    ///   - profiles: Current plasma profiles
+    ///   - geometry: Geometry for volume integration
+    ///   - plasmaCurrentDensity: Optional externally provided current density [A/m²]
+    /// - Returns: Source metadata with ohmic power
+    /// - Throws: PhysicsError if computation fails
+    public func computeMetadata(
+        profiles: CoreProfiles,
+        geometry: Geometry,
+        plasmaCurrentDensity: MLXArray? = nil
+    ) throws -> SourceMetadata {
+
+        // Compute parallel current density
+        let jParallel: MLXArray
+        if let providedCurrent = plasmaCurrentDensity {
+            jParallel = providedCurrent
+        } else {
+            jParallel = try computeParallelCurrentFromProfiles(
+                profiles: profiles,
+                geometry: geometry
+            )
+        }
+
+        let Q_ohm_watts = try compute(
+            Te: profiles.electronTemperature.value,
+            jParallel: jParallel,
+            geometry: geometry
+        )
+
+        // Volume integration: ∫ Q dV → [W/m³] × [m³] = [W]
+        let cellVolumes = GeometricFactors.from(geometry: geometry).cellVolumes.value
+        let P_ohmic_total = (Q_ohm_watts * cellVolumes).sum()
+        eval(P_ohmic_total)
+
+        let ohmicPower = P_ohmic_total.item(Float.self)
+
+        return SourceMetadata(
+            modelName: "ohmic_heating",
+            category: .ohmic,
+            ionPower: 0,  // All Ohmic power goes to electrons
+            electronPower: ohmicPower
+        )
+    }
 }
 
 // MARK: - Source Model Protocol Conformance
