@@ -428,7 +428,9 @@ public actor SimulationOrchestrator {
         newStats.totalSteps += 1
         newStats.totalIterations += accumulatedIterations
         newStats.converged = true
-        newStats.maxResidualNorm = worstResidual
+        // Use final successful attempt's residual, not worst from failed attempts
+        // This prevents false alarms in diagnostics when retries occurred
+        newStats.maxResidualNorm = max(newStats.maxResidualNorm, resolvedResult.residualNorm)
 
         // Use advanced(by:profiles:statistics:transport:sources:) for high-precision time accumulation
         // This prevents cumulative round-off errors over long simulations (20,000+ steps)
@@ -463,7 +465,8 @@ public actor SimulationOrchestrator {
             runDiagnostics(
                 step: state.step,
                 time: state.time,
-                transportCoeffs: transportCoeffs
+                transportCoeffs: transportCoeffs,
+                geometry: geometry
             )
         }
     }
@@ -599,10 +602,12 @@ public actor SimulationOrchestrator {
     ///   - step: Current timestep
     ///   - time: Current simulation time [s]
     ///   - transportCoeffs: Current transport coefficients
+    ///   - geometry: Current geometry
     private func runDiagnostics(
         step: Int,
         time: Float,
-        transportCoeffs: TransportCoefficients
+        transportCoeffs: TransportCoefficients,
+        geometry: Geometry
     ) {
         // 1. Transport diagnostics (always enabled, cheap)
         let transportResults = TransportDiagnostics.diagnose(
@@ -616,12 +621,74 @@ public actor SimulationOrchestrator {
         if let config = diagnosticsConfig,
            config.enableJacobianCheck,
            step % config.jacobianCheckInterval == 0 {
-            // TODO: Compute Jacobian from solver state
-            // This requires access to the Jacobian matrix from the solver
-            // For now, skip this diagnostic
+            // Check if solver provided condition number estimate in metadata
+            if let solverResult = lastSolverResult,
+               let conditionNumber = solverResult.metadata["condition_number"] {
+                // Use explicit Jacobian if available
+                let result = DiagnosticResult(
+                    name: "Jacobian Condition Number",
+                    severity: conditionNumber > 1e6 ? .warning : .info,
+                    message: "Condition number: \(conditionNumber)",
+                    value: conditionNumber,
+                    threshold: 1e6,
+                    time: time,
+                    step: step
+                )
+                diagnosticResults.append(result)
+            } else {
+                // Fallback: Log that Jacobian check is enabled but unavailable
+                // This avoids silent failure when user enables the feature
+                let result = DiagnosticResult(
+                    name: "Jacobian Diagnostics",
+                    severity: .info,
+                    message: "Enabled but condition number not available from solver",
+                    time: time,
+                    step: step
+                )
+                diagnosticResults.append(result)
+            }
         }
 
         // 3. Conservation drift monitoring (passive)
+        // Always monitor conservation drift, even if enforcer is disabled
+        if let initial = initialState,
+           step % 100 == 0 {  // Check every 100 steps to avoid overhead
+            let drifts = NumericalDiagnosticsCollector.computeConservationDrifts(
+                current: state.profiles,
+                initial: initial.profiles,
+                geometry: geometry
+            )
+
+            // Create passive monitoring results if enforcer is not active
+            if conservationEnforcer == nil {
+                // Wrap drifts as ConservationResult for unified reporting
+                let particleResult = ConservationResult(
+                    lawName: "Particle Conservation (passive)",
+                    referenceQuantity: 0.0,  // Not used in passive mode
+                    currentQuantity: 0.0,     // Not used in passive mode
+                    relativeDrift: drifts.particle,
+                    correctionFactor: 1.0,
+                    corrected: false,
+                    time: time,
+                    step: step
+                )
+                conservationResults.append(particleResult)
+
+                let energyResult = ConservationResult(
+                    lawName: "Energy Conservation (passive)",
+                    referenceQuantity: 0.0,
+                    currentQuantity: 0.0,
+                    relativeDrift: drifts.energy,
+                    correctionFactor: 1.0,
+                    corrected: false,
+                    time: time,
+                    step: step
+                )
+                conservationResults.append(energyResult)
+            }
+        }
+
+        // Diagnose conservation results if available (from enforcer or passive monitoring)
         if !conservationResults.isEmpty {
             let recentResults = conservationResults.suffix(10)
             let conservationDiag = ConservationDiagnostics.diagnose(

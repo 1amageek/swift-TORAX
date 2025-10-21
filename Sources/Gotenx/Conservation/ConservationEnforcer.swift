@@ -165,8 +165,32 @@ public struct ConservationEnforcer: Sendable {
                 geometry: geometry
             )
 
-            // Compute drift
-            let relativeDrift = abs(currentQty - referenceQty) / abs(referenceQty)
+            // Guard against zero/invalid reference OR current quantity
+            // Per design doc 3.1: "ゼロ割・非有限値を防ぐ"
+            guard referenceQty > 0, referenceQty.isFinite,
+                  currentQty.isFinite else {
+                // Invalid quantities mean no meaningful conservation to enforce
+                // Record for monitoring but skip correction
+                if verbose {
+                    print("[ConservationEnforcer] Skipping \(law.name): invalid quantities (ref=\(referenceQty), current=\(currentQty))")
+                }
+                let result = ConservationResult(
+                    lawName: law.name,
+                    referenceQuantity: referenceQty,
+                    currentQuantity: currentQty,
+                    relativeDrift: Float.nan,  // Cannot compute meaningful drift
+                    correctionFactor: 1.0,
+                    corrected: false,
+                    time: time,
+                    step: step
+                )
+                results.append(result)
+                continue  // Skip to next law
+            }
+
+            // Compute drift (now safe from division by zero and NaN)
+            // Note: referenceQty > 0 is guaranteed by guard, so abs() is redundant but kept for clarity
+            let relativeDrift = abs(currentQty - referenceQty) / referenceQty
 
             // Check if correction is needed
             let needsCorrection = relativeDrift > law.driftTolerance
