@@ -13,6 +13,7 @@ A Swift implementation of Google DeepMind's [TORAX](https://github.com/google-de
 - **Auto-Differentiation**: Jacobian computation via `grad()` and `vjp()` for Newton-Raphson
 - **Command-Line Interface**: Full CLI with progress monitoring and multiple output formats
 - **Scientific Data Formats**: JSON and NetCDF-4 output with CF-1.8 compliance
+- **NetCDF 圧縮最適化**: DEFLATE レベル6 + 時間方向256スライスチャンクで 50× 以上の圧縮を確認
 
 ## Project Status
 
@@ -112,6 +113,13 @@ swift test --filter GotenxCLITests
 
 # Verbose output
 swift test -v
+
+### NetCDF Compression Strategy
+
+- 出力 NetCDF-4 ファイルは DEFLATE レベル 6 / shuffle 有効で書き出します。
+- 時間方向は最大 256 ステップずつまとめてチャンクし（`[min(256, nTime), nCells]`）、空間方向は全セルを 1 チャンクに含めます。
+- 上記設定でテスト用データに対し 51× 以上、NetCDF 既定チャンクでは 61× の圧縮率を確認しています（`swift test --filter NetCDFCompressionTests/testCompressionRatio`）。
+- 時間方向アクセスの局所性を重視する場合は 128/64 ステップといった粒度に落とすか、差分エンコードなどの前処理を併用してください。
 ```
 
 ## Repository Structure

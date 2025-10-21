@@ -20,6 +20,7 @@ swift-Gotenx is a Swift implementation of Google DeepMind's TORAX (https://githu
   - High-precision arithmetic (Augmented) for numerical stability
   - Integer utilities for grid calculations
 - **Swift Configuration**: Type-safe configuration management for simulation parameters
+- **NetCDF-4**: Output files compressed with DEFLATE and chunked along time for high compression ratios
 
 ### Mathematical Library Usage Strategy
 
@@ -60,6 +61,12 @@ for value in criticalValues {
 ```
 
 **Key decision rule**: If the operation needs to be part of a computation graph for auto-differentiation or should run on GPU, use MLX. For scalar special functions or complex numbers, use Swift Numerics.
+
+## NetCDF Compression Guidelines
+
+- NetCDF プロファイルは DEFLATE レベル 6（shuffle 有効）で書き出し、時間方向は最大 256 ステップ単位でチャンク化 (`[min(256, nTime), nRho]`) します。
+- この設定は `Tests/GotenxTests/IO/NetCDF/NetCDFCompressionTests.swift` の `testCompressionRatio` で 51× 超の圧縮が再現できることを確認しています。
+- フル時間チャンクやデフォルトチャンクと比較するための検証テスト `testChunkingStrategies` も用意しているので、異なるアクセスパターンに最適化したい場合はここを起点に調整してください。
 
 ## Configuration System Architecture
 
