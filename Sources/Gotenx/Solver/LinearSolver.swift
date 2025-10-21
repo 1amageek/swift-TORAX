@@ -70,8 +70,10 @@ public struct LinearSolver: PDESolver {
 
         // Corrector steps: Fixed-point iteration
         var residualNorm: Float = 0.0
+        var actualIterations = 0
 
-        for iter in 0..<nCorrectorSteps {
+        for _ in 0..<nCorrectorSteps {
+            actualIterations += 1
             let xPrev = xNew
 
             // Get coefficients at new time
@@ -93,17 +95,17 @@ public struct LinearSolver: PDESolver {
             // Compute residual norm
             residualNorm = computeResidualNorm(xNew: xNew, xPrev: xPrev)
 
-            // Check convergence
-            if residualNorm < 1e-6 {
+            // Check convergence using configured tolerance
+            if residualNorm < staticParams.solverTolerance {
                 break
             }
         }
 
         return SolverResult(
             updatedProfiles: xNew,
-            iterations: nCorrectorSteps,
+            iterations: actualIterations,
             residualNorm: residualNorm,
-            converged: residualNorm < 1e-6,
+            converged: residualNorm < staticParams.solverTolerance,
             metadata: [
                 "theta": theta,
                 "dt": dt,

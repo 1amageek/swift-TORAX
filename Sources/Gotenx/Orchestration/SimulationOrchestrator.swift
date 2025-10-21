@@ -84,7 +84,7 @@ public actor SimulationOrchestrator {
         switch staticParams.solverType {
         case .linear:
             self.solver = LinearSolver(
-                nCorrectorSteps: 3,
+                nCorrectorSteps: staticParams.solverMaxIterations,
                 usePereversevCorrector: true,
                 theta: staticParams.theta
             )
@@ -359,36 +359,82 @@ public actor SimulationOrchestrator {
             boundaryConditions: dynamicParams.boundaryConditions
         )
 
-        // Solve PDE
-        let result = solver.solve(
-            dt: dt,
-            staticParams: staticParams,
-            dynamicParamsT: dynamicParams,
-            dynamicParamsTplusDt: dynamicParams,
-            geometryT: geometry,
-            geometryTplusDt: geometry,
-            xOld: xOld,
-            coreProfilesT: state.profiles,
-            coreProfilesTplusDt: state.profiles,
-            coeffsCallback: coeffsCallback
-        )
+        // Solve PDE (with adaptive retrial if not converged)
+        let maxSolverRetries = 5
+        var attempt = 0
+        var dtAttempt = dt
+        var accumulatedIterations = 0
+        var worstResidual: Float = state.statistics.maxResidualNorm
+        var finalResult: SolverResult? = nil
+
+        while attempt <= maxSolverRetries {
+            let result = solver.solve(
+                dt: dtAttempt,
+                staticParams: staticParams,
+                dynamicParamsT: dynamicParams,
+                dynamicParamsTplusDt: dynamicParams,
+                geometryT: geometry,
+                geometryTplusDt: geometry,
+                xOld: xOld,
+                coreProfilesT: state.profiles,
+                coreProfilesTplusDt: state.profiles,
+                coeffsCallback: coeffsCallback
+            )
+
+            accumulatedIterations += result.iterations
+            worstResidual = max(worstResidual, result.residualNorm)
+
+            if result.converged {
+                finalResult = result
+                break
+            }
+
+            // 収束しなかった場合はタイムステップを半分にして再試行
+            attempt += 1
+            let nextDt = dtAttempt * 0.5
+
+            if nextDt < timeStepCalculator.minimumTimestep {
+                // これ以上タイムステップを縮小できないので即時エラー
+                throw SolverError.convergenceFailure(
+                    iterations: accumulatedIterations,
+                    residualNorm: result.residualNorm
+                )
+            }
+
+            if attempt > maxSolverRetries {
+                throw SolverError.convergenceFailure(
+                    iterations: accumulatedIterations,
+                    residualNorm: result.residualNorm
+                )
+            }
+
+            print("[SimulationOrchestrator] Solver did not converge; reducing dt to \(nextDt) s (attempt \(attempt) of \(maxSolverRetries))")
+            dtAttempt = nextDt
+        }
+
+        guard let resolvedResult = finalResult else {
+            throw SolverError.convergenceFailure(
+                iterations: accumulatedIterations,
+                residualNorm: worstResidual
+            )
+        }
 
         // Store solver result for diagnostics
-        lastSolverResult = result
+        lastSolverResult = resolvedResult
 
         // Update state using high-precision time accumulation
         var newStats = state.statistics
         newStats.totalSteps += 1
-        newStats.totalIterations += result.iterations
-        newStats.converged = result.converged
-        newStats.maxResidualNorm = max(newStats.maxResidualNorm, result.residualNorm)
+        newStats.totalIterations += accumulatedIterations
+        newStats.converged = true
+        newStats.maxResidualNorm = worstResidual
 
         // Use advanced(by:profiles:statistics:transport:sources:) for high-precision time accumulation
         // This prevents cumulative round-off errors over long simulations (20,000+ steps)
         // Phase 3: Now also captures transport coefficients and source terms
         state = state.advanced(
-            by: dt,
-            profiles: result.updatedProfiles,
+            by: dtAttempt,
+            profiles: resolvedResult.updatedProfiles,
             statistics: newStats,
             transport: transportCoeffs,
             sources: sourceTerms,

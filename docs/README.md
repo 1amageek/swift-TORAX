@@ -54,6 +54,23 @@ Current implementation and design documents:
 
 ---
 
+## Implementation Plans
+
+Active improvement roadmaps and design specifications:
+
+- **[FVM_NUMERICAL_IMPROVEMENTS_PLAN.md](FVM_NUMERICAL_IMPROVEMENTS_PLAN.md)** 🔥 **PRIORITY**
+  Comprehensive plan for FVM numerical enhancements:
+  - Power-law scheme for convection stability (Patankar)
+  - Sauter bootstrap current formula with collisionality
+  - Non-uniform grid support with metric tensors
+  - Per-equation tolerance configuration (eliminate hardcoded `1e-6`)
+  - Integration test suite (analytical solutions, conservation, TORAX benchmark)
+
+  **Status**: Design Complete, Ready for Implementation (40-50 hours, ~1 week)
+  **Impact**: TORAX-equivalent physics accuracy + configurable numerical tolerances
+
+---
+
 ## User Interface
 
 - **[VISUALIZATION_DESIGN.md](VISUALIZATION_DESIGN.md)**

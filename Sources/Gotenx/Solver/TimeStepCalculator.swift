@@ -40,6 +40,13 @@ public struct TimeStepCalculator {
         self.maxTimestep = maxTimestep
     }
 
+    /// 最小タイムステップ（秒）
+    ///
+    /// タイムステップを縮小リトライする際の下限値として利用する。
+    public var minimumTimestep: Float {
+        minTimestep
+    }
+
     // MARK: - Timestep Computation
 
     /// Compute stable timestep from transport coefficients
