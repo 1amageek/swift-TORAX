@@ -148,7 +148,8 @@ struct ConservationEnforcerTests {
         )
 
         // Simulate drift in both particle and energy
-        let drifted = try createProfiles(nCells: nCells, Te: 9900.0, Ti: 9900.0, ne: 0.99e20)
+        // Use 9800 eV (2% reduction) to clearly exceed 1% tolerance
+        let drifted = try createProfiles(nCells: nCells, Te: 9800.0, Ti: 9800.0, ne: 0.99e20)
 
         let (corrected, results) = enforcer.enforce(
             profiles: drifted,
@@ -184,8 +185,8 @@ struct ConservationEnforcerTests {
             verbose: false
         )
 
-        // Drift: density -1%, temperature -1%
-        let drifted = try createProfiles(nCells: nCells, Te: 9900.0, Ti: 9900.0, ne: 0.99e20)
+        // Drift: density -1%, temperature -2% (to clearly exceed tolerances)
+        let drifted = try createProfiles(nCells: nCells, Te: 9800.0, Ti: 9800.0, ne: 0.99e20)
 
         let (corrected, results) = enforcer.enforce(
             profiles: drifted,

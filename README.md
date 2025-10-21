@@ -119,6 +119,7 @@ swift test -v
 - 出力 NetCDF-4 ファイルは DEFLATE レベル 6 / shuffle 有効で書き出します。
 - 時間方向は最大 256 ステップずつまとめてチャンクし（`[min(256, nTime), nCells]`）、空間方向は全セルを 1 チャンクに含めます。
 - 上記設定でテスト用データに対し 51× 以上、NetCDF 既定チャンクでは 61× の圧縮率を確認しています（`swift test --filter NetCDFCompressionTests/testCompressionRatio`）。
+- CLI の `OutputWriter` が生成する NetCDF でも `swift test --filter OutputWriterTests/testNetCDFCompressionRatio` を実行すると約 20〜25× の圧縮率が再現されます（テストログで実測値を表示）。
 - 時間方向アクセスの局所性を重視する場合は 128/64 ステップといった粒度に落とすか、差分エンコードなどの前処理を併用してください。
 ```
 

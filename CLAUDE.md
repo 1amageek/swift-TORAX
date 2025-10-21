@@ -66,6 +66,7 @@ for value in criticalValues {
 
 - NetCDF プロファイルは DEFLATE レベル 6（shuffle 有効）で書き出し、時間方向は最大 256 ステップ単位でチャンク化 (`[min(256, nTime), nRho]`) します。
 - この設定は `Tests/GotenxTests/IO/NetCDF/NetCDFCompressionTests.swift` の `testCompressionRatio` で 51× 超の圧縮が再現できることを確認しています。
+- CLI パスの圧縮率は `Tests/GotenxCLITests/OutputWriterTests.swift` の `testNetCDFCompressionRatio` で実測でき、約 20〜25× の圧縮率を想定しています（設定やデータ量に応じて増減）。
 - フル時間チャンクやデフォルトチャンクと比較するための検証テスト `testChunkingStrategies` も用意しているので、異なるアクセスパターンに最適化したい場合はここを起点に調整してください。
 
 ## Configuration System Architecture

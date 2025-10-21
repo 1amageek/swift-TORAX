@@ -291,12 +291,14 @@ struct DerivedQuantitiesComputerTests {
 
         // For fusion-relevant parameters:
         // n ~ 10^20 m^-3, T ~ 10 keV = 10^4 eV, τE ~ 0.1-1 s
-        // → n⟨T⟩τE ~ 10^5 - 10^6 eV s m^-3 = 10^-1 - 10^0 × 10^21 keV s m^-3
-        // (Lawson criterion for D-T: ~3×10^21 keV s m^-3)
+        // → n⟨T⟩τE = 10^20 * 10^4 * (0.1-1) = (10^23 - 10^24) eV s m^-3
+        //
+        // In keV units: n⟨T⟩τE = (10^20 - 10^21) keV s m^-3
+        // (Lawson criterion for D-T: ~3×10^21 keV s m^-3 = 3×10^24 eV s m^-3)
 
-        // Expect reasonable order of magnitude (10^3 - 10^7 eV s m^-3)
-        #expect(derived.n_T_tau > 1e3)
-        #expect(derived.n_T_tau < 1e7)
+        // Expect reasonable order of magnitude (10^23 - 10^25 eV s m^-3)
+        #expect(derived.n_T_tau > 1e23)
+        #expect(derived.n_T_tau < 1e25)
     }
 
     @Test("Power balance consistency")

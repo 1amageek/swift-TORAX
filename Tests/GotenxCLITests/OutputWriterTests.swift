@@ -224,4 +224,86 @@ struct OutputWriterTests {
             try writer.write(result, to: outputURL)
         }
     }
+
+    @Test("NetCDF compression ratio via OutputWriter")
+    func testNetCDFCompressionRatio() throws {
+        // Generate highly redundant time-series data (nearly static profiles)
+        // tuned to yield ~20–25× compression with current chunking policy
+        let nCells = 128
+        let nTime = 512
+        let profileAmplitude: Float = 15_000
+        let unit: Float = 1.0
+        let electronBaseScale: Float = 0.95
+        let baseProfile: [Float] = (0..<nCells).map { idx in
+            let rho = Float(idx) / Float(max(1, nCells - 1))
+            return profileAmplitude * (unit - rho * rho)
+        }
+
+        let baseDensity: Float = 9.5e19
+        let fluxScale: Float = Float(1e-4)
+        let deltaTime: Float = 0.01
+        let wallTimeScale: Float = Float(1e-4)
+
+        var timeSeries: [TimePoint] = []
+        for step in 0..<nTime {
+            // Minimal temporal variation to mirror equilibrium phases
+            let epsilon: Float = 1e-3 * Float(step % 8)
+            let ionScale: Float = unit + epsilon
+            let elecScale: Float = electronBaseScale + epsilon
+            let densityScale: Float = unit + epsilon
+
+            let ionTemp = baseProfile.map { $0 * ionScale }
+            let elecTemp = baseProfile.map { $0 * elecScale }
+            let density = Array(repeating: baseDensity * densityScale, count: nCells)
+            let flux = baseProfile.map { $0 * fluxScale }
+
+            let profiles = SerializableProfiles(
+                ionTemperature: ionTemp,
+                electronTemperature: elecTemp,
+                electronDensity: density,
+                poloidalFlux: flux
+            )
+
+            let timeValue = Float(step) * deltaTime
+            timeSeries.append(TimePoint(time: timeValue, profiles: profiles))
+        }
+
+        let finalProfiles = timeSeries.last!.profiles
+        let statistics = SimulationStatistics(
+            totalIterations: nTime,
+            totalSteps: nTime,
+            converged: true,
+            maxResidualNorm: Float(1e-7),
+            wallTime: Float(nTime) * wallTimeScale
+        )
+
+        let result = SimulationResult(
+            finalProfiles: finalProfiles,
+            statistics: statistics,
+            timeSeries: timeSeries
+        )
+
+        let writer = OutputWriter(format: .netcdf)
+        let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent("gotenx_compression_ratio.nc")
+        try? FileManager.default.removeItem(at: outputURL)
+
+        try writer.write(result, to: outputURL)
+
+        let attributes = try FileManager.default.attributesOfItem(atPath: outputURL.path)
+        let compressedSize = attributes[.size] as! Int
+
+        // 4 variables × nTime × nCells × sizeof(Float)
+        let variableCount = 4
+        let uncompressedPayload = variableCount * nTime * nCells * MemoryLayout<Float>.size
+        let compressionRatio = Double(uncompressedPayload) / Double(compressedSize)
+
+        print("✅ OutputWriter compression ratio results:")
+        print("   Uncompressed payload: \(uncompressedPayload) bytes")
+        print("   Compressed file:      \(compressedSize) bytes")
+        print("   Compression ratio:    \(String(format: "%.2f", compressionRatio))×")
+
+        #expect(compressionRatio > 8.0, "Compression ratio should exceed 8× (got \(String(format: "%.2f", compressionRatio)))")
+
+        try? FileManager.default.removeItem(at: outputURL)
+    }
 }

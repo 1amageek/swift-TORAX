@@ -70,11 +70,8 @@ extension CoreProfiles {
         let Bphi = geometry.toroidalField
         let psi = poloidalFlux.value
 
-        // Get cell distances from geometric factors
-        let geoFactors = GeometricFactors.from(geometry: geometry)
-
-        // Compute poloidal flux gradient: ∂ψ/∂r
-        let dPsi_dr = computeFluxGradient(psi: psi, radii: r, cellDistances: geoFactors.cellDistances.value)
+        // Use MLXGradient for robust gradient computation with central differencing
+        let dPsi_dr = MLXGradient.radialGradient(field: psi, radii: r)
 
         // Compute poloidal magnetic field: B_θ = (1/r) ∂ψ/∂r
         let Btheta = dPsi_dr / (r + 1e-10)
@@ -110,14 +107,8 @@ extension CoreProfiles {
         let q = safetyFactor(geometry: geometry)
         let r = geometry.radii.value
 
-        // Get cell distances from geometric factors
-        let geoFactors = GeometricFactors.from(geometry: geometry)
-
-        // Compute dq/dr
-        let dq_dr = computeFluxGradient(psi: q, radii: r, cellDistances: geoFactors.cellDistances.value)
-
-        // Compute shear: ŝ = (r/q) dq/dr
-        let shear = (r / (q + 1e-10)) * dq_dr
+        // Use MLXGradient for robust gradient computation with central differencing
+        let shear = MLXGradient.magneticShear(q: q, radii: r)
 
         // Clamp to reasonable range [-5, 5]
         let shear_clamped = minimum(maximum(shear, MLXArray(-5.0)), MLXArray(5.0))
