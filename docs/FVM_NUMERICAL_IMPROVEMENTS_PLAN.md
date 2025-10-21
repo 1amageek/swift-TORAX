@@ -1,4 +1,4 @@
-# FVM Numerical Improvements Plan
+ # FVM Numerical Improvements Plan
 
 **Date**: 2025-10-21
 **Status**: Design & Implementation Roadmap
@@ -9,7 +9,7 @@
 
 ## Executive Summary
 
-This document consolidates two critical reviews:
+This document consolidates two critical reviews with implementation-ready solutions:
 1. **FVM Implementation Gaps**: Missing power-law scheme, simplified bootstrap current, uniform-grid assumptions
 2. **Hardcoded Tolerances**: Magic number `1e-6` used inconsistently across 15+ locations
 
@@ -17,105 +17,48 @@ This document consolidates two critical reviews:
 - ✅ Implement TORAX-compliant power-law scheme for convection stability
 - ✅ Upgrade bootstrap current to Sauter formula with collisionality dependence
 - ✅ Support non-uniform grids with proper metric tensors
-- ✅ Centralize all numerical tolerances in configuration system
-- ✅ Establish comprehensive integration tests
+- ✅ Centralize all numerical tolerances in configuration system with proper scaling
+- ✅ Establish comprehensive integration tests using Swift Testing
 
-**Total Effort Estimate**: 40-50 hours (~1 week)
-
----
-
-## Part A: FVM Implementation Gaps
-
-### Review Summary
-
-**Current Status**: 80% complete with solid foundation, but critical physics components missing.
-
-#### ✅ Strengths (Completed)
-- `CellVariable`: Boundary conditions, face values/gradients (234 lines, 100% complete)
-- `Block1DCoeffs`: Per-equation coefficients, geometric factors (208 lines, 100% complete)
-- `Block1DCoeffsBuilder`: Non-conservation form, density floor, unit conversions (556 lines, 90% complete)
-- `NewtonRaphsonSolver`: Theta-method residuals, vectorized spatial operators (468 lines, 95% complete)
-
-#### ⚠️ Critical Gaps
-
-| Gap | Impact | Priority | Effort |
-|-----|--------|----------|--------|
-| Power-law scheme | Numerical oscillations at high Péclet (Pe > 10) | **P0** | 6-8h |
-| Sauter bootstrap formula | 20-50% error in edge/high-collisionality regions | **P0** | 8-10h |
-| Non-uniform grid support | 10-30% geometric error for shaped plasmas (δ > 0.3) | **P1** | 6-8h |
-| Energy coupling (Ti-Te) | Missing explicit ion-electron exchange term | **P1** | 4-6h |
-| Integration tests | No end-to-end validation of flux assembly | **P2** | 6-8h |
+**Total Effort Estimate**: 45-55 hours (~1 week)
 
 ---
 
-## Part B: Hardcoded Tolerance Analysis
+## Design Principles
 
-### Review Summary
+### 1. Residual Scaling and Tolerance Comparison
 
-**Magic Number `1e-6` Used in 15+ Locations**:
+**Critical**: The solver scales residuals to O(1) for uniform precision. Tolerances must be scaled identically:
 
-#### Solver Tolerances (5 locations)
-| File | Line | Usage | Current Value | Issue |
-|------|------|-------|---------------|-------|
-| `NewtonRaphsonSolver.swift` | 37 | Residual convergence | `1e-6` | Not configurable per equation |
-| `RuntimeParams.swift` | 51 | Default solver tolerance | `1e-6` | Single value for all 4 equations |
-| `SolverConfig.swift` | 19 | Config default | `1e-6` | No distinction for Ti/Te/ne/psi |
-| `TimeStepCalculator.swift` | 31 | Minimum timestep | `1e-6` | Too aggressive for stiff systems |
-| `SimulationOrchestrator.swift` | 79 | Explicit minTimestep | `1e-6` | Hardcoded, should use config |
+```
+residual_scaled = residual_physical / reference
+tolerance_scaled = tolerance_physical / reference
+converged = residual_scaled < tolerance_scaled
+```
 
-**Problem**: Newton-Raphson using same tolerance for all equations ignores scale differences:
-- Temperature: O(10⁴) eV → relative error O(10⁻²)
-- Density: O(10²⁰) m⁻³ → relative error O(10⁻²⁶) (meaningless precision)
-- Flux: O(10) Wb → relative error O(10⁻⁷)
+This is implemented via `ToleranceScaler` that applies the same reference state scaling to both residuals and tolerances.
 
-#### Physical Thresholds (6 locations)
-| File | Line | Usage | Current Value | Issue |
-|------|------|-------|---------------|-------|
-| `OhmicHeating.swift` | 307 | Poloidal flux variation threshold | `1e-6` | Should be `flux_range * rtol` |
-| `FusionPower.swift` | 99 | Fuel fraction sum check | `1e-6` | Should be `1e-4` (physical tolerance) |
-| `ConfigurationValidator.swift` | 124 | Fusion fuel fraction sum | `1e-6` | Should be `1e-4` (too strict) |
-| `DerivedQuantitiesComputer.swift` | 167 | Joule→MJ conversion floor | `1e-6` | Context-specific (energy scale) |
-| `DerivedQuantitiesComputer.swift` | 337 | Energy confinement time | `1e-6` | Should use power threshold (MW) |
-| `DerivedQuantitiesComputer.swift` | 579 | Fusion gain Q threshold | `1e-6` | Should be `1e-3` (Q < 0.001 is negligible) |
+### 2. Configuration Backward Compatibility
 
-**Problem**: Physical thresholds should scale with problem size, not use fixed absolute values.
+**Preserve existing structure**: Extend `AdaptiveTimestepConfig` rather than replacing it. Old configs with explicit `minDt` continue working; new configs can use `minDtFraction` for adaptive scaling.
 
-#### Time Configuration (4 locations)
-| File | Line | Usage | Current Value | Issue |
-|------|------|-------|---------------|-------|
-| `TimeConfiguration.swift` | 45 | Adaptive timestep minDt | `1e-6` | Default for all scenarios |
-| `GotenxConfigReader.swift` | 185 | Config default minDt | `1e-6` | Should depend on `maxDt` |
-| `GotenxConfigReader.swift` | 408 | Fallback minDt | `1e-6` | Hardcoded magic number |
+### 3. Physical Correctness
 
-**Problem**: Minimum timestep should be `maxDt / max_refinement_factor` (e.g., `maxDt / 1000`), not absolute.
+**Bootstrap current sign**: Bootstrap current can be negative at the plasma edge (counter-current drive). Clamp **magnitude only**, preserve sign for physical accuracy.
+
+### 4. Testing Framework
+
+**Swift Testing standard**: All tests use `@Suite`, `@Test`, and `#expect` (not XCTest).
+
+### 5. MLX API Compliance
+
+**Use actual APIs**: `MLX.select()` for conditionals (not non-existent `expandedDimensions` or bare `where`).
 
 ---
 
-## Design Goals
+## Configuration System Design
 
-### Numerical Accuracy Goals
-1. **Convection Stability**: Support Péclet numbers Pe ∈ [0.01, 100] without oscillations
-2. **Bootstrap Current**: ≤ 10% error vs. Sauter formula reference (all collisionality regimes)
-3. **Geometric Fidelity**: ≤ 5% error for shaped plasmas (triangularity δ ≤ 0.5, elongation κ ≤ 2.0)
-4. **Energy Coupling**: Explicit Ti-Te exchange with ≤ 5% conservation error
-
-### Configuration System Goals
-1. **Per-Equation Tolerances**: Separate absolute/relative tolerances for Ti, Te, ne, psi
-2. **Scaled Thresholds**: All physical thresholds scale with problem characteristics
-3. **Adaptive Defaults**: Minimum timestep = `maxDt * config.minTimestepFraction` (default: 0.001)
-4. **Validation**: Configuration validator checks tolerance consistency
-
-### Testing Goals
-1. **Unit Tests**: Power-law scheme, Sauter formula, metric tensor calculations
-2. **Integration Tests**: 1D diffusion (analytical solution), convection-diffusion (Pe sweep)
-3. **Conservation Tests**: Particle, energy, current conservation within 1% over 100 timesteps
-4. **Regression Tests**: ITER-like scenario matches Python TORAX within 5%
-
----
-
-## Architecture Changes
-
-### 1. New Configuration Structure
+### 1. Per-Equation Tolerances with Scaling
 
 **File**: `Sources/Gotenx/Configuration/NumericalTolerances.swift` (NEW)
 
@@ -143,16 +86,9 @@ public struct EquationTolerances: Codable, Sendable {
 
 /// Numerical tolerance configuration for all equations
 public struct NumericalTolerances: Codable, Sendable {
-    /// Ion temperature equation tolerances
     public let ionTemperature: EquationTolerances
-
-    /// Electron temperature equation tolerances
     public let electronTemperature: EquationTolerances
-
-    /// Electron density equation tolerances
     public let electronDensity: EquationTolerances
-
-    /// Poloidal flux equation tolerances
     public let poloidalFlux: EquationTolerances
 
     /// Default ITER-scale tolerances
@@ -163,57 +99,104 @@ public struct NumericalTolerances: Codable, Sendable {
             minValueThreshold: 100.0        // Below 100 eV, use absolute only
         ),
         electronTemperature: EquationTolerances(
-            absoluteTolerance: 10.0,        // 10 eV absolute
-            relativeTolerance: 1e-4,        // 0.01% relative
-            minValueThreshold: 100.0        // Below 100 eV, use absolute only
+            absoluteTolerance: 10.0,
+            relativeTolerance: 1e-4,
+            minValueThreshold: 100.0
         ),
         electronDensity: EquationTolerances(
             absoluteTolerance: 1e17,        // 1e17 m⁻³ absolute
-            relativeTolerance: 1e-4,        // 0.01% relative
-            minValueThreshold: 1e18         // Below 1e18 m⁻³, use absolute only
+            relativeTolerance: 1e-4,
+            minValueThreshold: 1e18
         ),
         poloidalFlux: EquationTolerances(
             absoluteTolerance: 1e-3,        // 1 mWb absolute
-            relativeTolerance: 1e-5,        // 0.001% relative (flux is smooth)
-            minValueThreshold: 0.1          // Below 0.1 Wb, use absolute only
+            relativeTolerance: 1e-5,
+            minValueThreshold: 0.1
         )
     )
 }
-```
 
-### 2. Time Configuration Enhancement
+/// Tolerance scaler for residual-space convergence checks
+public struct ToleranceScaler {
+    let referenceState: FlattenedState
+    let tolerances: NumericalTolerances
 
-**File**: `Sources/Gotenx/Configuration/TimeConfiguration.swift` (MODIFY)
+    /// Compute scaled tolerance for each equation
+    ///
+    /// **Critical**: Residuals are scaled to O(1) in solver, so we must
+    /// scale the physical tolerances by the same reference state:
+    ///
+    /// ```
+    /// residual_scaled = residual_physical / reference
+    /// tolerance_scaled = tolerance_physical / reference
+    /// converged = residual_scaled < tolerance_scaled
+    /// ```
+    ///
+    /// - Parameters:
+    ///   - layout: State layout (equation ranges)
+    ///   - physicalState: Current state in physical units (for relative tolerance)
+    /// - Returns: Scaled tolerance vector [4*nCells]
+    public func scaledTolerances(
+        layout: StateLayout,
+        physicalState: FlattenedState
+    ) -> MLXArray {
+        let nCells = layout.nCells
 
-```swift
-public struct TimeConfiguration: Codable, Sendable {
-    // ... existing fields ...
+        // Extract per-equation physical values and reference scales
+        let Ti_phys = physicalState.values.value[layout.tiRange]
+        let Te_phys = physicalState.values.value[layout.teRange]
+        let ne_phys = physicalState.values.value[layout.neRange]
+        let psi_phys = physicalState.values.value[layout.psiRange]
 
-    /// Minimum timestep fraction of maxDt (default: 0.001)
-    /// Actual minDt = maxDt * minTimestepFraction
-    public let minTimestepFraction: Float
+        let Ti_ref = referenceState.values.value[layout.tiRange]
+        let Te_ref = referenceState.values.value[layout.teRange]
+        let ne_ref = referenceState.values.value[layout.neRange]
+        let psi_ref = referenceState.values.value[layout.psiRange]
 
-    /// CFL safety factor (default: 0.9)
-    public let cflSafetyFactor: Float
+        // Compute per-equation tolerances
+        let tol_Ti = computeScaledTolerance(
+            values: Ti_phys,
+            reference: Ti_ref,
+            eqTol: tolerances.ionTemperature
+        )
+        let tol_Te = computeScaledTolerance(
+            values: Te_phys,
+            reference: Te_ref,
+            eqTol: tolerances.electronTemperature
+        )
+        let tol_ne = computeScaledTolerance(
+            values: ne_phys,
+            reference: ne_ref,
+            eqTol: tolerances.electronDensity
+        )
+        let tol_psi = computeScaledTolerance(
+            values: psi_phys,
+            reference: psi_ref,
+            eqTol: tolerances.poloidalFlux
+        )
 
-    /// Maximum timestep growth rate per step (default: 1.2)
-    public let maxTimestepGrowth: Float
+        return concatenated([tol_Ti, tol_Te, tol_ne, tol_psi], axis: 0)
+    }
 
-    public static let `default` = TimeConfiguration(
-        // ... existing defaults ...
-        minTimestepFraction: 0.001,      // minDt = maxDt / 1000
-        cflSafetyFactor: 0.9,            // 10% margin below CFL limit
-        maxTimestepGrowth: 1.2           // Max 20% increase per step
-    )
+    /// Compute scaled tolerance for single equation
+    private func computeScaledTolerance(
+        values: MLXArray,
+        reference: MLXArray,
+        eqTol: EquationTolerances
+    ) -> MLXArray {
+        // Combined physical tolerance: max(abs, rel * |x|)
+        // Vectorized over all cells
+        let absTol = MLXArray(eqTol.absoluteTolerance)
+        let relTol = eqTol.relativeTolerance * abs(values)
+        let physicalTol = maximum(absTol, relTol)
 
-    /// Computed minimum timestep (adaptive)
-    public var computedMinDt: Float {
-        return maxDt * minTimestepFraction
+        // Scale to residual space: tol_scaled = tol_phys / reference
+        return physicalTol / (reference + 1e-30)
     }
 }
 ```
 
-### 3. Physical Thresholds Configuration
+### 2. Physical Thresholds Configuration
 
 **File**: `Sources/Gotenx/Configuration/PhysicalThresholds.swift` (NEW)
 
@@ -250,34 +233,83 @@ public struct PhysicalThresholds: Codable, Sendable {
 }
 ```
 
-### 4. Solver Configuration Update
+### 3. Time Configuration Extension
 
-**File**: `Sources/Gotenx/Configuration/SolverConfig.swift` (MODIFY)
+**File**: `Sources/Gotenx/Configuration/TimeConfiguration.swift` (MODIFY)
 
 ```swift
-public struct SolverConfig: Codable, Sendable {
-    // ... existing fields ...
+/// Adaptive timestep configuration (EXTENDED, backward compatible)
+public struct AdaptiveTimestepConfig: Codable, Sendable, Equatable {
+    /// Minimum timestep [s] (absolute) - optional for backward compat
+    public let minDt: Float?
 
-    /// Per-equation tolerances
-    public let tolerances: NumericalTolerances
+    /// Minimum timestep fraction of maxDt (default: 0.001)
+    /// Ignored if minDt is explicitly set
+    public let minDtFraction: Float?
 
-    /// Physical thresholds for diagnostics
-    public let physicalThresholds: PhysicalThresholds
+    /// Maximum timestep [s]
+    public let maxDt: Float
 
-    /// Maximum Newton-Raphson iterations (default: 30)
-    public let maxIterations: Int
+    /// CFL safety factor (< 1.0)
+    public let safetyFactor: Float
 
-    /// Line search parameters
-    public let lineSearchEnabled: Bool
-    public let lineSearchMaxAlpha: Float
+    /// Maximum timestep growth rate per step (default: 1.2)
+    public let maxTimestepGrowth: Float
 
-    public static let `default` = SolverConfig(
-        tolerances: .iterScale,
-        physicalThresholds: .default,
-        maxIterations: 30,
-        lineSearchEnabled: true,
-        lineSearchMaxAlpha: 1.0
+    /// Computed minimum timestep (backward compatible)
+    public var effectiveMinDt: Float {
+        if let minDt = minDt {
+            return minDt  // Explicit value takes precedence (old configs)
+        } else if let fraction = minDtFraction {
+            return maxDt * fraction
+        } else {
+            return maxDt * 0.001  // Default fallback
+        }
+    }
+
+    public static let `default` = AdaptiveTimestepConfig(
+        minDt: nil,              // Use fraction instead
+        minDtFraction: 0.001,    // maxDt / 1000
+        maxDt: 1e-1,
+        safetyFactor: 0.9,
+        maxTimestepGrowth: 1.2
     )
+
+    public init(
+        minDt: Float? = nil,
+        minDtFraction: Float? = 0.001,
+        maxDt: Float,
+        safetyFactor: Float,
+        maxTimestepGrowth: Float = 1.2
+    ) {
+        self.minDt = minDt
+        self.minDtFraction = minDtFraction
+        self.maxDt = maxDt
+        self.safetyFactor = safetyFactor
+        self.maxTimestepGrowth = maxTimestepGrowth
+    }
+}
+```
+
+**Migration Example**:
+```json
+// Old config (still works):
+{
+  "adaptive": {
+    "minDt": 1e-6,
+    "maxDt": 1e-1,
+    "safetyFactor": 0.9
+  }
+}
+
+// New config (recommended):
+{
+  "adaptive": {
+    "minDtFraction": 0.001,
+    "maxDt": 1e-1,
+    "safetyFactor": 0.9,
+    "maxTimestepGrowth": 1.2
+  }
 }
 ```
 
@@ -285,137 +317,138 @@ public struct SolverConfig: Codable, Sendable {
 
 ## Implementation Plan
 
-### Phase 1: Configuration System Refactor (P0, 8-10 hours)
+### Phase 1: Configuration System Refactor (P0, 10-12 hours)
 
-**Goal**: Eliminate all hardcoded `1e-6` values, introduce per-equation tolerances.
+#### 1.1 Create Configuration Files (2 hours)
+- `Sources/Gotenx/Configuration/NumericalTolerances.swift` (with `ToleranceScaler`)
+- `Sources/Gotenx/Configuration/PhysicalThresholds.swift`
 
-#### Tasks
+#### 1.2 Extend AdaptiveTimestepConfig (2 hours)
 
-**1.1 Create New Configuration Files** (2 hours)
-- ✅ `Sources/Gotenx/Configuration/NumericalTolerances.swift`
-- ✅ `Sources/Gotenx/Configuration/PhysicalThresholds.swift`
-- ✅ Add to `RuntimeParams` and `GotenxConfigReader`
+Modify `Sources/Gotenx/Configuration/TimeConfiguration.swift` as shown above.
 
-**1.2 Update Solver to Use Per-Equation Tolerances** (3 hours)
+#### 1.3 Update NewtonRaphsonSolver (4 hours)
 
-**File**: `Sources/Gotenx/Solver/NewtonRaphsonSolver.swift`
+**File**: `Sources/Gotenx/Solver/NewtonRaphsonSolver.swift` (MODIFY)
 
-Changes:
 ```swift
 public struct NewtonRaphsonSolver: PDESolver {
     /// Per-equation tolerances (replaces single tolerance: Float)
     public let tolerances: NumericalTolerances
 
     public func solve(...) -> SolverResult {
-        // ...
+        // ... existing setup ...
 
-        // Compute per-equation residual norms
-        let layout = StateLayout(nCells: nCells)
-        let R_Ti_norm = computeNorm(residualScaled[layout.tiRange])
-        let R_Te_norm = computeNorm(residualScaled[layout.teRange])
-        let R_ne_norm = computeNorm(residualScaled[layout.neRange])
-        let R_psi_norm = computeNorm(residualScaled[layout.psiRange])
+        // Create tolerance scaler
+        let toleranceScaler = ToleranceScaler(
+            referenceState: referenceState,
+            tolerances: tolerances
+        )
 
-        // Check convergence for each equation
-        let Ti_converged = R_Ti_norm < tolerances.ionTemperature.absoluteTolerance
-        let Te_converged = R_Te_norm < tolerances.electronTemperature.absoluteTolerance
-        let ne_converged = R_ne_norm < tolerances.electronDensity.absoluteTolerance
-        let psi_converged = R_psi_norm < tolerances.poloidalFlux.absoluteTolerance
+        // Newton-Raphson iteration in SCALED space
+        for iter in 0..<maxIterations {
+            // Compute residual in scaled space
+            let residualScaled = residualFnScaled(xScaled.values.value)
+            eval(residualScaled)
 
-        let converged = Ti_converged && Te_converged && ne_converged && psi_converged
+            // Compute scaled tolerances for current state
+            let xPhysical = xScaled.unscaled(by: referenceState)
+            let scaledTols = toleranceScaler.scaledTolerances(
+                layout: layout,
+                physicalState: xPhysical
+            )
+            eval(scaledTols)
 
-        // Store per-equation convergence info in metadata
-        metadata["Ti_residual"] = R_Ti_norm
-        metadata["Te_residual"] = R_Te_norm
-        metadata["ne_residual"] = R_ne_norm
-        metadata["psi_residual"] = R_psi_norm
+            // Per-equation convergence check
+            let R_Ti = residualScaled[layout.tiRange]
+            let R_Te = residualScaled[layout.teRange]
+            let R_ne = residualScaled[layout.neRange]
+            let R_psi = residualScaled[layout.psiRange]
+
+            let tol_Ti = scaledTols[layout.tiRange]
+            let tol_Te = scaledTols[layout.teRange]
+            let tol_ne = scaledTols[layout.neRange]
+            let tol_psi = scaledTols[layout.psiRange]
+
+            // RMS residual norm for each equation
+            let Ti_norm = sqrt((R_Ti * R_Ti).mean())
+            let Te_norm = sqrt((R_Te * R_Te).mean())
+            let ne_norm = sqrt((R_ne * R_ne).mean())
+            let psi_norm = sqrt((R_psi * R_psi).mean())
+
+            // RMS tolerance for each equation
+            let Ti_tol = sqrt((tol_Ti * tol_Ti).mean())
+            let Te_tol = sqrt((tol_Te * tol_Te).mean())
+            let ne_tol = sqrt((tol_ne * tol_ne).mean())
+            let psi_tol = sqrt((tol_psi * tol_psi).mean())
+
+            eval(Ti_norm, Te_norm, ne_norm, psi_norm)
+            eval(Ti_tol, Te_tol, ne_tol, psi_tol)
+
+            // Check convergence for each equation
+            let Ti_converged = Ti_norm.item(Float.self) < Ti_tol.item(Float.self)
+            let Te_converged = Te_norm.item(Float.self) < Te_tol.item(Float.self)
+            let ne_converged = ne_norm.item(Float.self) < ne_tol.item(Float.self)
+            let psi_converged = psi_norm.item(Float.self) < psi_tol.item(Float.self)
+
+            let converged = Ti_converged && Te_converged && ne_converged && psi_converged
+
+            if converged {
+                break
+            }
+
+            // ... rest of Newton iteration ...
+        }
+
+        // Store per-equation convergence info
+        metadata["Ti_residual"] = Ti_norm.item(Float.self)
+        metadata["Te_residual"] = Te_norm.item(Float.self)
+        metadata["ne_residual"] = ne_norm.item(Float.self)
+        metadata["psi_residual"] = psi_norm.item(Float.self)
     }
 }
 ```
 
-**1.3 Update Time Step Calculator** (2 hours)
+#### 1.4 Update Physical Modules (2 hours)
 
-**File**: `Sources/Gotenx/Orchestration/TimeStepCalculator.swift`
+Replace hardcoded `1e-6` with `PhysicalThresholds`:
 
-Changes:
+**OhmicHeating.swift** (Line 307):
 ```swift
-public struct TimeStepCalculator {
-    // Remove hardcoded minTimestep: Float = 1e-6
-
-    public func computeTimestep(
-        timeConfig: TimeConfiguration,  // Now contains minTimestepFraction
-        // ...
-    ) -> Float {
-        // ...
-        let cflDt = minCFLDt * timeConfig.cflSafetyFactor
-
-        // Adaptive minimum timestep
-        let minDt = timeConfig.computedMinDt  // = maxDt * fraction
-
-        // Clamp with growth limit
-        let proposedDt = min(cflDt, previousDt * timeConfig.maxTimestepGrowth)
-        return max(proposedDt, minDt)
-    }
-}
-```
-
-**1.4 Update Physical Modules** (3 hours)
-
-Replace all hardcoded thresholds:
-
-**File**: `Sources/GotenxPhysics/Heating/OhmicHeating.swift` (Line 307)
-```swift
-// OLD: if fluxVariation < 1e-6 { return zero }
+// OLD: if fluxVariation < 1e-6
 // NEW:
 if fluxVariation < (fluxRange * thresholds.fluxVariationThreshold) {
     return zero
 }
 ```
 
-**File**: `Sources/GotenxPhysics/Heating/FusionPower.swift` (Line 99)
+**FusionPower.swift** (Line 99):
 ```swift
-// OLD: guard sum > 1e-6 else { throw error }
+// OLD: guard sum > 1e-6
 // NEW:
 guard abs(sum - 1.0) < thresholds.fuelFractionTolerance else {
-    throw FusionPowerError.invalidFuelFractionSum(
-        sum: sum,
-        tolerance: thresholds.fuelFractionTolerance
-    )
+    throw FusionPowerError.invalidFuelFractionSum
 }
 ```
 
-**File**: `Sources/Gotenx/Diagnostics/DerivedQuantitiesComputer.swift`
+**DerivedQuantitiesComputer.swift**:
 ```swift
 // Line 337 - Energy confinement time
-// OLD: if totalHeatingPower < 1e-6 { return 0 }
-// NEW:
 if totalHeatingPower < thresholds.minHeatingPowerForTauE {
     return 0.0
 }
 
 // Line 579 - Fusion gain Q
-// OLD: if heatingPower < 1e-6 { return 0 }
-// NEW:
 if fusionPower < thresholds.minFusionPowerForQ {
     return 0.0
 }
 ```
 
-#### Deliverables
-- ✅ 2 new configuration files
-- ✅ Updated `NewtonRaphsonSolver` with per-equation convergence
-- ✅ Updated `TimeStepCalculator` with adaptive minDt
-- ✅ Updated 5 physics modules to use `PhysicalThresholds`
-- ✅ JSON schema update for new config fields
-- ✅ CLI help text update
-
 ---
 
-### Phase 2: Power-Law Scheme Implementation (P0, 6-8 hours)
+### Phase 2: Power-Law Scheme Implementation (P0, 7-9 hours)
 
-**Goal**: TORAX-compliant Patankar scheme for convection stability.
-
-#### 2.1 Create Power-Law Module (3 hours)
+#### 2.1 Create Power-Law Module (4 hours)
 
 **File**: `Sources/Gotenx/FVM/PowerLawScheme.swift` (NEW)
 
@@ -450,19 +483,21 @@ public struct PowerLawScheme {
         dFace: MLXArray,
         dx: MLXArray
     ) -> MLXArray {
-        // Regularization to prevent division by zero
         let dFace_safe = dFace + 1e-30
 
-        // Broadcast dx to [nFaces] if needed (interior faces + boundaries)
+        // Broadcast dx to [nFaces] if needed
         let dx_broadcast: MLXArray
         if dx.ndim == 0 {
-            // Scalar dx: create [nFaces] array
+            // Scalar: create full array
             dx_broadcast = MLXArray.full([vFace.shape[0]], values: dx)
-        } else {
-            // dx is [nFaces-1]: pad with boundary values
+        } else if dx.shape[0] == vFace.shape[0] - 2 {
+            // dx is [nFaces-1] (interior only): pad boundaries
             let dx_left = dx[0..<1]
             let dx_right = dx[(dx.shape[0]-1)..<dx.shape[0]]
             dx_broadcast = concatenated([dx_left, dx, dx_right], axis: 0)
+        } else {
+            // Already correct size
+            dx_broadcast = dx
         }
 
         return vFace * dx_broadcast / dFace_safe
@@ -478,24 +513,20 @@ public struct PowerLawScheme {
     /// α(Pe) = 0 (full upwinding)        for |Pe| > 10
     /// ```
     ///
-    /// Sign convention:
-    /// - Pe > 0: flow left→right, upwind is left cell
-    /// - Pe < 0: flow right→left, upwind is right cell
-    ///
     /// - Parameter peclet: Péclet number [dimensionless], shape [nFaces]
     /// - Returns: Weighting factor α ∈ [0,1], shape [nFaces]
     public static func computeWeightingFactor(peclet: MLXArray) -> MLXArray {
         let absPe = abs(peclet)
 
         // Power-law formula: (1 - 0.1*|Pe|)^5
-        // Only valid for |Pe| ≤ 10
-        let powerLaw = pow(maximum(0.0, 1.0 - 0.1 * absPe), 5.0)
+        let clamped = maximum(0.0, 1.0 - 0.1 * absPe)
+        let powerLaw = pow(clamped, 5.0)
 
-        // For |Pe| > 10: use full upwinding (α = 0 for central diff, 1 for upwind)
-        // TORAX uses (1 - α) formulation, so α=0 means full upwind
-        let alpha = expandedDimensions(where(absPe > 10.0, MLXArray(0.0), powerLaw), axis: -1)
+        // For |Pe| > 10: full upwinding
+        // Use MLX.select() (actual API, not non-existent where())
+        let alpha = MLX.select(absPe > 10.0, MLXArray(0.0), powerLaw)
 
-        return alpha.squeezed()
+        return alpha
     }
 
     /// Compute face values using power-law weighting
@@ -511,22 +542,24 @@ public struct PowerLawScheme {
         let nCells = cellValues.shape[0]
 
         // Interior faces: power-law weighted
-        let leftCells = cellValues[0..<(nCells-1)]   // [nFaces-1]
-        let rightCells = cellValues[1..<nCells]      // [nFaces-1]
-        let pecletInterior = peclet[1..<(peclet.shape[0]-1)]  // [nFaces-1]
+        let leftCells = cellValues[0..<(nCells-1)]
+        let rightCells = cellValues[1..<nCells]
+        let pecletInterior = peclet[1..<(peclet.shape[0]-1)]
 
         let alpha = computeWeightingFactor(peclet: pecletInterior)
 
         // Upwind selection based on flow direction
-        // Pe > 0: use left cell (α=1), Pe < 0: use right cell (α=0)
-        let upwindValues = expandedDimensions(
-            where(pecletInterior > 0, leftCells, rightCells),
-            axis: -1
-        ).squeezed()
-        let downwindValues = expandedDimensions(
-            where(pecletInterior > 0, rightCells, leftCells),
-            axis: -1
-        ).squeezed()
+        // Use MLX.select() (actual MLX API)
+        let upwindValues = MLX.select(
+            pecletInterior > 0,  // condition
+            leftCells,           // if Pe > 0: upwind = left
+            rightCells          // if Pe < 0: upwind = right
+        )
+        let downwindValues = MLX.select(
+            pecletInterior > 0,
+            rightCells,          // if Pe > 0: downwind = right
+            leftCells           // if Pe < 0: downwind = left
+        )
 
         let faceInterior = alpha * upwindValues + (1.0 - alpha) * downwindValues
 
@@ -541,32 +574,23 @@ public struct PowerLawScheme {
 
 #### 2.2 Integrate into NewtonRaphsonSolver (2 hours)
 
-**File**: `Sources/Gotenx/Solver/NewtonRaphsonSolver.swift`
+**File**: `Sources/Gotenx/Solver/NewtonRaphsonSolver.swift` (MODIFY)
 
-Modify `interpolateToFacesVectorized`:
+Update `interpolateToFacesVectorized`:
 ```swift
 /// Interpolate cell values to faces using power-law scheme
-///
-/// - Parameters:
-///   - u: Cell values [nCells]
-///   - vFace: Convection velocity at faces [nFaces]
-///   - dFace: Diffusion coefficient at faces [nFaces]
-///   - dx: Cell spacing [nCells-1] or scalar
-/// - Returns: Face values [nFaces]
 private func interpolateToFacesVectorized(
     _ u: MLXArray,
     vFace: MLXArray,
     dFace: MLXArray,
     dx: MLXArray
 ) -> MLXArray {
-    // Compute Péclet number
     let peclet = PowerLawScheme.computePecletNumber(
         vFace: vFace,
         dFace: dFace,
         dx: dx
     )
 
-    // Use power-law interpolation
     return PowerLawScheme.interpolateToFaces(
         cellValues: u,
         peclet: peclet
@@ -574,7 +598,7 @@ private func interpolateToFacesVectorized(
 }
 ```
 
-Update `applySpatialOperatorVectorized` call site (Line 368):
+Update call site in `applySpatialOperatorVectorized` (Line 368):
 ```swift
 // OLD: let u_face = interpolateToFacesVectorized(u)
 // NEW:
@@ -591,17 +615,18 @@ let u_face = interpolateToFacesVectorized(
 **File**: `Tests/GotenxTests/FVM/PowerLawSchemeTests.swift` (NEW)
 
 ```swift
-import XCTest
+import Testing
 import MLX
 @testable import Gotenx
 
-final class PowerLawSchemeTests: XCTestCase {
+@Suite("Power-Law Scheme Tests")
+struct PowerLawSchemeTests {
 
-    /// Test Péclet number calculation
-    func testPecletNumber() {
-        let vFace = MLXArray([0.0, 1.0, 10.0, 100.0])  // [m/s]
-        let dFace = MLXArray([1.0, 1.0, 1.0, 1.0])     // [m²/s]
-        let dx = MLXArray(1.0)                         // [m]
+    @Test("Péclet number calculation")
+    func pecletNumber() {
+        let vFace = MLXArray([0.0, 1.0, 10.0, 100.0])
+        let dFace = MLXArray([1.0, 1.0, 1.0, 1.0])
+        let dx = MLXArray(1.0)
 
         let peclet = PowerLawScheme.computePecletNumber(
             vFace: vFace,
@@ -610,78 +635,81 @@ final class PowerLawSchemeTests: XCTestCase {
         )
         eval(peclet)
 
-        let expected = [0.0, 1.0, 10.0, 100.0]
-        XCTAssertEqual(peclet.asArray(Float.self), expected, accuracy: 1e-6)
+        let result = peclet.asArray(Float.self)
+        #expect(abs(result[0] - 0.0) < 1e-6)
+        #expect(abs(result[1] - 1.0) < 1e-6)
+        #expect(abs(result[2] - 10.0) < 1e-6)
+        #expect(abs(result[3] - 100.0) < 1e-6)
     }
 
-    /// Test power-law weighting for different Péclet numbers
-    func testWeightingFactor() {
+    @Test("Power-law weighting for different Péclet numbers")
+    func weightingFactor() {
         let peclet = MLXArray([0.0, 1.0, 5.0, 10.0, 50.0, -10.0])
         let alpha = PowerLawScheme.computeWeightingFactor(peclet: peclet)
         eval(alpha)
 
         let result = alpha.asArray(Float.self)
 
-        // Pe = 0: central differencing → α ≈ 1 (max power-law)
-        XCTAssertEqual(result[0], 1.0, accuracy: 1e-5)
+        // Pe = 0: central → α ≈ 1
+        #expect(abs(result[0] - 1.0) < 1e-5)
 
         // Pe = 1: α = (1 - 0.1)^5 = 0.59049
-        XCTAssertEqual(result[1], 0.59049, accuracy: 1e-4)
+        #expect(abs(result[1] - 0.59049) < 1e-4)
 
         // Pe = 5: α = (1 - 0.5)^5 = 0.03125
-        XCTAssertEqual(result[2], 0.03125, accuracy: 1e-4)
+        #expect(abs(result[2] - 0.03125) < 1e-4)
 
-        // Pe = 10: α = (1 - 1.0)^5 = 0
-        XCTAssertEqual(result[3], 0.0, accuracy: 1e-5)
+        // Pe = 10: α = 0
+        #expect(abs(result[3]) < 1e-5)
 
-        // |Pe| > 10: full upwinding → α = 0
-        XCTAssertEqual(result[4], 0.0, accuracy: 1e-5)
-        XCTAssertEqual(result[5], 0.0, accuracy: 1e-5)
+        // |Pe| > 10: upwinding → α = 0
+        #expect(abs(result[4]) < 1e-5)
+        #expect(abs(result[5]) < 1e-5)
     }
 
-    /// Test convection-diffusion with varying Péclet (1D analytical solution)
-    func testConvectionDiffusion1D() {
-        // Problem: ∂u/∂t + V·∂u/∂x = D·∂²u/∂x²
-        // Steady-state analytical: u(x) = (exp(Pe·x) - 1) / (exp(Pe) - 1)
+    @Test("Upwind selection for positive/negative Pe")
+    func upwindSelection() {
+        let cellValues = MLXArray([1.0, 2.0, 3.0, 4.0])
 
-        let nCells = 100
-        let L: Float = 1.0  // Domain length
-        let V: Float = 1.0  // Velocity
-        let D: Float = 0.1  // Diffusion
-        let Pe = V * L / D  // Péclet = 10
+        // Positive Pe: upwind from left
+        let pecletPos = MLXArray([0.0, 15.0, 15.0, 15.0, 0.0])
+        let facePos = PowerLawScheme.interpolateToFaces(
+            cellValues: cellValues,
+            peclet: pecletPos
+        )
+        eval(facePos)
 
-        // Create grid
-        let x = MLXArray.linspace(0.0, L, count: nCells)
-        let dx = L / Float(nCells - 1)
+        let resultPos = facePos.asArray(Float.self)
+        #expect(abs(resultPos[1] - 1.0) < 1e-5)  // Left upwind
+        #expect(abs(resultPos[2] - 2.0) < 1e-5)
+        #expect(abs(resultPos[3] - 3.0) < 1e-5)
 
-        // Analytical solution
-        let u_exact = (exp(Pe * x) - 1.0) / (exp(Pe) - 1.0)
+        // Negative Pe: upwind from right
+        let pecletNeg = MLXArray([0.0, -15.0, -15.0, -15.0, 0.0])
+        let faceNeg = PowerLawScheme.interpolateToFaces(
+            cellValues: cellValues,
+            peclet: pecletNeg
+        )
+        eval(faceNeg)
 
-        // TODO: Solve using power-law scheme and compare
-        // (Requires full FVM solver integration)
+        let resultNeg = faceNeg.asArray(Float.self)
+        #expect(abs(resultNeg[1] - 2.0) < 1e-5)  // Right upwind
+        #expect(abs(resultNeg[2] - 3.0) < 1e-5)
+        #expect(abs(resultNeg[3] - 4.0) < 1e-5)
     }
 }
 ```
 
-#### Deliverables
-- ✅ `PowerLawScheme.swift` with Patankar formula
-- ✅ Integration into `NewtonRaphsonSolver`
-- ✅ Unit tests for Pe = [0.1, 1, 5, 10, 50]
-- ✅ Documentation with physics background
-
 ---
 
-### Phase 3: Sauter Bootstrap Current (P0, 8-10 hours)
+### Phase 3: Sauter Bootstrap Current (P0, 9-11 hours)
 
-**Goal**: Replace simplified `C_BS = 1 - ε` with collisionality-dependent Sauter formula.
-
-#### 3.1 Implement Collisionality Calculation (3 hours)
+#### 3.1 Implement Collisionality Calculation (4 hours)
 
 **File**: `Sources/Gotenx/Solver/CollisionalityHelpers.swift` (NEW)
 
 ```swift
 import MLX
-import Numerics  // For physical constants
 
 /// Collisionality and neoclassical transport helpers
 ///
@@ -690,11 +718,9 @@ import Numerics  // For physical constants
 /// - Wesson, "Tokamak Physics" (2nd ed.), Chapter 7
 public struct CollisionalityHelpers {
 
-    /// Compute electron-ion collision time τₑ
+    /// Compute electron-ion collision time τₑ [s]
     ///
-    /// Formula: τₑ = (12π^(3/2) ε₀² mₑ^(1/2) Tₑ^(3/2)) / (nₑ e⁴ ln(Λ))
-    ///
-    /// Simplified: τₑ ≈ 3.44e5 * Tₑ^(3/2) / (nₑ * ln(Λ))  [seconds]
+    /// Formula: τₑ ≈ 3.44e5 * Tₑ^(3/2) / (nₑ * ln(Λ))
     ///
     /// - Parameters:
     ///   - Te: Electron temperature [eV], shape [nCells]
@@ -706,15 +732,12 @@ public struct CollisionalityHelpers {
         ne: MLXArray,
         coulombLog: Float = 17.0
     ) -> MLXArray {
-        // τₑ = 3.44e5 * Tₑ^(3/2) / (nₑ * ln(Λ))
-        let tau_e = 3.44e5 * pow(Te, 1.5) / (ne * coulombLog)
-        return tau_e
+        return 3.44e5 * pow(Te, 1.5) / (ne * coulombLog)
     }
 
     /// Compute normalized collisionality ν*
     ///
     /// Formula: ν* = (R₀ q) / (ε^(3/2) vₜₕ τₑ)
-    ///           = (R₀ q) / (ε^(3/2) √(2Tₑ/mₑ) τₑ)
     ///
     /// Where:
     /// - ε = r/R₀ (inverse aspect ratio)
@@ -733,19 +756,13 @@ public struct CollisionalityHelpers {
     ) -> MLXArray {
         let tau_e = computeCollisionTime(Te: Te, ne: ne)
 
-        // Inverse aspect ratio: ε = r/R₀
         let epsilon = geometry.radii.value / geometry.majorRadius
-
-        // Safety factor q (from geometry or approximation)
-        // For now, use cylindrical approximation: q ≈ r·Bφ/(R₀·Bp)
-        let q = geometry.safetyFactor ?? approximateSafetyFactor(geometry: geometry)
+        let q = approximateSafetyFactor(geometry: geometry)
 
         // Thermal velocity: vₜₕ = √(2Tₑ/mₑ)
-        // With Tₑ in eV: vₜₕ = √(2 * Tₑ[eV] * 1.602e-19 / 9.109e-31)
-        //                    = √(3.514e11 * Tₑ)  [m/s]
+        // With Tₑ in eV: vₜₕ = √(3.514e11 * Tₑ)  [m/s]
         let vth = sqrt(3.514e11 * Te)
 
-        // ν* = (R₀ q) / (ε^(3/2) vₜₕ τₑ)
         let nu_star = (geometry.majorRadius * q) / (pow(epsilon, 1.5) * vth * tau_e)
 
         return nu_star
@@ -753,15 +770,11 @@ public struct CollisionalityHelpers {
 
     /// Approximate safety factor q from geometry
     ///
-    /// Cylindrical approximation: q ≈ (r Bφ) / (R₀ Bp)
+    /// Parabolic approximation: q ≈ 1 + (r/a)²
     ///
     /// - Parameter geometry: Tokamak geometry
     /// - Returns: Safety factor [dimensionless], shape [nCells]
     private static func approximateSafetyFactor(geometry: Geometry) -> MLXArray {
-        // q ≈ (r * Bφ) / (R₀ * Bp)
-        // Bp ≈ ψ' / (2π r) (from flux definition)
-
-        // Simplified: q ≈ 1 + (r/a)²  (parabolic profile)
         let r_norm = geometry.radii.value / geometry.minorRadius
         return 1.0 + r_norm * r_norm
     }
@@ -770,7 +783,7 @@ public struct CollisionalityHelpers {
 
 #### 3.2 Implement Sauter Formula (4 hours)
 
-**File**: `Sources/Gotenx/Solver/Block1DCoeffsBuilder.swift`
+**File**: `Sources/Gotenx/Solver/Block1DCoeffsBuilder.swift` (MODIFY)
 
 Replace `computeBootstrapCurrent` (Line 474-507):
 
@@ -783,9 +796,7 @@ Replace `computeBootstrapCurrent` (Line 474-507):
 /// where C_BS = L₃₁·fₜ + L₃₂·fₜ·α + L₃₄·fₜ·α²
 /// ```
 ///
-/// - L₃ᵢ: Collisionality-dependent coefficients (Sauter Table I)
-/// - fₜ: Trapped particle fraction = 1 - √(1-ε)
-/// - α: Pressure anisotropy parameter (≈ 0 for isotropic)
+/// **Critical**: Preserves sign (can be negative at edge for counter-current drive)
 ///
 /// **References**:
 /// - Sauter et al., PoP 6, 2834 (1999), Eqs. 13-14, Table I
@@ -802,46 +813,45 @@ private func computeBootstrapCurrent(
     let Te = profiles.electronTemperature.value
     let ne = profiles.electronDensity.value
 
-    // 1. Compute total pressure: P = n_e (T_i + T_e) * e
+    // 1. Total pressure: P = n_e (T_i + T_e) * e
     let P = ne * (Ti + Te) * UnitConversions.eV  // [Pa]
 
-    // 2. Compute pressure gradient: ∇P [Pa/m]
+    // 2. Pressure gradient: ∇P [Pa/m]
     let geoFactors = GeometricFactors.from(geometry: geometry)
     let gradP = computeGradient(P, cellDistances: geoFactors.cellDistances.value)
 
-    // 3. Compute normalized collisionality ν*
+    // 3. Normalized collisionality ν*
     let nu_star = CollisionalityHelpers.computeNormalizedCollisionality(
         Te: Te,
         ne: ne,
         geometry: geometry
     )
 
-    // 4. Compute trapped particle fraction
+    // 4. Trapped particle fraction
     let epsilon = geometry.radii.value / geometry.majorRadius
-    let ft = 1.0 - sqrt(1.0 - epsilon)
+    let ft = 1.0 - sqrt(maximum(1e-10, 1.0 - epsilon))
 
-    // 5. Compute Sauter coefficients L₃₁, L₃₂, L₃₄
-    // Using Sauter et al. (1999) Table I fitting formulas
+    // 5. Sauter coefficients L₃₁, L₃₂, L₃₄
     let L31 = computeSauterL31(nu_star: nu_star, ft: ft)
     let L32 = computeSauterL32(nu_star: nu_star, ft: ft)
     let L34 = computeSauterL34(nu_star: nu_star, ft: ft)
 
     // 6. Pressure anisotropy parameter α (assume isotropic: α = 0)
-    // For anisotropic distributions, α = (P_∥ - P_⊥) / P
     let alpha = MLXArray.zeros(like: Te)
 
     // 7. Bootstrap coefficient: C_BS = L₃₁·ft + L₃₂·ft·α + L₃₄·ft·α²
     let C_BS = L31 * ft + L32 * ft * alpha + L34 * ft * alpha * alpha
 
     // 8. Bootstrap current: J_BS = -C_BS · (∇P / B_φ)
-    // Note: Negative sign because ∇P points inward (toward axis) in tokamak
     let J_BS = -C_BS * gradP / geometry.toroidalField
 
-    // 9. Clamp to physical range [0, 10 MA/m²]
-    // (Negative values can occur at plasma edge, clamp to zero)
-    let J_BS_clamped = minimum(maximum(J_BS, MLXArray(0.0)), MLXArray(1e7))
+    // 9. Clamp MAGNITUDE only, preserve sign (CORRECTED)
+    // Bootstrap current can be negative at edge (counter-current drive)
+    let J_BS_magnitude = abs(J_BS)
+    let J_BS_clamped_magnitude = minimum(J_BS_magnitude, MLXArray(1e7))  // Max 10 MA/m²
+    let J_BS_final = sign(J_BS) * J_BS_clamped_magnitude
 
-    return J_BS_clamped
+    return J_BS_final
 }
 
 /// Compute Sauter L₃₁ coefficient (bootstrap current, main term)
@@ -856,11 +866,9 @@ private func computeBootstrapCurrent(
 ///   - ft: Trapped fraction [dimensionless]
 /// - Returns: L₃₁ coefficient [dimensionless]
 private func computeSauterL31(nu_star: MLXArray, ft: MLXArray) -> MLXArray {
-    // Regularization to prevent division by zero
     let ft_safe = ft + 1e-10
     let nu_safe = nu_star + 1e-10
 
-    // L₃₁ = ((1 + 0.15/ft) - 0.22/(1 + 0.01·ν*)) / (1 + 0.5·√ν*)
     let numerator = (1.0 + 0.15 / ft_safe) - 0.22 / (1.0 + 0.01 * nu_safe)
     let denominator = 1.0 + 0.5 * sqrt(nu_safe)
 
@@ -869,13 +877,13 @@ private func computeSauterL31(nu_star: MLXArray, ft: MLXArray) -> MLXArray {
 
 /// Compute Sauter L₃₂ coefficient (pressure anisotropy correction)
 private func computeSauterL32(nu_star: MLXArray, ft: MLXArray) -> MLXArray {
-    // Simplified: L₃₂ ≈ 0.05 (small correction for α term)
+    // Simplified: L₃₂ ≈ 0.05
     return MLXArray.full(nu_star.shape, values: MLXArray(0.05))
 }
 
 /// Compute Sauter L₃₄ coefficient (second-order pressure anisotropy)
 private func computeSauterL34(nu_star: MLXArray, ft: MLXArray) -> MLXArray {
-    // Simplified: L₃₄ ≈ 0.01 (very small correction for α² term)
+    // Simplified: L₃₄ ≈ 0.01
     return MLXArray.full(nu_star.shape, values: MLXArray(0.01))
 }
 ```
@@ -885,13 +893,18 @@ private func computeSauterL34(nu_star: MLXArray, ft: MLXArray) -> MLXArray {
 **File**: `Tests/GotenxTests/Solver/BootstrapCurrentTests.swift` (NEW)
 
 ```swift
-final class BootstrapCurrentTests: XCTestCase {
+import Testing
+import MLX
+@testable import Gotenx
 
-    /// Test collisionality calculation against reference values
-    func testCollisionality() {
+@Suite("Bootstrap Current Tests")
+struct BootstrapCurrentTests {
+
+    @Test("Collision time calculation against reference")
+    func collisionTime() {
         // ITER typical core: Te = 10 keV, ne = 1e20 m⁻³
-        let Te = MLXArray([10000.0])  // [eV]
-        let ne = MLXArray([1e20])     // [m⁻³]
+        let Te = MLXArray([10000.0])
+        let ne = MLXArray([1e20])
 
         let tau_e = CollisionalityHelpers.computeCollisionTime(
             Te: Te,
@@ -900,13 +913,14 @@ final class BootstrapCurrentTests: XCTestCase {
         )
         eval(tau_e)
 
-        // Expected: τₑ ≈ 3.44e5 * (1e4)^1.5 / (1e20 * 17) ≈ 2.02e-6 s
+        // Expected: τₑ ≈ 2.02e-6 s
+        let result = tau_e.item(Float.self)
         let expected: Float = 2.02e-6
-        XCTAssertEqual(tau_e.item(Float.self), expected, accuracy: expected * 0.1)
+        #expect(abs(result - expected) < expected * 0.1)
     }
 
-    /// Test Sauter coefficients for banana regime (low ν*)
-    func testSauterCoefficients_BananaRegime() {
+    @Test("Sauter L₃₁ coefficient - banana regime")
+    func sauterL31BananaRegime() {
         // Low collisionality: ν* = 0.01, ft = 0.3
         let nu_star = MLXArray([0.01])
         let ft = MLXArray([0.3])
@@ -914,12 +928,13 @@ final class BootstrapCurrentTests: XCTestCase {
         let L31 = computeSauterL31(nu_star: nu_star, ft: ft)
         eval(L31)
 
+        let result = L31.item(Float.self)
         // Banana regime: L₃₁ ≈ 1.5 (from Sauter Table I)
-        XCTAssertEqual(L31.item(Float.self), 1.5, accuracy: 0.2)
+        #expect(abs(result - 1.5) < 0.2)
     }
 
-    /// Test Sauter coefficients for plateau regime (moderate ν*)
-    func testSauterCoefficients_PlateauRegime() {
+    @Test("Sauter L₃₁ coefficient - plateau regime")
+    func sauterL31PlateauRegime() {
         // Moderate collisionality: ν* = 1.0, ft = 0.3
         let nu_star = MLXArray([1.0])
         let ft = MLXArray([0.3])
@@ -927,29 +942,25 @@ final class BootstrapCurrentTests: XCTestCase {
         let L31 = computeSauterL31(nu_star: nu_star, ft: ft)
         eval(L31)
 
+        let result = L31.item(Float.self)
         // Plateau regime: L₃₁ ≈ 0.8
-        XCTAssertEqual(L31.item(Float.self), 0.8, accuracy: 0.2)
+        #expect(abs(result - 0.8) < 0.2)
     }
 
-    /// Compare simplified vs. Sauter bootstrap current for ITER-like profile
-    func testBootstrapCurrent_ITERComparison() {
-        // TODO: Set up ITER-like profiles and compare
-        // Expected: Sauter gives 20-30% higher bootstrap fraction at edge
+    @Test("Bootstrap current preserves sign")
+    func bootstrapSignPreservation() {
+        // Create scenario with negative gradient (edge)
+        // Bootstrap current should be negative (counter-current)
+
+        // TODO: Set up profiles with outward pressure gradient
+        // Verify J_BS < 0 at edge (no artificial clamp to zero)
     }
 }
 ```
 
-#### Deliverables
-- ✅ `CollisionalityHelpers.swift` with ν* calculation
-- ✅ Sauter formula implementation in `computeBootstrapCurrent`
-- ✅ Unit tests for banana/plateau/Pfirsch-Schlüter regimes
-- ✅ Integration test comparing simplified vs. Sauter for ITER
-
 ---
 
 ### Phase 4: Non-Uniform Grid Support (P1, 6-8 hours)
-
-**Goal**: Use full metric tensors from `Geometry` for shaped plasmas.
 
 #### 4.1 Enhance GeometricFactors (4 hours)
 
@@ -964,15 +975,15 @@ public struct GeometricFactors: Sendable {
     /// Shape: [nCells]
     public let jacobian: EvaluatedArray
 
-    /// Metric tensor component g₁ (related to ∂R/∂ψ)
+    /// Metric tensor component g₁
     /// Shape: [nCells]
     public let g1: EvaluatedArray
 
-    /// Metric tensor component g₂ (related to pressure gradient)
+    /// Metric tensor component g₂
     /// Shape: [nCells]
     public let g2: EvaluatedArray
 
-    /// Create from full geometry (NEW: use g0, g1, g2)
+    /// Create from full geometry (use g0, g1, g2)
     public static func from(geometry: Geometry) -> GeometricFactors {
         let nCells = geometry.nCells
 
@@ -982,7 +993,7 @@ public struct GeometricFactors: Sendable {
         let g2 = geometry.g2
 
         // Cell volumes: V = ∫ √g dr dθ dζ = 2π ∫ g₀ dr
-        let dr = geometry.radii.value[1] - geometry.radii.value[0]  // Assume uniform for now
+        let dr = geometry.radii.value[1] - geometry.radii.value[0]
         let cellVolumes = jacobian.value * dr * Float(2 * .pi)
 
         // Face areas: A = 2π g₀(r_face)
@@ -1005,91 +1016,41 @@ public struct GeometricFactors: Sendable {
 
 #### 4.2 Update Spatial Operators (2 hours)
 
-Modify `applySpatialOperatorVectorized` to use metric tensors:
+Modify `applySpatialOperatorVectorized` to use metric tensors for flux divergence:
 ```swift
-private func applySpatialOperatorVectorized(
-    u: MLXArray,
-    coeffs: EquationCoeffs,
-    geometry: GeometricFactors,
-    boundaryCondition: BoundaryCondition
-) -> MLXArray {
-    // ... existing gradient calculation ...
+// Flux divergence with metric tensors:
+// ∇·F = (1/√g) ∂(√g·F)/∂ψ
 
-    // Flux divergence with metric tensors:
-    // ∇·F = (1/√g) ∂(√g·F)/∂ψ
-    let flux_right = totalFlux[1..<(nCells + 1)]
-    let flux_left = totalFlux[0..<nCells]
+let jacobianCells = geometry.jacobian.value
+let jacobianFaces = interpolateToFaces(jacobianCells, mode: .arithmetic)
+let jacobian_right = jacobianFaces[1..<(nCells + 1)]
+let jacobian_left = jacobianFaces[0..<nCells]
 
-    // Metric-weighted flux difference
-    let jacobianCells = geometry.jacobian.value
-    let jacobianFaces = interpolateToFaces(jacobianCells, mode: .arithmetic)
-    let jacobian_right = jacobianFaces[1..<(nCells + 1)]
-    let jacobian_left = jacobianFaces[0..<nCells]
+let weightedFlux_right = jacobian_right * flux_right
+let weightedFlux_left = jacobian_left * flux_left
 
-    let weightedFlux_right = jacobian_right * flux_right
-    let weightedFlux_left = jacobian_left * flux_left
-
-    let fluxDivergence = (weightedFlux_right - weightedFlux_left) /
-                         (jacobianCells * geometry.cellDistances.value + 1e-10)
-
-    // ... rest of implementation ...
-}
+let fluxDivergence = (weightedFlux_right - weightedFlux_left) /
+                     (jacobianCells * geometry.cellDistances.value + 1e-10)
 ```
-
-#### 4.3 Add Non-Uniform Grid Tests (2 hours)
-
-**File**: `Tests/GotenxTests/FVM/NonUniformGridTests.swift` (NEW)
-
-```swift
-final class NonUniformGridTests: XCTestCase {
-
-    /// Test convergence on exponentially refined grid
-    func testExponentialGrid() {
-        // Create exponentially spaced grid (fine near edge)
-        let nCells = 100
-        let a: Float = 0.5  // Minor radius
-        let stretch: Float = 2.0
-
-        // r(i) = a * (exp(stretch * i/N) - 1) / (exp(stretch) - 1)
-        let i_norm = MLXArray.linspace(0.0, 1.0, count: nCells)
-        let r = a * (exp(stretch * i_norm) - 1.0) / (exp(stretch) - 1.0)
-
-        // TODO: Create geometry with non-uniform spacing
-        // Verify conservation and convergence rate
-    }
-
-    /// Test shaped plasma (D-shape with δ = 0.4, κ = 1.8)
-    func testShapedPlasma() {
-        // TODO: Create ITER-like shaped geometry
-        // Compare flux-surface-averaged quantities with/without metrics
-    }
-}
-```
-
-#### Deliverables
-- ✅ Enhanced `GeometricFactors` with metric tensors
-- ✅ Updated spatial operators to use metrics
-- ✅ Tests for exponential grid and shaped plasma
-- ✅ Documentation on metric tensor usage
 
 ---
 
-### Phase 5: Integration Testing (P2, 6-8 hours)
-
-**Goal**: End-to-end validation of complete FVM pipeline.
+### Phase 5: Integration Testing (P2, 7-9 hours)
 
 #### 5.1 Analytical Solution Tests (3 hours)
 
 **File**: `Tests/GotenxTests/Integration/FVMAnalyticalTests.swift` (NEW)
 
 ```swift
-final class FVMAnalyticalTests: XCTestCase {
+import Testing
+import MLX
+@testable import Gotenx
 
-    /// Test 1D diffusion against analytical solution
-    ///
-    /// PDE: ∂T/∂t = χ ∂²T/∂r²
-    /// Analytical: T(r,t) = T₀ exp(-r²/(4χt)) / √(1 + 4χt/r₀²)
-    func testDiffusionAnalytical() {
+@Suite("FVM Analytical Solution Tests")
+struct FVMAnalyticalTests {
+
+    @Test("1D diffusion against analytical solution")
+    func diffusionAnalytical() async throws {
         let chi: Float = 1.0    // [m²/s]
         let T0: Float = 1000.0  // [eV]
         let r0: Float = 0.5     // [m]
@@ -1097,21 +1058,18 @@ final class FVMAnalyticalTests: XCTestCase {
 
         // TODO: Set up simulation with D=χ, V=0, source=0
         // Run to t=tFinal, compare with analytical solution
+        // T(r,t) = T₀ exp(-r²/(4χt)) / √(1 + 4χt/r₀²)
         // Expected error < 5% for nCells=100
     }
 
-    /// Test steady-state convection-diffusion (Péclet sweep)
-    ///
-    /// PDE: V ∂T/∂r = χ ∂²T/∂r²
-    /// Analytical: T(r) = (exp(Pe·r/L) - 1) / (exp(Pe) - 1)
-    func testConvectionDiffusionSteadyState() {
-        let pecletNumbers: [Float] = [0.1, 1.0, 5.0, 10.0, 50.0]
+    @Test("Steady-state convection-diffusion", arguments: [0.1, 1.0, 5.0, 10.0, 50.0])
+    func convectionDiffusionSteadyState(peclet: Float) async throws {
+        // PDE: V ∂T/∂r = χ ∂²T/∂r²
+        // Analytical: T(r) = (exp(Pe·r/L) - 1) / (exp(Pe) - 1)
 
-        for Pe in pecletNumbers {
-            // TODO: Set up V and χ to achieve target Pe
-            // Run to steady state, compare with analytical
-            // Verify power-law scheme prevents oscillations for Pe > 10
-        }
+        // TODO: Set up V and χ to achieve target Pe
+        // Run to steady state, compare with analytical
+        // Verify power-law scheme prevents oscillations for Pe > 10
     }
 }
 ```
@@ -1121,10 +1079,15 @@ final class FVMAnalyticalTests: XCTestCase {
 **File**: `Tests/GotenxTests/Integration/ConservationTests.swift` (NEW)
 
 ```swift
-final class ConservationTests: XCTestCase {
+import Testing
+import MLX
+@testable import Gotenx
 
-    /// Test particle conservation over 100 timesteps
-    func testParticleConservation() {
+@Suite("Conservation Tests")
+struct ConservationIntegrationTests {
+
+    @Test("Particle conservation over 100 timesteps")
+    func particleConservation() async throws {
         // Initial particles: N₀ = ∫ n_e dV
         // After 100 steps with no source: |N - N₀| / N₀ < 1%
 
@@ -1133,8 +1096,8 @@ final class ConservationTests: XCTestCase {
         // Verify drift < 1% over 100 steps
     }
 
-    /// Test energy conservation (no heating/loss)
-    func testEnergyConservation() {
+    @Test("Energy conservation (no heating/loss)")
+    func energyConservation() async throws {
         // Total energy: E = ∫ (3/2)nT dV
         // With Q_heat = 0, Q_loss = 0: dE/dt ≈ 0
 
@@ -1142,8 +1105,8 @@ final class ConservationTests: XCTestCase {
         // Verify |E(t=100Δt) - E(t=0)| / E(t=0) < 1%
     }
 
-    /// Test current conservation (bootstrap + Ohmic)
-    func testCurrentConservation() {
+    @Test("Current conservation (bootstrap + Ohmic)")
+    func currentConservation() async throws {
         // Total current: I_p = ∫ J dA
         // Verify I_p matches specified boundary condition
 
@@ -1153,18 +1116,19 @@ final class ConservationTests: XCTestCase {
 }
 ```
 
-#### 5.3 TORAX Benchmark (3 hours)
+#### 5.3 TORAX Benchmark (2 hours)
 
 **File**: `Tests/GotenxTests/Integration/TORAXBenchmarkTests.swift` (NEW)
 
 ```swift
-final class TORAXBenchmarkTests: XCTestCase {
+import Testing
+@testable import Gotenx
 
-    /// Compare ITER-like scenario with Python TORAX
-    ///
-    /// Use identical initial conditions, run for 10 time steps,
-    /// compare profiles within 5% RMS error.
-    func testITERScenario() {
+@Suite("TORAX Benchmark Tests")
+struct TORAXBenchmarkTests {
+
+    @Test("ITER-like scenario comparison with Python TORAX")
+    func iterScenario() async throws {
         // Load ITER_LIKE configuration
         // Run both Gotenx and TORAX (via subprocess or pre-computed reference)
         // Compare Ti, Te, ne, psi profiles at t = 1.0 s
@@ -1177,11 +1141,43 @@ final class TORAXBenchmarkTests: XCTestCase {
 }
 ```
 
-#### Deliverables
-- ✅ 3 analytical solution tests (diffusion, convection-diffusion)
-- ✅ 3 conservation tests (particles, energy, current)
-- ✅ TORAX benchmark test with ITER scenario
-- ✅ CI integration for regression detection
+---
+
+## Validation Criteria
+
+### Phase 1 (Configuration): ✅
+- [ ] All 15 `1e-6` occurrences replaced with config values
+- [ ] `ToleranceScaler` correctly computes scaled tolerances
+- [ ] `AdaptiveTimestepConfig` extended (backward compatible)
+- [ ] Old configs with explicit `minDt` still work
+- [ ] New configs with `minDtFraction` work
+- [ ] JSON schema validates
+
+### Phase 2 (Power-Law): ✅
+- [ ] `MLX.select()` used (not non-existent helpers)
+- [ ] Pe ∈ [0.01, 100] tested
+- [ ] No oscillations for Pe = 50
+- [ ] All tests use Swift Testing (@Test, #expect)
+
+### Phase 3 (Sauter Bootstrap): ✅
+- [ ] Bootstrap current preserves sign
+- [ ] Magnitude clamp only (|J_BS| < 10 MA/m²)
+- [ ] Collisionality ν* matches references (±10%)
+- [ ] L₃₁ coefficients match Sauter Table I (±20%)
+- [ ] Tests use Swift Testing
+
+### Phase 4 (Metrics): ✅
+- [ ] Metric tensors g₀, g₁, g₂ propagated
+- [ ] Shaped plasma (δ=0.4, κ=1.8): error < 5%
+- [ ] Exponential grid: O(Δr²) convergence maintained
+- [ ] Uniform grid results unchanged
+
+### Phase 5 (Integration): ✅
+- [ ] All tests use Swift Testing
+- [ ] 1D diffusion: error < 5% vs. analytical
+- [ ] Particle conservation: drift < 1% over 100 steps
+- [ ] Energy conservation: drift < 1%
+- [ ] TORAX benchmark: RMS error < 5%
 
 ---
 
@@ -1232,10 +1228,15 @@ final class TORAXBenchmarkTests: XCTestCase {
         "lineSearchEnabled": true
       },
       "time": {
-        "maxDt": 0.1,
-        "minTimestepFraction": 0.001,
-        "cflSafetyFactor": 0.9,
-        "maxTimestepGrowth": 1.2
+        "start": 0.0,
+        "end": 10.0,
+        "initialDt": 1e-3,
+        "adaptive": {
+          "minDtFraction": 0.001,
+          "maxDt": 0.1,
+          "safetyFactor": 0.9,
+          "maxTimestepGrowth": 1.2
+        }
       }
     }
   }
@@ -1244,146 +1245,53 @@ final class TORAXBenchmarkTests: XCTestCase {
 
 ### CLI Migration Path
 
-**Backward Compatibility**: Old configs with `tolerance: 1e-6` will auto-upgrade:
+**Backward Compatibility**: Old configs with `minDt: 1e-6` will continue working without changes.
 
-```swift
-// In GotenxConfigReader.swift
-if let legacyTolerance = json["solver"]["tolerance"].float {
-    // Convert to per-equation tolerances with default scaling
-    return NumericalTolerances(
-        ionTemperature: EquationTolerances(
-            absoluteTolerance: legacyTolerance * 1e4,  // Scale to eV
-            relativeTolerance: legacyTolerance,
-            minValueThreshold: 100.0
-        ),
-        // ... similar for other equations
-    )
-}
+---
+
+## Dependencies
+
+### Package.swift (No Changes Needed)
+
+Current dependencies already include:
+- `swift-numerics` ✅
+- `mlx-swift` ✅
+- `swift-testing` ✅
+
+**Verification**:
+```bash
+swift package describe
 ```
-
----
-
-## Validation Criteria
-
-### Phase 1 (Configuration): ✅ Acceptance
-- [ ] All 15 `1e-6` occurrences replaced with config values
-- [ ] Per-equation tolerances accessible in solver
-- [ ] JSON config validates with new schema
-- [ ] Backward compatibility for old configs
-
-### Phase 2 (Power-Law): ✅ Acceptance
-- [ ] Péclet number calculation tested for Pe ∈ [0.01, 100]
-- [ ] Power-law weighting matches Patankar formula within 1e-5
-- [ ] Convection-diffusion test shows no oscillations for Pe = 50
-- [ ] Integration into solver preserves Newton convergence
-
-### Phase 3 (Sauter Bootstrap): ✅ Acceptance
-- [ ] Collisionality ν* matches reference (ITER core: ν* ≈ 0.01)
-- [ ] Sauter L₃₁ within 10% of Table I values for banana/plateau regimes
-- [ ] Bootstrap current differs from simplified by 20-30% at edge (as expected)
-- [ ] ITER benchmark: bootstrap fraction f_BS = 0.4 ± 0.05
-
-### Phase 4 (Metrics): ✅ Acceptance
-- [ ] Metric tensors g₀, g₁, g₂ propagated through flux calculations
-- [ ] Shaped plasma (δ=0.4, κ=1.8): geometric error < 5%
-- [ ] Exponential grid: convergence rate = O(Δr²) maintained
-- [ ] Uniform grid results unchanged (backward compatibility)
-
-### Phase 5 (Integration): ✅ Acceptance
-- [ ] 1D diffusion: error < 5% vs. analytical (nCells=100)
-- [ ] Particle conservation: drift < 1% over 100 steps
-- [ ] Energy conservation: drift < 1% over 100 steps
-- [ ] TORAX benchmark: RMS error < 5% for all profiles
-
----
-
-## Risk Mitigation
-
-### Technical Risks
-
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| Power-law scheme breaks Newton convergence | Medium | High | Add line search adaptation, fallback to central diff |
-| Sauter formula unstable at low density | Low | Medium | Add density floor (1e18 m⁻³), clamp ν* ∈ [1e-3, 1e3] |
-| Metric tensors cause performance regression | Low | Low | Profile before/after, optimize eval() placement |
-| Per-equation tolerances too complex for users | Medium | Low | Provide presets (ITER, DIII-D, JET), auto-tune mode |
-
-### Schedule Risks
-
-| Risk | Mitigation |
-|------|------------|
-| Phase 3 (Sauter) takes longer than estimated | Implement simplified Sauter first (L₃₁ only), defer L₃₂/L₃₄ to Phase 6 |
-| Integration tests reveal fundamental issues | Pause implementation, triage with unit tests, fix root cause before proceeding |
-| TORAX benchmark data unavailable | Use published ITER Baseline Scenario results as reference |
-
----
-
-## Success Metrics
-
-### Quantitative
-- ✅ Code coverage: 90% for new modules (PowerLawScheme, CollisionalityHelpers)
-- ✅ Performance: Full timestep < 15 ms (nCells=100, was 10 ms target + 50% margin for new features)
-- ✅ Accuracy: TORAX benchmark RMS error < 5%
-- ✅ Conservation: Particle/energy drift < 1% over 100 steps
-
-### Qualitative
-- ✅ Configuration system: User can tune tolerances via JSON without code changes
-- ✅ Documentation: Every new module has physics background + references
-- ✅ Maintainability: No magic numbers, all thresholds traced to config
-- ✅ TORAX alignment: Power-law scheme, Sauter formula match Python implementation
 
 ---
 
 ## Timeline Summary
 
-| Phase | Priority | Effort | Dependencies | Deliverables |
-|-------|----------|--------|--------------|--------------|
-| 1. Configuration Refactor | P0 | 8-10h | None | `NumericalTolerances`, `PhysicalThresholds`, updated 5 modules |
-| 2. Power-Law Scheme | P0 | 6-8h | Phase 1 | `PowerLawScheme.swift`, tests, integration |
-| 3. Sauter Bootstrap | P0 | 8-10h | None | `CollisionalityHelpers`, Sauter formula, tests |
-| 4. Metric Tensors | P1 | 6-8h | None | Enhanced `GeometricFactors`, spatial operators |
-| 5. Integration Tests | P2 | 6-8h | Phases 2-4 | Analytical, conservation, TORAX benchmark tests |
-| **Total** | | **40-50h** | | **~1 week full-time** |
+| Phase | Priority | Effort | Deliverables |
+|-------|----------|--------|--------------|
+| 1. Configuration Refactor | P0 | 10-12h | `NumericalTolerances`, `PhysicalThresholds`, solver updates |
+| 2. Power-Law Scheme | P0 | 7-9h | `PowerLawScheme.swift`, tests, integration |
+| 3. Sauter Bootstrap | P0 | 9-11h | `CollisionalityHelpers`, Sauter formula, tests |
+| 4. Metric Tensors | P1 | 6-8h | Enhanced `GeometricFactors`, spatial operators |
+| 5. Integration Tests | P2 | 7-9h | Analytical, conservation, TORAX benchmark |
+| **Total** | | **45-55h** | **~1 week full-time** |
 
 ### Suggested Schedule
 
 **Week 1**:
-- Day 1-2: Phase 1 (Configuration) - Foundation for all other work
-- Day 3: Phase 2 (Power-Law) - Critical for stability
+- Day 1-2: Phase 1 (Configuration) - Foundation
+- Day 3: Phase 2 (Power-Law) - Stability
 - Day 4-5: Phase 3 (Sauter Bootstrap) - Physics accuracy
 
-**Week 2** (if continuing):
+**Optional Week 2**:
 - Day 1-2: Phase 4 (Metric Tensors) - Advanced geometry
 - Day 3-5: Phase 5 (Integration Tests) - Validation
 
-**Minimum Viable Product**: Phases 1-3 only (22-28 hours, ~3-4 days)
+**Minimum Viable Product**: Phases 1-3 only (26-32 hours, ~4 days)
 
 ---
 
-## References
-
-### TORAX Core
-1. **TORAX Paper**: arXiv:2406.06718v2, "TORAX: A Differentiable Tokamak Transport Simulator"
-2. **TORAX GitHub**: https://github.com/google-deepmind/torax
-3. **DeepWiki**: https://deepwiki.com/google-deepmind/torax
-
-### Numerical Methods
-4. **Patankar (1980)**: "Numerical Heat Transfer and Fluid Flow" (Power-law scheme)
-5. **Hairer & Wanner (1996)**: "Solving ODEs II" (Theta method)
-6. **Higham (2002)**: "Accuracy and Stability of Numerical Algorithms"
-
-### Neoclassical Physics
-7. **Sauter et al. (1999)**: "Neoclassical conductivity and bootstrap current formulas", PoP 6, 2834
-8. **Wesson (2011)**: "Tokamak Physics" (2nd ed.), Chapter 7 (Neoclassical transport)
-9. **Hirshman & Sigmar (1981)**: "Neoclassical transport of impurities", NF 21, 1079
-
-### Tokamak Geometry
-10. **Miller et al. (1998)**: "Noncircular, finite aspect ratio, local equilibrium model", PoP 5, 973
-11. **Lao et al. (1985)**: "Reconstruction of current profile parameters", NF 25, 1611
-
----
-
-## Appendix: File Impact Summary
+## File Impact Summary
 
 ### Files to Create (7 new files)
 1. `Sources/Gotenx/Configuration/NumericalTolerances.swift`
@@ -1399,7 +1307,7 @@ if let legacyTolerance = json["solver"]["tolerance"].float {
 2. `Sources/Gotenx/Configuration/SolverConfig.swift` (+15 lines)
 3. `Sources/Gotenx/Configuration/RuntimeParams.swift` (+10 lines)
 4. `Sources/GotenxCLI/Configuration/GotenxConfigReader.swift` (+50 lines)
-5. `Sources/Gotenx/Solver/NewtonRaphsonSolver.swift` (+80 lines)
+5. `Sources/Gotenx/Solver/NewtonRaphsonSolver.swift` (+100 lines)
 6. `Sources/Gotenx/Solver/Block1DCoeffsBuilder.swift` (+150 lines)
 7. `Sources/Gotenx/Core/GeometricFactors.swift` (+30 lines)
 8. `Sources/Gotenx/Orchestration/TimeStepCalculator.swift` (+15 lines)
@@ -1408,16 +1316,38 @@ if let legacyTolerance = json["solver"]["tolerance"].float {
 11. `Sources/Gotenx/Configuration/ConfigurationValidator.swift` (+5 lines)
 12. `Sources/Gotenx/Diagnostics/DerivedQuantitiesComputer.swift` (+20 lines)
 
-**Total New Code**: ~1500 lines
-**Total Modified Code**: ~405 lines
-**Total Impact**: ~1900 lines across 19 files
+**Total New Code**: ~1600 lines
+**Total Modified Code**: ~425 lines
+**Total Impact**: ~2025 lines across 19 files
+
+---
+
+## References
+
+### TORAX Core
+1. **TORAX Paper**: arXiv:2406.06718v2
+2. **TORAX GitHub**: https://github.com/google-deepmind/torax
+3. **DeepWiki**: https://deepwiki.com/google-deepmind/torax
+
+### Numerical Methods
+4. **Patankar (1980)**: "Numerical Heat Transfer and Fluid Flow"
+5. **Hairer & Wanner (1996)**: "Solving ODEs II"
+6. **Higham (2002)**: "Accuracy and Stability of Numerical Algorithms"
+
+### Neoclassical Physics
+7. **Sauter et al. (1999)**: PoP 6, 2834
+8. **Wesson (2011)**: "Tokamak Physics" (2nd ed.), Chapter 7
+9. **Hirshman & Sigmar (1981)**: NF 21, 1079
+
+### Tokamak Geometry
+10. **Miller et al. (1998)**: PoP 5, 973
+11. **Lao et al. (1985)**: NF 25, 1611
 
 ---
 
 **Document Status**: Ready for Implementation
 **Next Action**: Begin Phase 1 (Configuration Refactor)
-**Point of Contact**: Review with team, prioritize phases based on project needs
 
 ---
 
-*End of Document*
+*Last updated: 2025-10-21*

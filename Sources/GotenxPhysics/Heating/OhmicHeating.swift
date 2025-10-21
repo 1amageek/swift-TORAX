@@ -27,20 +27,26 @@ public struct OhmicHeating: Sendable {
     /// Apply neoclassical correction for trapped particles
     public let useNeoclassical: Bool
 
+    /// Physical thresholds for validation
+    public let thresholds: PhysicalThresholds
+
     /// Create Ohmic heating model
     ///
     /// - Parameters:
     ///   - Zeff: Effective charge (default: 1.5)
     ///   - lnLambda: Coulomb logarithm (default: 17.0)
     ///   - useNeoclassical: Apply neoclassical correction (default: true)
+    ///   - thresholds: Physical thresholds (default: .default)
     public init(
         Zeff: Float = 1.5,
         lnLambda: Float = 17.0,
-        useNeoclassical: Bool = true
+        useNeoclassical: Bool = true,
+        thresholds: PhysicalThresholds = .default
     ) {
         self.Zeff = Zeff
         self.lnLambda = lnLambda
         self.useNeoclassical = useNeoclassical
+        self.thresholds = thresholds
     }
 
     /// Compute Ohmic heating power density
@@ -303,9 +309,13 @@ extension OhmicHeating {
 
         // Check if we have meaningful flux data
         let psiRange = MLX.max(psi).item(Float.self) - MLX.min(psi).item(Float.self)
+        let psiMax = MLX.max(abs(psi)).item(Float.self)
 
-        guard psiRange > 1e-6 else {
-            // Poloidal flux is essentially zero → no current
+        // Use relative threshold: dψ/ψ_max < threshold
+        let relativeVariation = psiRange / max(psiMax, 1e-10)
+
+        guard relativeVariation > thresholds.fluxVariationThreshold else {
+            // Poloidal flux variation is negligible → no meaningful current
             // This happens in startup or when psi solver hasn't run yet
             return MLXArray.zeros([nCells])
         }

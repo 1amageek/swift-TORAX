@@ -54,20 +54,20 @@ public struct ConfigurationValidator {
         }
 
         if let adaptive = time.adaptive {
-            // minDt must be positive
-            guard adaptive.minDt > 0 else {
+            // effectiveMinDt must be positive
+            guard adaptive.effectiveMinDt > 0 else {
                 throw ConfigurationError.invalidValue(
-                    key: "time.adaptive.minDt",
-                    value: "\(adaptive.minDt)",
+                    key: "time.adaptive.effectiveMinDt",
+                    value: "\(adaptive.effectiveMinDt)",
                     reason: "Min timestep must be positive"
                 )
             }
 
-            // maxDt must be greater than minDt
-            guard adaptive.minDt < adaptive.maxDt else {
+            // maxDt must be greater than effectiveMinDt
+            guard adaptive.effectiveMinDt < adaptive.maxDt else {
                 throw ConfigurationError.invalidValue(
                     key: "time.adaptive",
-                    value: "min=\(adaptive.minDt), max=\(adaptive.maxDt)",
+                    value: "min=\(adaptive.effectiveMinDt), max=\(adaptive.maxDt)",
                     reason: "Min timestep must be less than max timestep"
                 )
             }
@@ -82,9 +82,9 @@ public struct ConfigurationValidator {
             }
 
             // Warning: initialDt should be within adaptive range
-            if time.initialDt < adaptive.minDt || time.initialDt > adaptive.maxDt {
+            if time.initialDt < adaptive.effectiveMinDt || time.initialDt > adaptive.maxDt {
                 print("⚠️  Warning: initialDt (\(time.initialDt)s) is outside adaptive range")
-                print("   Adaptive range: [\(adaptive.minDt), \(adaptive.maxDt)]s")
+                print("   Adaptive range: [\(adaptive.effectiveMinDt), \(adaptive.maxDt)]s")
                 print("   Timestep will be clamped to this range")
             }
         }
@@ -121,7 +121,8 @@ public struct ConfigurationValidator {
     private static func validateSources(_ sources: SourcesConfig) throws {
         if let fusion = sources.fusionConfig {
             let totalFraction = fusion.deuteriumFraction + fusion.tritiumFraction
-            guard abs(totalFraction - 1.0) < 1e-6 else {
+            // Use physical threshold for fuel fraction validation (1e-4, not hardcoded 1e-6)
+            guard abs(totalFraction - 1.0) < PhysicalThresholds.default.fuelFractionTolerance else {
                 throw ConfigurationError.invalidValue(
                     key: "sources.fusionConfig.fractions",
                     value: "D=\(fusion.deuteriumFraction), T=\(fusion.tritiumFraction)",

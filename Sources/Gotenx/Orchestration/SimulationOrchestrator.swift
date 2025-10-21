@@ -64,7 +64,8 @@ public actor SimulationOrchestrator {
         initialProfiles: SerializableProfiles,
         transport: any TransportModel,
         sources: [any SourceModel] = [],
-        samplingConfig: SamplingConfig = .balanced
+        samplingConfig: SamplingConfig = .balanced,
+        adaptiveConfig: AdaptiveTimestepConfig = .default
     ) async {
         self.staticParams = staticParams
         self.transport = transport
@@ -75,9 +76,9 @@ public actor SimulationOrchestrator {
         self.geometry = Geometry(config: staticParams.mesh)
 
         self.timeStepCalculator = TimeStepCalculator(
-            stabilityFactor: 0.9,
-            minTimestep: 1e-6,
-            maxTimestep: 1e-2
+            stabilityFactor: adaptiveConfig.safetyFactor,
+            minTimestep: adaptiveConfig.effectiveMinDt,
+            maxTimestep: adaptiveConfig.maxDt
         )
 
         // Create solver based on configuration

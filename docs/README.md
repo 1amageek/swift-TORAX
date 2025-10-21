@@ -107,6 +107,7 @@ Active improvement roadmaps and design specifications:
 | **Swift Concurrency** | [SWIFT_CONCURRENCY.md](SWIFT_CONCURRENCY.md) | ✅ Reference |
 | **Transport Models** | [TRANSPORT_MODELS.md](TRANSPORT_MODELS.md) | ✅ Reference |
 | Conservation Laws | [CONSERVATION_AND_DIAGNOSTICS_DESIGN.md](CONSERVATION_AND_DIAGNOSTICS_DESIGN.md) | ✅ Implemented |
+| **FVM Improvements** | [FVM_NUMERICAL_IMPROVEMENTS_PLAN.md](FVM_NUMERICAL_IMPROVEMENTS_PLAN.md) | 🔥 **Priority** |
 | Visualization | [VISUALIZATION_DESIGN.md](VISUALIZATION_DESIGN.md) | 🚧 In Progress |
 | TORAX Validation | [TORAX_COMPARISON_AND_VALIDATION.md](TORAX_COMPARISON_AND_VALIDATION.md) | 📋 Planned |
 | Future Phases (5-7) | [PHASE5_7_IMPLEMENTATION_PLAN.md](PHASE5_7_IMPLEMENTATION_PLAN.md) | 📋 Roadmap |
@@ -127,6 +128,9 @@ Active improvement roadmaps and design specifications:
 
 **Starting a new feature?**
 → Start with [CLAUDE.md](../CLAUDE.md) for architecture patterns and constraints.
+
+**Improving FVM numerics?** 🔥
+→ See [FVM_NUMERICAL_IMPROVEMENTS_PLAN.md](FVM_NUMERICAL_IMPROVEMENTS_PLAN.md) for power-law scheme, Sauter bootstrap, and tolerance configuration.
 
 **Implementing conservation laws?**
 → See [CONSERVATION_AND_DIAGNOSTICS_DESIGN.md](CONSERVATION_AND_DIAGNOSTICS_DESIGN.md).
@@ -149,4 +153,4 @@ When adding new documentation:
 
 ---
 
-*Last updated: 2025-10-21*
+*Last updated: 2025-10-21* (Added FVM Numerical Improvements Plan)

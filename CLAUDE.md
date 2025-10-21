@@ -41,6 +41,7 @@ All detailed technical documentation has been extracted to `docs/` for easier ma
 | MLX Best Practices | [docs/MLX_BEST_PRACTICES.md](docs/MLX_BEST_PRACTICES.md) | Lazy evaluation, eval() patterns |
 | Swift Concurrency | [docs/SWIFT_CONCURRENCY.md](docs/SWIFT_CONCURRENCY.md) | EvaluatedArray, actor isolation |
 | Transport Models | [docs/TRANSPORT_MODELS.md](docs/TRANSPORT_MODELS.md) | Constant, Bohm-GyroBohm, QLKNN |
+| **🔥 FVM Improvements** | [docs/FVM_NUMERICAL_IMPROVEMENTS_PLAN.md](docs/FVM_NUMERICAL_IMPROVEMENTS_PLAN.md) | **PRIORITY**: Power-law scheme, Sauter bootstrap, tolerance config |
 
 **Navigation**: [docs/README.md](docs/README.md)
 

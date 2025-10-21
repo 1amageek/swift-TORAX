@@ -448,20 +448,4 @@ public struct NewtonRaphsonSolver: PDESolver {
 }
 
 // MARK: - State Layout Helper
-
-/// Layout for flattened state vector
-private struct StateLayout {
-    let nCells: Int
-    let tiRange: Range<Int>
-    let teRange: Range<Int>
-    let neRange: Range<Int>
-    let psiRange: Range<Int>
-
-    init(nCells: Int) {
-        self.nCells = nCells
-        self.tiRange = 0..<nCells
-        self.teRange = nCells..<(2 * nCells)
-        self.neRange = (2 * nCells)..<(3 * nCells)
-        self.psiRange = (3 * nCells)..<(4 * nCells)
-    }
-}
+// Note: StateLayout is now defined in NumericalTolerances.swift

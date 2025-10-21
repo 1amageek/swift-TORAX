@@ -69,17 +69,22 @@ public struct FusionPower: Sendable {
     /// - 0.8 = 20% impurity dilution
     public let fuelDilution: Float
 
+    /// Physical thresholds for validation
+    public let thresholds: PhysicalThresholds
+
     /// Create fusion power model
     ///
     /// - Parameters:
     ///   - fuelMix: Fuel mixture configuration (default: equal D-T)
     ///   - alphaEnergy: Alpha particle energy in MeV (default: 3.5 MeV)
     ///   - fuelDilution: Fraction of n_e from fuel ions (default: 0.9 for ~10% impurities)
+    ///   - thresholds: Physical thresholds (default: .default)
     /// - Throws: PhysicsError if parameters are out of valid range
     public init(
         fuelMix: FuelMixture = .equalDT,
         alphaEnergy: Float = 3.5,
-        fuelDilution: Float = 0.9
+        fuelDilution: Float = 0.9,
+        thresholds: PhysicalThresholds = .default
     ) throws {
         // Validate fuelDilution range
         guard fuelDilution > 0.0 && fuelDilution <= 1.0 else {
@@ -96,7 +101,7 @@ public struct FusionPower: Sendable {
                 )
             }
             let total = fD + fT
-            guard total > 1e-6 else {
+            guard total > thresholds.fuelFractionTolerance else {
                 throw PhysicsError.parameterOutOfRange(
                     "Sum of fuel fractions must be positive, got \(total)"
                 )
@@ -106,6 +111,7 @@ public struct FusionPower: Sendable {
         self.fuelMix = fuelMix
         self.alphaEnergy = alphaEnergy
         self.fuelDilution = fuelDilution
+        self.thresholds = thresholds
     }
 
     /// Compute fusion power density

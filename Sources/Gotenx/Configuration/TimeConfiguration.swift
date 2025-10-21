@@ -30,26 +30,58 @@ public struct TimeConfiguration: Codable, Sendable, Equatable {
     }
 }
 
-/// Adaptive timestep configuration
+/// Adaptive timestep configuration (EXTENDED for better scalability)
 public struct AdaptiveTimestepConfig: Codable, Sendable, Equatable {
-    /// Minimum timestep [s]
-    public let minDt: Float
+    /// Minimum timestep [s] (absolute) - optional for backward compatibility
+    /// If set, takes precedence over minDtFraction
+    public let minDt: Float?
+
+    /// Minimum timestep fraction of maxDt (default: 0.001)
+    /// Ignored if minDt is explicitly set
+    /// Recommended approach: minDt = maxDt * minDtFraction
+    public let minDtFraction: Float?
 
     /// Maximum timestep [s]
     public let maxDt: Float
 
-    /// Safety factor (< 1.0)
+    /// CFL safety factor (< 1.0)
     public let safetyFactor: Float
 
+    /// Maximum timestep growth rate per step (default: 1.2)
+    /// Limits how quickly timestep can increase: dt_new ≤ dt_old * maxTimestepGrowth
+    public let maxTimestepGrowth: Float
+
+    /// Computed minimum timestep (adaptive)
+    /// Priority: explicit minDt > minDtFraction > default (maxDt * 0.001)
+    public var effectiveMinDt: Float {
+        if let minDt = minDt {
+            return minDt  // Explicit value takes precedence (old configs)
+        } else if let fraction = minDtFraction {
+            return maxDt * fraction
+        } else {
+            return maxDt * 0.001  // Default fallback: maxDt / 1000
+        }
+    }
+
     public static let `default` = AdaptiveTimestepConfig(
-        minDt: 1e-6,
+        minDt: nil,              // Use fraction instead
+        minDtFraction: 0.001,    // maxDt / 1000
         maxDt: 1e-1,
-        safetyFactor: 0.9
+        safetyFactor: 0.9,
+        maxTimestepGrowth: 1.2
     )
 
-    public init(minDt: Float, maxDt: Float, safetyFactor: Float) {
+    public init(
+        minDt: Float? = nil,
+        minDtFraction: Float? = 0.001,
+        maxDt: Float,
+        safetyFactor: Float,
+        maxTimestepGrowth: Float = 1.2
+    ) {
         self.minDt = minDt
+        self.minDtFraction = minDtFraction
         self.maxDt = maxDt
         self.safetyFactor = safetyFactor
+        self.maxTimestepGrowth = maxTimestepGrowth
     }
 }

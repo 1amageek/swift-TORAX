@@ -70,7 +70,7 @@ extension StaticConfig {
             evolveCurrent: evolution.current,
             solverType: solverType,
             theta: scheme.theta,
-            solverTolerance: solver.tolerance,
+            solverTolerance: solver.tolerance ?? 1e-6,  // Fallback for legacy field
             solverMaxIterations: solver.maxIterations
         )
     }

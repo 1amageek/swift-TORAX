@@ -334,7 +334,7 @@ public enum DerivedQuantitiesComputer {
         let P_loss = P_input + powers.P_alpha  // Total heating power
 
         let tau_E: Float
-        if P_loss > 1e-6 {
+        if P_loss > PhysicalThresholds.default.minHeatingPowerForTauE {
             tau_E = W_thermal / P_loss  // [MJ / MW = s]
         } else {
             tau_E = 0
@@ -576,7 +576,7 @@ public enum DerivedQuantitiesComputer {
         let P_input = P_auxiliary + P_ohmic
 
         // Handle edge cases
-        guard P_input > 1e-6 else {
+        guard P_input > PhysicalThresholds.default.minFusionPowerForQ else {
             // No input power: return 0 (avoid division by zero)
             return 0
         }
