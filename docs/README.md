@@ -1,0 +1,135 @@
+# swift-Gotenx Documentation
+
+Technical documentation and implementation guides for swift-Gotenx tokamak transport simulator.
+
+## 📚 Documentation Guide
+
+- **For Development**: See [CLAUDE.md](../CLAUDE.md) - Concise development guidelines
+- **For Users**: See [README.md](../README.md) - Getting started and usage
+
+---
+
+## Core Technical Reference
+
+Detailed technical specifications extracted from CLAUDE.md for easier reference:
+
+### System Architecture
+
+- **[ARCHITECTURE.md](ARCHITECTURE.md)**
+  Project overview, TORAX core concepts, Swift design patterns, and future extensions.
+
+- **[UNIT_SYSTEM.md](UNIT_SYSTEM.md)**
+  SI-based unit system standard (eV, m⁻³) throughout the codebase with conversion guidelines.
+
+- **[CONFIGURATION_SYSTEM.md](CONFIGURATION_SYSTEM.md)**
+  Hierarchical configuration management using swift-configuration (CLI, env vars, JSON).
+
+### MLX and Numerical Computing
+
+- **[NUMERICAL_PRECISION.md](NUMERICAL_PRECISION.md)**
+  Float32-only policy, Apple Silicon GPU constraints, and numerical stability strategies.
+
+- **[MLX_BEST_PRACTICES.md](MLX_BEST_PRACTICES.md)**
+  Lazy evaluation, eval() patterns, and common MLXArray pitfalls.
+
+- **[SWIFT_CONCURRENCY.md](SWIFT_CONCURRENCY.md)**
+  EvaluatedArray wrapper, actor isolation, compile() patterns, and Sendable constraints.
+
+### Physics Models
+
+- **[TRANSPORT_MODELS.md](TRANSPORT_MODELS.md)**
+  Comparison of Constant, Bohm-GyroBohm, and QLKNN transport models.
+
+---
+
+## Physics & Diagnostics
+
+Current implementation and design documents:
+
+- **[CONSERVATION_AND_DIAGNOSTICS_DESIGN.md](CONSERVATION_AND_DIAGNOSTICS_DESIGN.md)**
+  Conservation law enforcement (particle/energy) and diagnostic computation design.
+
+- **[TORAX_COMPARISON_AND_VALIDATION.md](TORAX_COMPARISON_AND_VALIDATION.md)**
+  Validation methodology against original Python TORAX implementation.
+
+---
+
+## User Interface
+
+- **[VISUALIZATION_DESIGN.md](VISUALIZATION_DESIGN.md)**
+  GotenxUI visualization system design (Swift Charts-based 2D/3D plotting).
+
+- **[GotenxUI_Requirements.md](GotenxUI_Requirements.md)**
+  Detailed UI requirements for tokamak plasma visualization.
+
+- **[GUI_APPLICATION_DESIGN.md](GUI_APPLICATION_DESIGN.md)**
+  Future macOS GUI application design (SwiftUI-based).
+
+---
+
+## Future Roadmap
+
+- **[PHASE5_7_IMPLEMENTATION_PLAN.md](PHASE5_7_IMPLEMENTATION_PLAN.md)**
+  Phases 5-7 implementation plan:
+  - Phase 5: IMAS-compatible I/O (ITER integration)
+  - Phase 6: Experimental data validation
+  - Phase 7: Automatic differentiation for optimization
+
+---
+
+## Quick Reference
+
+| Topic | Document | Status |
+|-------|----------|--------|
+| **Development** | [CLAUDE.md](../CLAUDE.md) | ✅ Active |
+| **Architecture** | [ARCHITECTURE.md](ARCHITECTURE.md) | ✅ Reference |
+| **Unit System** | [UNIT_SYSTEM.md](UNIT_SYSTEM.md) | ✅ Reference |
+| **Configuration** | [CONFIGURATION_SYSTEM.md](CONFIGURATION_SYSTEM.md) | ✅ Reference |
+| **Numerical Precision** | [NUMERICAL_PRECISION.md](NUMERICAL_PRECISION.md) | ✅ Reference |
+| **MLX Best Practices** | [MLX_BEST_PRACTICES.md](MLX_BEST_PRACTICES.md) | ✅ Reference |
+| **Swift Concurrency** | [SWIFT_CONCURRENCY.md](SWIFT_CONCURRENCY.md) | ✅ Reference |
+| **Transport Models** | [TRANSPORT_MODELS.md](TRANSPORT_MODELS.md) | ✅ Reference |
+| Conservation Laws | [CONSERVATION_AND_DIAGNOSTICS_DESIGN.md](CONSERVATION_AND_DIAGNOSTICS_DESIGN.md) | ✅ Implemented |
+| Visualization | [VISUALIZATION_DESIGN.md](VISUALIZATION_DESIGN.md) | 🚧 In Progress |
+| TORAX Validation | [TORAX_COMPARISON_AND_VALIDATION.md](TORAX_COMPARISON_AND_VALIDATION.md) | 📋 Planned |
+| Future Phases (5-7) | [PHASE5_7_IMPLEMENTATION_PLAN.md](PHASE5_7_IMPLEMENTATION_PLAN.md) | 📋 Roadmap |
+
+---
+
+## Document Organization
+
+### Development vs. User Documentation
+
+| Purpose | Location | Audience |
+|---------|----------|----------|
+| **Active development guidance** | `CLAUDE.md` | Claude Code, Contributors |
+| **Technical specifications** | `docs/*.md` | Developers, Maintainers |
+| **User guides** | `README.md`, `Examples/` | End Users |
+
+### When to Consult Which Document
+
+**Starting a new feature?**
+→ Start with [CLAUDE.md](../CLAUDE.md) for architecture patterns and constraints.
+
+**Implementing conservation laws?**
+→ See [CONSERVATION_AND_DIAGNOSTICS_DESIGN.md](CONSERVATION_AND_DIAGNOSTICS_DESIGN.md).
+
+**Adding visualization?**
+→ Check [VISUALIZATION_DESIGN.md](VISUALIZATION_DESIGN.md) and [GotenxUI_Requirements.md](GotenxUI_Requirements.md).
+
+**Planning future work?**
+→ Review [PHASE5_7_IMPLEMENTATION_PLAN.md](PHASE5_7_IMPLEMENTATION_PLAN.md).
+
+---
+
+## Contributing Documentation
+
+When adding new documentation:
+
+1. **Technical Design Docs** → Place in `docs/` with descriptive name
+2. **Update This Index** → Add link to appropriate section
+3. **Reference from CLAUDE.md** → If relevant for active development
+
+---
+
+*Last updated: 2025-10-21*
