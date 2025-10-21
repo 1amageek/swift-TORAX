@@ -66,6 +66,7 @@ public struct Block1DCoeffs: Sendable {
 /// - Cell volumes and face areas
 /// - Distances between cell centers
 /// - Radial coordinates
+/// - Metric tensor components for non-uniform grids
 public struct GeometricFactors: Sendable {
     /// Cell volumes [nCells]
     ///
@@ -94,6 +95,22 @@ public struct GeometricFactors: Sendable {
     /// Normalized radial coordinate at faces (boundaries between cells)
     public let rFace: EvaluatedArray
 
+    /// Metric tensor component g₀ = √g (Jacobian of flux coordinates) [nCells]
+    ///
+    /// For circular geometry: g₀ = F / B_p where F is flux function
+    /// Used for flux divergence: ∇·F = (1/√g) ∂(√g·F)/∂ψ
+    public let jacobian: EvaluatedArray
+
+    /// Metric tensor component g₁ [nCells]
+    ///
+    /// Geometric factor for non-uniform grids
+    public let g1: EvaluatedArray
+
+    /// Metric tensor component g₂ [nCells]
+    ///
+    /// Geometric factor for non-uniform grids
+    public let g2: EvaluatedArray
+
     /// Create geometric factors
     ///
     /// - Parameters:
@@ -102,18 +119,27 @@ public struct GeometricFactors: Sendable {
     ///   - cellDistances: Distances between cell centers [nCells-1]
     ///   - rCell: Radial coordinates at cells [nCells]
     ///   - rFace: Radial coordinates at faces [nFaces]
+    ///   - jacobian: Metric tensor g₀ (Jacobian) [nCells]
+    ///   - g1: Metric tensor g₁ [nCells]
+    ///   - g2: Metric tensor g₂ [nCells]
     public init(
         cellVolumes: EvaluatedArray,
         faceAreas: EvaluatedArray,
         cellDistances: EvaluatedArray,
         rCell: EvaluatedArray,
-        rFace: EvaluatedArray
+        rFace: EvaluatedArray,
+        jacobian: EvaluatedArray,
+        g1: EvaluatedArray,
+        g2: EvaluatedArray
     ) {
         self.cellVolumes = cellVolumes
         self.faceAreas = faceAreas
         self.cellDistances = cellDistances
         self.rCell = rCell
         self.rFace = rFace
+        self.jacobian = jacobian
+        self.g1 = g1
+        self.g2 = g2
     }
 
     /// Create geometric factors from Geometry (UNIFORM GRID ONLY)
@@ -180,12 +206,39 @@ public struct GeometricFactors: Sendable {
         // Cell distances (uniform grid: all equal to dr)
         let cellDistances = MLXArray.full([nCells - 1], values: MLXArray(dr))
 
+        // Metric tensor components from geometry
+        // ALL metric tensors (g0, g1, g2) are face-centered [nFaces]
+        // Convert to cell-centered [nCells] using arithmetic average
+
+        // Validate shapes first
+        guard geometry.g0.value.shape[0] == nFaces else {
+            fatalError("GeometricFactors.from: g0 shape mismatch. Expected \(nFaces) (nFaces), got \(geometry.g0.value.shape[0])")
+        }
+        guard geometry.g1.value.shape[0] == nFaces else {
+            fatalError("GeometricFactors.from: g1 shape mismatch. Expected \(nFaces) (nFaces), got \(geometry.g1.value.shape[0])")
+        }
+        guard geometry.g2.value.shape[0] == nFaces else {
+            fatalError("GeometricFactors.from: g2 shape mismatch. Expected \(nFaces) (nFaces), got \(geometry.g2.value.shape[0])")
+        }
+
+        // Convert face-centered to cell-centered via arithmetic average
+        let g0Faces = geometry.g0.value
+        let g1Faces = geometry.g1.value
+        let g2Faces = geometry.g2.value
+
+        let jacobian = 0.5 * (g0Faces[0..<nCells] + g0Faces[1..<(nCells+1)])
+        let g1 = 0.5 * (g1Faces[0..<nCells] + g1Faces[1..<(nCells+1)])
+        let g2 = 0.5 * (g2Faces[0..<nCells] + g2Faces[1..<(nCells+1)])
+
         return GeometricFactors(
             cellVolumes: EvaluatedArray(evaluating: cellVolumes),
             faceAreas: EvaluatedArray(evaluating: faceAreas),
             cellDistances: EvaluatedArray(evaluating: cellDistances),
             rCell: EvaluatedArray(evaluating: rCell),
-            rFace: EvaluatedArray(evaluating: rFace)
+            rFace: EvaluatedArray(evaluating: rFace),
+            jacobian: EvaluatedArray(evaluating: jacobian),
+            g1: EvaluatedArray(evaluating: g1),
+            g2: EvaluatedArray(evaluating: g2)
         )
     }
 }

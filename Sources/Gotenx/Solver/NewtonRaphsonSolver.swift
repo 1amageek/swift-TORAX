@@ -365,18 +365,57 @@ public struct NewtonRaphsonSolver: PDESolver {
 
         // 3. Convective flux: F_conv = v * u_face (VECTORIZED)
         let vFace = coeffs.vFace.value         // [nFaces]
-        let u_face = interpolateToFacesVectorized(u)  // [nFaces]
+        let u_face = interpolateToFacesVectorized(
+            u,
+            vFace: vFace,
+            dFace: dFace,
+            dx: dx
+        )  // [nFaces]
         let convectiveFlux = vFace * u_face    // [nFaces]
 
         // 4. Total flux at faces
         let totalFlux = diffusiveFlux + convectiveFlux  // [nFaces]
 
-        // 5. Flux divergence: ∇·F = (F[i+1] - F[i]) / V_cell (VECTORIZED)
-        let flux_right = totalFlux[1..<(nCells + 1)]  // [nCells]
-        let flux_left = totalFlux[0..<nCells]         // [nCells]
-        let cellVolumes = geometry.cellVolumes.value  // [nCells]
+        // 5. Flux divergence with metric tensor: ∇·F = (1/√g) ∂(√g·F)/∂ψ
+        // For non-uniform grids, weight fluxes by Jacobian (√g = g₀)
+        //
+        // Traditional: ∇·F = (F[i+1] - F[i]) / V_cell
+        // Metric tensor: ∇·F = (1/√g_cell) * (√g_face_right * F_right - √g_face_left * F_left) / Δψ
+        //
+        // For uniform grids with g₀=constant, both formulations are equivalent.
+        // For non-uniform grids, metric tensor formulation maintains conservation.
 
-        let fluxDivergence = (flux_right - flux_left) / (cellVolumes + 1e-10)  // [nCells]
+        // Interpolate Jacobian (g₀) to faces
+        let jacobianCells = geometry.jacobian.value  // [nCells]
+        // For faces: use arithmetic average of adjacent cells
+        let jacobianFaces_interior = 0.5 * (jacobianCells[0..<(nCells-1)] + jacobianCells[1..<nCells])  // [nCells-1]
+        // Boundary faces: use adjacent cell value
+        let jacobianFaces = concatenated([
+            jacobianCells[0..<1],           // Left boundary
+            jacobianFaces_interior,         // Interior faces
+            jacobianCells[(nCells-1)..<nCells]  // Right boundary
+        ], axis: 0)  // [nFaces]
+
+        // Weight fluxes by Jacobian: √g·F
+        let weightedFlux = jacobianFaces * totalFlux  // [nFaces]
+
+        // Flux divergence at cells
+        let flux_right = weightedFlux[1..<(nCells + 1)]  // [nCells]
+        let flux_left = weightedFlux[0..<nCells]         // [nCells]
+        let cellDistances = geometry.cellDistances.value  // [nCells-1]
+
+        // Map cellDistances [nCells-1] to per-cell distances [nCells]
+        // For cells[0..nCells-2]: use distance to right neighbor = cellDistances[i]
+        // For cell[nCells-1]: use distance to left neighbor = cellDistances[nCells-2]
+        //
+        // Physical interpretation: each cell's "characteristic length" for flux divergence
+        let dx_padded = concatenated([
+            cellDistances,                                              // [nCells-1] for cells 0..nCells-2
+            cellDistances[(cellDistances.shape[0]-1)..<cellDistances.shape[0]]  // Last distance for cell nCells-1
+        ], axis: 0)  // Total: (nCells-1) + 1 = nCells ✓
+
+        // Final divergence: (1/√g_cell) * ∂(√g·F)/∂ψ
+        let fluxDivergence = (flux_right - flux_left) / ((jacobianCells * dx_padded) + 1e-10)  // [nCells]
 
         // 6. Source terms (VECTORIZED)
         let source = coeffs.sourceCell.value           // [nCells]
@@ -388,13 +427,42 @@ public struct NewtonRaphsonSolver: PDESolver {
         return F
     }
 
-    /// Interpolate cell values to faces (VECTORIZED - NO LOOPS)
+    /// Interpolate cell values to faces using power-law scheme (VECTORIZED - NO LOOPS)
     ///
-    /// Uses central difference for interior faces, adjacent values for boundaries.
+    /// Uses Patankar power-law scheme for convection-diffusion stability:
+    /// - Low Péclet (Pe < 0.1): Central differencing
+    /// - Moderate Péclet (0.1 ≤ Pe ≤ 10): Power-law interpolation
+    /// - High Péclet (Pe > 10): First-order upwinding
     ///
-    /// - Parameter u: Cell values [nCells]
+    /// - Parameters:
+    ///   - u: Cell values [nCells]
+    ///   - vFace: Convection velocity at faces [m/s], shape [nFaces]
+    ///   - dFace: Diffusion coefficient at faces [m²/s], shape [nFaces]
+    ///   - dx: Cell spacing [m], shape [nCells-1]
     /// - Returns: Face values [nFaces]
-    private func interpolateToFacesVectorized(_ u: MLXArray) -> MLXArray {
+    private func interpolateToFacesVectorized(
+        _ u: MLXArray,
+        vFace: MLXArray,
+        dFace: MLXArray,
+        dx: MLXArray
+    ) -> MLXArray {
+        // Compute Péclet number: Pe = V·Δx/D
+        let peclet = PowerLawScheme.computePecletNumber(
+            vFace: vFace,
+            dFace: dFace,
+            dx: dx
+        )
+
+        // Power-law weighted interpolation
+        return PowerLawScheme.interpolateToFaces(
+            cellValues: u,
+            peclet: peclet
+        )
+    }
+
+    /// DEPRECATED: Old central-difference implementation
+    /// Left here for reference, should be removed after testing
+    private func interpolateToFacesVectorized_OLD(_ u: MLXArray) -> MLXArray {
         let nCells = u.shape[0]
 
         // Central difference for interior faces

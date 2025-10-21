@@ -65,6 +65,90 @@ let array = MLXArray([1.0, 2.0], dtype: .float32)
 
 **Full details**: [docs/NUMERICAL_PRECISION.md](docs/NUMERICAL_PRECISION.md)
 
+### ⚠️ MLXArray Initialization
+
+**CRITICAL**: MLXArray initialization methods differ from standard Swift arrays. Using incorrect initializers will cause compilation errors.
+
+#### Common Mistakes and Corrections
+
+**❌ WRONG - `repeating:` does NOT exist**:
+```swift
+let Ti = MLXArray(repeating: 5000.0, [nCells])  // ❌ Compilation error
+let Te = MLXArray(repeating: 5000.0, [nCells])  // ❌ Compilation error
+```
+
+**✅ CORRECT - Use `MLXArray.full()`**:
+```swift
+let Ti = MLXArray.full([nCells], values: MLXArray(5000.0))
+let Te = MLXArray.full([nCells], values: MLXArray(Float(5000.0)))
+```
+
+**❌ WRONG - `linspace` is NOT a standalone function**:
+```swift
+let psi = MLXArray(linspace(0.0, 1.0, count: nCells))  // ❌ Compilation error
+```
+
+**✅ CORRECT - Use `MLXArray.linspace()`**:
+```swift
+let psi = MLXArray.linspace(0.0, 1.0, count: nCells)
+```
+
+#### Standard Initialization Methods
+
+```swift
+// 1. Fill with constant value
+let ones = MLXArray.full([nCells], values: MLXArray(1.0))
+let constants = MLXArray.full([10, 20], values: MLXArray(Float(42.0)))
+
+// 2. Zeros
+let zeros = MLXArray.zeros([nCells])
+let zerosMatrix = MLXArray.zeros([10, 20])
+
+// 3. Ones
+let ones = MLXArray.ones([nCells])
+let onesMatrix = MLXArray.ones([10, 20])
+
+// 4. Linearly spaced values
+let linspace = MLXArray.linspace(0.0, 1.0, count: 100)  // [0.0, 0.01, 0.02, ..., 1.0]
+
+// 5. From array literal
+let array = MLXArray([Float(1.0), Float(2.0), Float(3.0)])
+let array2D = MLXArray([[1.0, 2.0], [3.0, 4.0]])
+
+// 6. Scalar value
+let scalar = MLXArray(Float(42.0))
+let scalar2 = MLXArray(3.14)
+```
+
+#### Data Type Specifications
+
+```swift
+// Explicit dtype (use .float32 for GPU compatibility)
+let array = MLXArray.zeros([100], dtype: .float32)
+let full = MLXArray.full([50], values: MLXArray(1.0), dtype: .float32)
+
+// ⚠️ Remember: Float64 is NOT supported on Apple Silicon GPUs
+let badArray = MLXArray.zeros([100], dtype: .float64)  // ❌ Will fail at runtime on GPU
+```
+
+#### Creating Arrays Like Another
+
+```swift
+let template = MLXArray.zeros([100])
+
+// Create zeros with same shape
+let zeros = MLXArray.zeros(like: template)
+
+// Create ones with same shape
+let ones = MLXArray.ones(like: template)
+```
+
+**Key Rules**:
+1. Always use `MLXArray.` static methods for array creation
+2. Use `MLXArray(value)` to wrap scalar values for `values:` parameter
+3. Prefer explicit `Float()` casts to avoid type ambiguity
+4. Use `.float32` dtype for GPU operations (default is usually fine)
+
 ### ⚠️ MLX Lazy Evaluation
 
 **Operations are NOT executed immediately** - they queue until `eval()` is called.
