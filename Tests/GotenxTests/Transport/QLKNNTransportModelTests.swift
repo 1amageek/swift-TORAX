@@ -49,7 +49,7 @@ struct QLKNNTransportModelTests {
             poloidalFlux: EvaluatedArray(evaluating: psi)
         )
 
-        let params = TransportParameters(modelType: "qlknn")
+        let params = TransportParameters(modelType: .qlknn)
 
         // Try to initialize QLKNN
         do {
@@ -126,7 +126,7 @@ struct QLKNNTransportModelTests {
             poloidalFlux: EvaluatedArray(evaluating: psi)
         )
 
-        let params = TransportParameters(modelType: "qlknn")
+        let params = TransportParameters(modelType: .qlknn)
 
         do {
             let model = try QLKNNTransportModel()
@@ -180,7 +180,7 @@ struct QLKNNTransportModelTests {
             poloidalFlux: EvaluatedArray(evaluating: psi)
         )
 
-        let params = TransportParameters(modelType: "qlknn")
+        let params = TransportParameters(modelType: .qlknn)
 
         do {
             let model = try QLKNNTransportModel()

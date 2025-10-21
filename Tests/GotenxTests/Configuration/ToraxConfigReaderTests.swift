@@ -194,8 +194,8 @@ struct GotenxConfigReaderTests {
         #expect(config.runtime.dynamic.boundaries.electronTemperature > 0)
         #expect(config.runtime.dynamic.boundaries.density > 0)
 
-        // Transport
-        #expect(!config.runtime.dynamic.transport.modelType.isEmpty)
+        // Transport (modelType is enum, always valid)
+        // No need to check - enum ensures valid value
 
         // Sources
         #expect(config.runtime.dynamic.sources.ohmicHeating || true)  // Valid boolean

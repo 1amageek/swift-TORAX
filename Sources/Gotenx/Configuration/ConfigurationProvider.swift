@@ -62,7 +62,7 @@ public struct DefaultConfigurationProvider: ConfigurationProvider {
                         electronTemperature: 100.0,
                         density: 1e19
                     ),
-                    transport: TransportConfig(modelType: "constant"),
+                    transport: TransportConfig(modelType: .constant),
                     sources: .default,
                     pedestal: nil
                 )

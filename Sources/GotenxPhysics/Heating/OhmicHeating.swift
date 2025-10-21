@@ -239,14 +239,39 @@ extension OhmicHeating {
         // Convert to MW/m³ for SourceTerms
         let Q_ohm = PhysicsConstants.wattsToMegawatts(Q_ohm_watts)
 
-        // Create new SourceTerms with updated electron heating
+        // Compute metadata for power balance tracking
+        // Reuse Q_ohm_watts to avoid duplicate computation
+        let cellVolumes = GeometricFactors.from(geometry: geometry).cellVolumes.value
+        let P_ohmic_total = (Q_ohm_watts * cellVolumes).sum()
+        eval(P_ohmic_total)
+        let ohmicPower = P_ohmic_total.item(Float.self)
+
+        let ohmicMetadata = SourceMetadata(
+            modelName: "ohmic_heating",
+            category: .ohmic,
+            ionPower: 0,
+            electronPower: ohmicPower
+        )
+
+        // Merge with existing metadata
+        let mergedMetadata: SourceMetadataCollection
+        if let existingMetadata = sources.metadata {
+            mergedMetadata = SourceMetadataCollection(
+                entries: existingMetadata.entries + [ohmicMetadata]
+            )
+        } else {
+            mergedMetadata = SourceMetadataCollection(entries: [ohmicMetadata])
+        }
+
+        // Create new SourceTerms with updated electron heating and metadata
         return SourceTerms(
             ionHeating: sources.ionHeating,
             electronHeating: EvaluatedArray(
                 evaluating: sources.electronHeating.value + Q_ohm
             ),
             particleSource: sources.particleSource,
-            currentSource: sources.currentSource
+            currentSource: sources.currentSource,
+            metadata: mergedMetadata
         )
     }
 

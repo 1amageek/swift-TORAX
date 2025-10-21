@@ -3,7 +3,7 @@ import Foundation
 // MARK: - Geometry Type
 
 /// Geometry type enumeration
-public enum GeometryType: String, Sendable, Codable {
+public enum GeometryType: String, Sendable, Codable, CaseIterable {
     case circular
     case chease
     case eqdsk

@@ -171,10 +171,12 @@ extension Bremsstrahlung {
     /// - Parameters:
     ///   - sources: Source terms to modify
     ///   - profiles: Current plasma profiles
+    ///   - geometry: Tokamak geometry for metadata computation
     /// - Returns: Modified source terms with radiation losses
     public func applyToSources(
         _ sources: SourceTerms,
-        profiles: CoreProfiles
+        profiles: CoreProfiles,
+        geometry: Geometry
     ) throws -> SourceTerms {
 
         let P_brems_watts = try compute(
@@ -185,14 +187,39 @@ extension Bremsstrahlung {
         // Convert to MW/m³ for SourceTerms
         let P_brems = PhysicsConstants.wattsToMegawatts(P_brems_watts)
 
-        // Create new SourceTerms with updated electron heating
+        // Compute metadata for power balance tracking
+        // Reuse P_brems_watts to avoid duplicate computation
+        let cellVolumes = GeometricFactors.from(geometry: geometry).cellVolumes.value
+        let P_brems_total = (P_brems_watts * cellVolumes).sum()
+        eval(P_brems_total)
+        let bremsPower = P_brems_total.item(Float.self)
+
+        let bremsMetadata = SourceMetadata(
+            modelName: "bremsstrahlung",
+            category: .radiation,
+            ionPower: 0,
+            electronPower: bremsPower
+        )
+
+        // Merge with existing metadata
+        let mergedMetadata: SourceMetadataCollection
+        if let existingMetadata = sources.metadata {
+            mergedMetadata = SourceMetadataCollection(
+                entries: existingMetadata.entries + [bremsMetadata]
+            )
+        } else {
+            mergedMetadata = SourceMetadataCollection(entries: [bremsMetadata])
+        }
+
+        // Create new SourceTerms with updated electron heating and metadata
         return SourceTerms(
             ionHeating: sources.ionHeating,
             electronHeating: EvaluatedArray(
                 evaluating: sources.electronHeating.value + P_brems
             ),
             particleSource: sources.particleSource,
-            currentSource: sources.currentSource
+            currentSource: sources.currentSource,
+            metadata: mergedMetadata
         )
     }
 }

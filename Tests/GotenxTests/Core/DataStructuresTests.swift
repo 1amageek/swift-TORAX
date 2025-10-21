@@ -174,8 +174,8 @@ struct TransportCoefficientsTests {
 
 // MARK: - Source Terms Tests
 
-@Suite("SourceTerms Tests")
-struct SourceTermsTests {
+@Suite("SourceTerms Data Structure Tests")
+struct SourceTermsDataStructureTests {
 
     @Test("SourceTerms zero initialization")
     func testZeroInitialization() {

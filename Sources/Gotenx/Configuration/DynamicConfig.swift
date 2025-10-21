@@ -54,7 +54,7 @@ public struct DynamicConfig: Codable, Sendable, Equatable {
         restart: RestartConfig = .default
     ) {
         self.boundaries = boundaries
-        self.transport = TransportConfig(modelType: "constant")
+        self.transport = TransportConfig(modelType: .constant)
         self.sources = sources
         self.pedestal = pedestal
         self.mhd = mhd

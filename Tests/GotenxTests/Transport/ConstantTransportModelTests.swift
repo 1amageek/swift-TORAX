@@ -22,7 +22,7 @@ struct ConstantTransportModelTests {
     @Test("ConstantTransportModel initialization from parameters")
     func testInitializationFromParams() {
         let params = TransportParameters(
-            modelType: "constant",
+            modelType: .constant,
             params: [
                 "chi_ion": 2.0,
                 "chi_electron": 2.5,
@@ -61,7 +61,7 @@ struct ConstantTransportModelTests {
         )
         let geometry = createGeometry(from: mesh)
 
-        let params = TransportParameters(modelType: "constant")
+        let params = TransportParameters(modelType: .constant)
 
         let coeffs = model.computeCoefficients(
             profiles: profiles,
@@ -121,7 +121,7 @@ struct BohmGyroBohmTransportModelTests {
         )
         let geometry = createGeometry(from: mesh)
 
-        let params = TransportParameters(modelType: "bohm-gyrobohm")
+        let params = TransportParameters(modelType: .bohmGyrobohm)
 
         let coeffs = model.computeCoefficients(
             profiles: profiles,

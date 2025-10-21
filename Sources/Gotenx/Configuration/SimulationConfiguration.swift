@@ -111,7 +111,7 @@ extension SimulationConfiguration {
             electronTemperature: 100.0,
             density: 1e19
         )
-        public var transport: TransportConfig = TransportConfig(modelType: "constant")
+        public var transport: TransportConfig = TransportConfig(modelType: .constant)
         public var sources: SourcesConfig = .default
         public var pedestal: PedestalConfig? = nil
         public var mhd: MHDConfig = .default

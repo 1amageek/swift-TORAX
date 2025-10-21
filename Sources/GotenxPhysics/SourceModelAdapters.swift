@@ -46,21 +46,8 @@ public struct OhmicHeatingSource: SourceModel {
                 plasmaCurrentDensity: nil
             )
 
-            // Compute metadata
-            let metadata = try model.computeMetadata(
-                profiles: profiles,
-                geometry: geometry,
-                plasmaCurrentDensity: nil
-            )
-
-            // Return with metadata
-            return SourceTerms(
-                ionHeating: sourceTerms.ionHeating,
-                electronHeating: sourceTerms.electronHeating,
-                particleSource: sourceTerms.particleSource,
-                currentSource: sourceTerms.currentSource,
-                metadata: SourceMetadataCollection(entries: [metadata])
-            )
+            // applyToSources now includes metadata, return directly
+            return sourceTerms
         } catch {
             // If computation fails, return zeros with warning
             print("⚠️  Warning: Ohmic heating computation failed: \(error)")
@@ -167,27 +154,16 @@ public struct IonElectronExchangeSource: SourceModel {
             metadata: SourceMetadataCollection.empty  // Always provide metadata (empty on error)
         )
 
-        // IonElectronExchange.applyToSources does NOT take geometry parameter
+        // IonElectronExchange.applyToSources now takes geometry parameter
         do {
             let sourceTerms = try model.applyToSources(
                 emptySourceTerms,
-                profiles: profiles
-            )
-
-            // Compute metadata
-            let metadata = try model.computeMetadata(
                 profiles: profiles,
                 geometry: geometry
             )
 
-            // Return with metadata
-            return SourceTerms(
-                ionHeating: sourceTerms.ionHeating,
-                electronHeating: sourceTerms.electronHeating,
-                particleSource: sourceTerms.particleSource,
-                currentSource: sourceTerms.currentSource,
-                metadata: SourceMetadataCollection(entries: [metadata])
-            )
+            // applyToSources now includes metadata, return directly
+            return sourceTerms
         } catch {
             print("⚠️  Warning: Ion-electron exchange computation failed: \(error)")
             return emptySourceTerms
@@ -226,27 +202,16 @@ public struct BremsstrahlungSource: SourceModel {
             metadata: SourceMetadataCollection.empty  // Always provide metadata (empty on error)
         )
 
-        // Bremsstrahlung.applyToSources does NOT take geometry parameter
+        // Bremsstrahlung.applyToSources now takes geometry parameter
         do {
             let sourceTerms = try model.applyToSources(
                 emptySourceTerms,
-                profiles: profiles
-            )
-
-            // Compute metadata
-            let metadata = try model.computeMetadata(
                 profiles: profiles,
                 geometry: geometry
             )
 
-            // Return with metadata
-            return SourceTerms(
-                ionHeating: sourceTerms.ionHeating,
-                electronHeating: sourceTerms.electronHeating,
-                particleSource: sourceTerms.particleSource,
-                currentSource: sourceTerms.currentSource,
-                metadata: SourceMetadataCollection(entries: [metadata])
-            )
+            // applyToSources now includes metadata, return directly
+            return sourceTerms
         } catch {
             print("⚠️  Warning: Bremsstrahlung computation failed: \(error)")
             return emptySourceTerms

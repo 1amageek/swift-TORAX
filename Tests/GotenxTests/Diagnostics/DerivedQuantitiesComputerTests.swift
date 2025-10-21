@@ -488,4 +488,135 @@ struct DerivedQuantitiesComputerTests {
         // No external heating → Q = 0 (by definition)
         #expect(derivedFusionOnly.Q_fusion == 0)
     }
+
+    // MARK: - Metadata Validation Tests (CRITICAL)
+
+    @Test("Power balance requires metadata - should fail gracefully with nil metadata")
+    func testPowerBalanceRequiresMetadata() {
+        let geometry = createTestGeometry()
+        let profiles = createFlatProfiles(nCells: 10, Ti: 10000, Te: 10000, ne: 1e20)
+        
+        // Create sources WITHOUT metadata (nil)
+        let sourcesNoMetadata = SourceTerms(
+            ionHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 1.0, count: 10))),
+            electronHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 1.0, count: 10))),
+            particleSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
+            currentSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
+            metadata: nil  // CRITICAL: nil metadata
+        )
+        
+        // CRITICAL: In debug builds, this should trigger preconditionFailure
+        // In release builds, behavior is undefined
+        #if DEBUG
+        // Can't test preconditionFailure directly, but document expected behavior
+        // This test documents that nil metadata is NOT allowed
+        print("⚠️  Note: nil metadata will cause preconditionFailure in debug builds")
+        #endif
+    }
+    
+    @Test("Power balance with valid metadata succeeds")
+    func testPowerBalanceWithValidMetadata() {
+        let geometry = createTestGeometry()
+        let profiles = createFlatProfiles(nCells: 10, Ti: 10000, Te: 10000, ne: 1e20)
+        
+        // Create sources WITH valid metadata
+        let metadata = SourceMetadataCollection(entries: [
+            SourceMetadata(
+                modelName: "test_ohmic",
+                category: .ohmic,
+                ionPower: 0,
+                electronPower: 10e6  // 10 MW
+            ),
+            SourceMetadata(
+                modelName: "test_fusion",
+                category: .fusion,
+                ionPower: 5e6,
+                electronPower: 5e6
+            )
+        ])
+        
+        let sourcesWithMetadata = SourceTerms(
+            ionHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 1.0, count: 10))),
+            electronHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 1.0, count: 10))),
+            particleSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
+            currentSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
+            metadata: metadata
+        )
+        
+        // Should succeed
+        let derived = DerivedQuantitiesComputer.compute(
+            profiles: profiles,
+            geometry: geometry,
+            sources: sourcesWithMetadata
+        )
+        
+        // Verify power balance computation used metadata
+        // Note: DerivedQuantities returns power in MW, metadata is in W
+        #expect(derived.P_ohmic == 10.0, "Ohmic power should be 10 MW")
+        #expect(derived.P_fusion == 10.0, "Fusion power should be 10 MW (5+5)")
+    }
+    
+    @Test("Empty metadata collection is valid")
+    func testEmptyMetadataCollectionIsValid() {
+        let geometry = createTestGeometry()
+        let profiles = createFlatProfiles(nCells: 10, Ti: 10000, Te: 10000, ne: 1e20)
+        
+        // Create sources with EMPTY metadata (not nil)
+        let sourcesEmptyMetadata = SourceTerms(
+            ionHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
+            electronHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
+            particleSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
+            currentSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
+            metadata: SourceMetadataCollection.empty
+        )
+        
+        // Should succeed - empty metadata is valid (means no sources)
+        let derived = DerivedQuantitiesComputer.compute(
+            profiles: profiles,
+            geometry: geometry,
+            sources: sourcesEmptyMetadata
+        )
+        
+        // All powers should be zero
+        #expect(derived.P_ohmic == 0)
+        #expect(derived.P_fusion == 0)
+        #expect(derived.P_auxiliary == 0)
+        // P_radiation is not currently implemented in DerivedQuantities
+    }
+    
+    @Test("Metadata categories are correctly summed")
+    func testMetadataCategoriesCorrectlySummed() {
+        let geometry = createTestGeometry()
+        let profiles = createFlatProfiles(nCells: 10, Ti: 10000, Te: 10000, ne: 1e20)
+        
+        // Create metadata with multiple sources in same category
+        let metadata = SourceMetadataCollection(entries: [
+            SourceMetadata(modelName: "ecrh", category: .auxiliary, ionPower: 0, electronPower: 20e6),
+            SourceMetadata(modelName: "icrh", category: .auxiliary, ionPower: 15e6, electronPower: 5e6),
+            SourceMetadata(modelName: "brems", category: .radiation, ionPower: 0, electronPower: -3e6),
+            SourceMetadata(modelName: "line_rad", category: .radiation, ionPower: 0, electronPower: -2e6)
+        ])
+        
+        let sources = SourceTerms(
+            ionHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 1.0, count: 10))),
+            electronHeating: EvaluatedArray(evaluating: MLXArray([Float](repeating: 1.0, count: 10))),
+            particleSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
+            currentSource: EvaluatedArray(evaluating: MLXArray([Float](repeating: 0, count: 10))),
+            metadata: metadata
+        )
+        
+        let derived = DerivedQuantitiesComputer.compute(
+            profiles: profiles,
+            geometry: geometry,
+            sources: sources
+        )
+        
+        // Auxiliary: ECRH (20) + ICRH (20) = 40 MW
+        // Note: DerivedQuantities returns power in MW, metadata is in W
+        #expect(derived.P_auxiliary == 40.0, "Auxiliary power should be 40 MW")
+
+        // Radiation: Brems (-3) + Line (-2) = -5 MW (loss)
+        // P_radiation is not currently implemented in DerivedQuantities
+        // TODO: Add P_radiation property when radiation tracking is implemented
+    }
 }

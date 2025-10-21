@@ -101,7 +101,7 @@ struct UnitConversionTests {
 
         let dynamicConfig = DynamicConfig(
             boundaries: boundaries,
-            transport: TransportConfig(modelType: "constant")
+            transport: TransportConfig(modelType: .constant)
         )
 
         let profileConditions = dynamicConfig.toProfileConditions()
@@ -127,7 +127,7 @@ struct UnitConversionTests {
 
         let dynamicConfig = DynamicConfig(
             boundaries: boundaries,
-            transport: TransportConfig(modelType: "constant")
+            transport: TransportConfig(modelType: .constant)
         )
 
         let profileConditions = dynamicConfig.toProfileConditions()
@@ -153,7 +153,7 @@ struct UnitConversionTests {
 
         let dynamicConfig = DynamicConfig(
             boundaries: boundaries,
-            transport: TransportConfig(modelType: "constant")
+            transport: TransportConfig(modelType: .constant)
         )
 
         let runtimeParams = dynamicConfig.toDynamicRuntimeParams(dt: 0.01)

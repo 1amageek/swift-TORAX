@@ -26,7 +26,7 @@ struct SimulationConfigurationTests {
                         electronTemperature: 100.0,
                         density: 1e19
                     ),
-                    transport: TransportConfig(modelType: "constant")
+                    transport: TransportConfig(modelType: .constant)
                 )
             ),
             time: TimeConfiguration(
@@ -80,7 +80,7 @@ struct SimulationConfigurationTests {
                         electronTemperature: 100.0,
                         density: 1e19
                     ),
-                    transport: TransportConfig(modelType: "constant"),
+                    transport: TransportConfig(modelType: .constant),
                     sources: .default
                 )
             ),
@@ -123,7 +123,7 @@ struct SimulationConfigurationTests {
                         electronTemperature: 100.0,
                         density: 1e19
                     ),
-                    transport: TransportConfig(modelType: "constant")
+                    transport: TransportConfig(modelType: .constant)
                 )
             ),
             time: TimeConfiguration(
@@ -156,7 +156,7 @@ struct SimulationConfigurationTests {
                         electronTemperature: 100.0,
                         density: 1e19
                     ),
-                    transport: TransportConfig(modelType: "constant")
+                    transport: TransportConfig(modelType: .constant)
                 )
             ),
             time: TimeConfiguration(
@@ -188,7 +188,7 @@ struct SimulationConfigurationTests {
                         electronTemperature: 100.0,
                         density: 1e19
                     ),
-                    transport: TransportConfig(modelType: "constant")
+                    transport: TransportConfig(modelType: .constant)
                 )
             ),
             time: TimeConfiguration(
@@ -221,7 +221,7 @@ struct SimulationConfigurationTests {
                         electronTemperature: 100.0,
                         density: 1e19
                     ),
-                    transport: TransportConfig(modelType: "constant")
+                    transport: TransportConfig(modelType: .constant)
                 )
             ),
             time: TimeConfiguration(
@@ -254,7 +254,7 @@ struct SimulationConfigurationTests {
                         electronTemperature: 100.0,
                         density: 1e19
                     ),
-                    transport: TransportConfig(modelType: "constant"),
+                    transport: TransportConfig(modelType: .constant),
                     sources: SourcesConfig(
                         fusionConfig: FusionConfig(
                             deuteriumFraction: 0.7,  // Sum != 1.0
@@ -294,7 +294,7 @@ struct SimulationConfigurationTests {
                         electronTemperature: 100.0,
                         density: 1e19
                     ),
-                    transport: TransportConfig(modelType: "constant")
+                    transport: TransportConfig(modelType: .constant)
                 )
             ),
             time: TimeConfiguration(end: 1.0)
@@ -316,7 +316,7 @@ struct SimulationConfigurationTests {
                         electronTemperature: 100.0,
                         density: 1e19
                     ),
-                    transport: TransportConfig(modelType: "constant")
+                    transport: TransportConfig(modelType: .constant)
                 )
             ),
             time: TimeConfiguration(end: 1.0)

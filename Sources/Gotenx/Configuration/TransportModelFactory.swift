@@ -13,15 +13,8 @@ public struct TransportModelFactory {
     public static func create(config: TransportConfig) throws -> any TransportModel {
         let params = config.toTransportParameters()
 
-        guard let modelType = TransportModelType(rawValue: config.modelType) else {
-            throw ConfigurationError.invalidValue(
-                key: "transport.modelType",
-                value: config.modelType,
-                reason: "Unknown transport model type. Valid types: constant, bohmGyrobohm, qlknn"
-            )
-        }
-
-        switch modelType {
+        // config.modelType is already TransportModelType enum
+        switch config.modelType {
         case .constant:
             return ConstantTransportModel(params: params)
 
@@ -45,7 +38,7 @@ public struct TransportModelFactory {
     /// - Returns: Instantiated transport model with default parameters
     /// - Throws: ConfigurationError if model type is not implemented
     public static func createDefault(_ modelType: TransportModelType) throws -> any TransportModel {
-        let config = TransportConfig(model: modelType)
+        let config = TransportConfig(modelType: modelType)
         return try create(config: config)
     }
 }

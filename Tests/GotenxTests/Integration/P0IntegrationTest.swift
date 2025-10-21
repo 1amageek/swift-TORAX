@@ -44,7 +44,7 @@ struct P0IntegrationTest {
     /// Create P0 dynamic configuration
     func makeP0DynamicConfig() -> DynamicRuntimeParams {
         let transportParams = TransportParameters(
-            modelType: "constant",
+            modelType: .constant,
             params: [
                 "chi_ion": 1.0,
                 "chi_electron": 1.0

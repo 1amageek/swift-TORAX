@@ -163,10 +163,12 @@ extension IonElectronExchange {
     /// - Parameters:
     ///   - sources: Source terms to modify
     ///   - profiles: Current plasma profiles
+    ///   - geometry: Tokamak geometry for metadata computation
     /// - Returns: Modified source terms with heat exchange
     public func applyToSources(
         _ sources: SourceTerms,
-        profiles: CoreProfiles
+        profiles: CoreProfiles,
+        geometry: Geometry
     ) throws -> SourceTerms {
 
         let Q_ie_watts = try compute(
@@ -178,7 +180,31 @@ extension IonElectronExchange {
         // Convert to MW/m³ for SourceTerms
         let Q_ie = PhysicsConstants.wattsToMegawatts(Q_ie_watts)
 
-        // Create new SourceTerms with updated heating
+        // Compute metadata for power balance tracking
+        // Reuse Q_ie_watts to avoid duplicate computation
+        let cellVolumes = GeometricFactors.from(geometry: geometry).cellVolumes.value
+        let P_ie_total = (Q_ie_watts * cellVolumes).sum()
+        eval(P_ie_total)
+        let exchangePower = P_ie_total.item(Float.self)
+
+        let exchangeMetadata = SourceMetadata(
+            modelName: "ion_electron_exchange",
+            category: .other,
+            ionPower: exchangePower,
+            electronPower: -exchangePower
+        )
+
+        // Merge with existing metadata
+        let mergedMetadata: SourceMetadataCollection
+        if let existingMetadata = sources.metadata {
+            mergedMetadata = SourceMetadataCollection(
+                entries: existingMetadata.entries + [exchangeMetadata]
+            )
+        } else {
+            mergedMetadata = SourceMetadataCollection(entries: [exchangeMetadata])
+        }
+
+        // Create new SourceTerms with updated heating and metadata
         return SourceTerms(
             ionHeating: EvaluatedArray(
                 evaluating: sources.ionHeating.value + Q_ie
@@ -187,7 +213,8 @@ extension IonElectronExchange {
                 evaluating: sources.electronHeating.value - Q_ie
             ),
             particleSource: sources.particleSource,
-            currentSource: sources.currentSource
+            currentSource: sources.currentSource,
+            metadata: mergedMetadata
         )
     }
 }

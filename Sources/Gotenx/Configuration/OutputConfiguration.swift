@@ -32,7 +32,7 @@ public struct OutputConfiguration: Codable, Sendable, Equatable {
 }
 
 /// Output format
-public enum OutputFormat: String, Codable, Sendable {
+public enum OutputFormat: String, Codable, Sendable, CaseIterable {
     case json
     case hdf5
     case netcdf

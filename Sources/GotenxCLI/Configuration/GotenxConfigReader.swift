@@ -133,9 +133,9 @@ public actor GotenxConfigReader {
             forKey: "runtime.static.mesh.toroidalField",
             default: 2.5
         )
-        let geometryType = try await configReader.fetchString(
+        let geometryType = try await fetchEnum(
             forKey: "runtime.static.mesh.geometryType",
-            default: "circular"
+            default: GeometryType.circular
         )
 
         let mesh = MeshConfig(
@@ -143,7 +143,7 @@ public actor GotenxConfigReader {
             majorRadius: Float(majorRadius),
             minorRadius: Float(minorRadius),
             toroidalField: Float(toroidalField),
-            geometryType: GeometryType(rawValue: geometryType) ?? .circular
+            geometryType: geometryType
         )
 
         // Evolution configuration
@@ -258,9 +258,9 @@ public actor GotenxConfigReader {
     }
 
     private func fetchTransportConfig() async throws -> TransportConfig {
-        let modelType = try await configReader.fetchString(
+        let modelType = try await fetchEnum(
             forKey: "runtime.dynamic.transport.modelType",
-            default: "constant"
+            default: TransportModelType.constant
         )
 
         // Transport-specific parameters (optional)
@@ -441,27 +441,59 @@ public actor GotenxConfigReader {
             default: "/tmp/gotenx_results"
         )
 
-        let formatStr = try await configReader.fetchString(
+        let format = try await fetchEnum(
             forKey: "output.format",
-            default: "json"
+            default: Gotenx.OutputFormat.json
         )
-
-        let format: Gotenx.OutputFormat
-        switch formatStr.lowercased() {
-        case "json":
-            format = .json
-        case "hdf5":
-            format = .hdf5
-        case "netcdf":
-            format = .netcdf
-        default:
-            format = .json
-        }
 
         return OutputConfiguration(
             saveInterval: saveInterval.map { Float($0) },
             directory: directory,
             format: format
         )
+    }
+
+    // MARK: - Generic Helpers
+
+    /// Fetch string-based enum with validation
+    ///
+    /// Provides type-safe enum conversion with clear error messages.
+    ///
+    /// - Parameters:
+    ///   - key: Configuration key (hierarchical dot notation)
+    ///   - defaultValue: Default enum value if key not found
+    /// - Returns: Parsed enum value
+    /// - Throws: ConfigurationError.invalidValue if string doesn't match any enum case
+    ///
+    /// Example:
+    /// ```swift
+    /// let modelType = try await fetchEnum(
+    ///     forKey: "runtime.dynamic.transport.modelType",
+    ///     default: TransportModelType.constant
+    /// )
+    /// ```
+    private func fetchEnum<T>(
+        forKey key: String,
+        default defaultValue: T
+    ) async throws -> T where T: RawRepresentable, T.RawValue == String, T: CaseIterable {
+        let rawValue = try await configReader.fetchString(
+            forKey: key,
+            default: defaultValue.rawValue
+        )
+
+        guard let value = T(rawValue: rawValue) else {
+            // Generate helpful error message with all valid cases
+            let validCases = T.allCases
+                .map { "\($0)" }
+                .joined(separator: ", ")
+
+            throw ConfigurationError.invalidValue(
+                key: key,
+                value: rawValue,
+                reason: "Expected one of: \(validCases)"
+            )
+        }
+
+        return value
     }
 }

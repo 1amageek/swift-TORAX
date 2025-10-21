@@ -132,7 +132,8 @@ public struct SourceTerms: Sendable, Equatable {
             ionHeating: .zeros([nCells]),
             electronHeating: .zeros([nCells]),
             particleSource: .zeros([nCells]),
-            currentSource: .zeros([nCells])
+            currentSource: .zeros([nCells]),
+            metadata: SourceMetadataCollection.empty  // Always provide empty metadata
         )
     }
 

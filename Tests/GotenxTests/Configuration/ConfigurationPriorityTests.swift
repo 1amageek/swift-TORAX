@@ -273,8 +273,8 @@ struct ConfigurationPriorityTests {
 
     // MARK: - Enum Handling Tests
 
-    @Test("Invalid enum values fall back to defaults")
-    func testEnumFallback() async throws {
+    @Test("Invalid enum values throw ConfigurationError")
+    func testEnumValidation() async throws {
         let configPath = try createTestConfig()
         defer { try? FileManager.default.removeItem(atPath: configPath) }
 
@@ -288,10 +288,10 @@ struct ConfigurationPriorityTests {
             cliOverrides: cliOverrides
         )
 
-        let config = try await reader.fetchConfiguration()
-
-        // Verify fallback to .circular
-        #expect(config.runtime.static.mesh.geometryType == .circular)
+        // Should throw ConfigurationError.invalidValue
+        await #expect(throws: ConfigurationError.self) {
+            try await reader.fetchConfiguration()
+        }
     }
 
     @Test("Valid enum values are parsed correctly")

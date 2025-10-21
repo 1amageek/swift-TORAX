@@ -51,7 +51,7 @@ struct ITERBaselineIntegrationTest {
     /// Create ITER baseline dynamic configuration
     func makeITERDynamicConfig() -> DynamicRuntimeParams {
         let transportParams = TransportParameters(
-            modelType: "bohmGyrobohm",
+            modelType: .bohmGyrobohm,
             params: [:]
         )
 

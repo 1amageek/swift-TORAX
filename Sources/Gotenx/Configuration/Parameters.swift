@@ -4,13 +4,13 @@ import Foundation
 
 /// Transport model parameters
 public struct TransportParameters: Sendable, Codable, Equatable {
-    /// Transport model type
-    public var modelType: String
+    /// Transport model type (enum for type safety)
+    public var modelType: TransportModelType
 
     /// Model-specific parameters
     public var params: [String: Float]
 
-    public init(modelType: String, params: [String: Float] = [:]) {
+    public init(modelType: TransportModelType, params: [String: Float] = [:]) {
         self.modelType = modelType
         self.params = params
     }
