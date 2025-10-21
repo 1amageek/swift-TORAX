@@ -78,7 +78,7 @@ struct ValidationConfigMatcherTests {
         #expect(abs(config.output.saveInterval! - expectedInterval) < 1e-6, "Save interval should match TORAX")
     }
 
-    @Test("ValidationConfigError for invalid mesh size")
+    @Test("ValidationConfigError for invalid mesh size - too small")
     func invalidMeshSize() throws {
         // Create TORAX data with too few cells
         let time: [Float] = [0.0, 1.0, 2.0]
@@ -94,6 +94,93 @@ struct ValidationConfigMatcherTests {
             ne: profiles
         )
 
+        #expect(throws: ValidationConfigError.self) {
+            try ValidationConfigMatcher.matchToTorax(toraxData)
+        }
+    }
+
+    @Test("ValidationConfigError for invalid mesh size - too large")
+    func invalidMeshSizeTooLarge() throws {
+        // Create TORAX data with too many cells (> 200 maximum)
+        let time: [Float] = [0.0, 1.0, 2.0]
+        let rho: [Float] = (0...250).map { Float($0) / 250.0 }  // 251 cells (> 200 maximum)
+
+        let profiles = (0..<3).map { _ in Array(repeating: Float(1000), count: 251) }
+
+        let toraxData = ToraxReferenceData(
+            time: time,
+            rho: rho,
+            Ti: profiles,
+            Te: profiles,
+            ne: profiles
+        )
+
+        #expect(throws: ValidationConfigError.self) {
+            try ValidationConfigMatcher.matchToTorax(toraxData)
+        }
+    }
+
+    @Test("Edge detection with dynamic rho finding")
+    func edgeDetectionDynamic() throws {
+        // Create TORAX data with proper ascending rho (minimum 10 cells required)
+        let time: [Float] = [0.0, 1.0, 2.0]
+        let rho: [Float] = [0.0, 0.1, 0.2, 0.3, 0.4, 0.6, 0.8, 0.95, 0.98, 1.0]  // 10 cells with edge at index 9
+
+        // Create profiles with edge values clearly identifiable
+        let Ti: [[Float]] = [
+            [15000, 13000, 11000, 9000, 7000, 4000, 2000, 500, 200, 100],  // Edge = 100 eV at index 9
+            [15100, 13100, 11100, 9100, 7100, 4100, 2100, 510, 210, 110],
+            [15200, 13200, 11200, 9200, 7200, 4200, 2200, 520, 220, 120]
+        ]
+
+        let Te = Ti
+        let ne: [[Float]] = [
+            [1e20, 9e19, 8e19, 7e19, 5e19, 3e19, 1e19, 5e18, 3e18, 2e18],  // Edge = 2e18 m⁻³
+            [1.1e20, 9.9e19, 8.8e19, 7.7e19, 5.5e19, 3.3e19, 1.1e19, 5.5e18, 3.3e18, 2.2e18],
+            [1.2e20, 10.8e19, 9.6e19, 8.4e19, 6e19, 3.6e19, 1.2e19, 6e18, 3.6e18, 2.4e18]
+        ]
+
+        let toraxData = ToraxReferenceData(
+            time: time,
+            rho: rho,
+            Ti: Ti,
+            Te: Te,
+            ne: ne
+        )
+
+        let config = try ValidationConfigMatcher.matchToTorax(toraxData)
+
+        // Verify that edge boundary conditions are taken from rho ≈ 1.0 (index 9)
+        #expect(config.runtime.dynamic.boundaries.ionTemperature == 100.0,
+                "Ti edge should be from rho=1.0 (index 9)")
+        #expect(config.runtime.dynamic.boundaries.electronTemperature == 100.0,
+                "Te edge should be from rho=1.0 (index 9)")
+        #expect(config.runtime.dynamic.boundaries.density == 2e18,
+                "ne edge should be from rho=1.0 (index 9)")
+
+        print("✅ Edge detection correctly found rho=1.0 at index 9")
+        print("   Ti edge: \(config.runtime.dynamic.boundaries.ionTemperature) eV")
+        print("   Te edge: \(config.runtime.dynamic.boundaries.electronTemperature) eV")
+        print("   ne edge: \(config.runtime.dynamic.boundaries.density) m⁻³")
+    }
+
+    @Test("Edge rho validation rejects non-normalized grids")
+    func edgeRhoValidation() throws {
+        // Create TORAX data where maximum rho is not close to 1.0
+        let time: [Float] = [0.0, 1.0]
+        let rho: [Float] = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]  // Max = 0.9, not 1.0!
+
+        let profiles = (0..<2).map { _ in Array(repeating: Float(5000), count: 10) }
+
+        let toraxData = ToraxReferenceData(
+            time: time,
+            rho: rho,
+            Ti: profiles,
+            Te: profiles,
+            ne: profiles
+        )
+
+        // Should throw because max rho (0.9) is not close to 1.0
         #expect(throws: ValidationConfigError.self) {
             try ValidationConfigMatcher.matchToTorax(toraxData)
         }
