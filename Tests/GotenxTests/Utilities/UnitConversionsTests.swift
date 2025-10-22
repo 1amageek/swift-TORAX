@@ -1,6 +1,6 @@
 import Testing
 import MLX
-@testable import Gotenx
+@testable import GotenxCore
 
 /// Tests for UnitConversions utilities
 @Suite("UnitConversions Tests")

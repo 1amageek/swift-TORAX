@@ -617,7 +617,7 @@ let u_face = interpolateToFacesVectorized(
 ```swift
 import Testing
 import MLX
-@testable import Gotenx
+@testable import GotenxCore
 
 @Suite("Power-Law Scheme Tests")
 struct PowerLawSchemeTests {
@@ -895,7 +895,7 @@ private func computeSauterL34(nu_star: MLXArray, ft: MLXArray) -> MLXArray {
 ```swift
 import Testing
 import MLX
-@testable import Gotenx
+@testable import GotenxCore
 
 @Suite("Bootstrap Current Tests")
 struct BootstrapCurrentTests {
@@ -1044,7 +1044,7 @@ let fluxDivergence = (weightedFlux_right - weightedFlux_left) /
 ```swift
 import Testing
 import MLX
-@testable import Gotenx
+@testable import GotenxCore
 
 @Suite("FVM Analytical Solution Tests")
 struct FVMAnalyticalTests {
@@ -1081,7 +1081,7 @@ struct FVMAnalyticalTests {
 ```swift
 import Testing
 import MLX
-@testable import Gotenx
+@testable import GotenxCore
 
 @Suite("Conservation Tests")
 struct ConservationIntegrationTests {
@@ -1122,7 +1122,7 @@ struct ConservationIntegrationTests {
 
 ```swift
 import Testing
-@testable import Gotenx
+@testable import GotenxCore
 
 @Suite("TORAX Benchmark Tests")
 struct TORAXBenchmarkTests {

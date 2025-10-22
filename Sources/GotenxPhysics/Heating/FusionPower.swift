@@ -1,6 +1,6 @@
 import Foundation
 import MLX
-import Gotenx
+import GotenxCore
 
 /// Fusion power model for D-T reactions
 ///

@@ -1,6 +1,6 @@
 import Testing
 import MLX
-@testable import Gotenx
+@testable import GotenxCore
 @testable import GotenxPhysics
 
 @Test("Fusion reactivity peak at ~70 keV")

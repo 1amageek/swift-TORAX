@@ -1,7 +1,7 @@
 import Testing
 import MLX
 import Foundation
-@testable import Gotenx
+@testable import GotenxCore
 
 /// Tests for particle conservation enforcement
 @Suite("Particle Conservation Tests")

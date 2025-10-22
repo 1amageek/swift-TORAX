@@ -1,6 +1,6 @@
 import MLX
 import Foundation
-import Gotenx
+import GotenxCore
 
 // MARK: - Impurity Radiation Model
 

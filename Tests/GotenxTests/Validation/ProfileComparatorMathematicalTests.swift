@@ -3,7 +3,7 @@
 
 import Testing
 import Foundation
-@testable import Gotenx
+@testable import GotenxCore
 
 @Suite("Profile Comparator Mathematical Tests")
 struct ProfileComparatorMathematicalTests {

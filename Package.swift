@@ -4,7 +4,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "swift-Gotenx",
+    name: "swift-gotenx",
     platforms: [
         .macOS(.v26),
         .iOS(.v26),
@@ -13,8 +13,8 @@ let package = Package(
     products: [
         // Products define the executables and libraries a package produces, making them visible to other packages.
         .library(
-            name: "Gotenx",
-            targets: ["Gotenx"]
+            name: "GotenxCore",
+            targets: ["GotenxCore"]
         ),
         .library(
             name: "GotenxPhysics",
@@ -49,7 +49,7 @@ let package = Package(
         // Targets are the basic building blocks of a package, defining a module or a test suite.
         // Targets can depend on other targets in this package and products from dependencies.
         .target(
-            name: "Gotenx",
+            name: "GotenxCore",
             dependencies: [
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
@@ -71,7 +71,7 @@ let package = Package(
         .target(
             name: "GotenxPhysics",
             dependencies: [
-                "Gotenx",
+                "GotenxCore",
                 .product(name: "MLX", package: "mlx-swift"),
             ]
         ),
@@ -80,7 +80,7 @@ let package = Package(
         .target(
             name: "GotenxUI",
             dependencies: [
-                "Gotenx",
+                "GotenxCore",
             ]
         ),
 
@@ -88,7 +88,7 @@ let package = Package(
         .executableTarget(
             name: "GotenxCLI",
             dependencies: [
-                "Gotenx",
+                "GotenxCore",
                 "GotenxPhysics",
                 "GotenxUI",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
@@ -99,7 +99,7 @@ let package = Package(
         .testTarget(
             name: "GotenxTests",
             dependencies: [
-                "Gotenx",
+                "GotenxCore",
                 "GotenxPhysics",
                 "GotenxCLI",  // Added: GotenxConfigReader tests need GotenxCLI
                 .product(name: "MLX", package: "mlx-swift"),
@@ -110,7 +110,7 @@ let package = Package(
         .testTarget(
             name: "GotenxPhysicsTests",
             dependencies: [
-                "Gotenx",
+                "GotenxCore",
                 "GotenxPhysics",
             ]
         ),
@@ -124,7 +124,7 @@ let package = Package(
             name: "GotenxUITests",
             dependencies: [
                 "GotenxUI",
-                "Gotenx",
+                "GotenxCore",
             ]
         ),
     ]

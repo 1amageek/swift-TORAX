@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import MLX
-@testable import Gotenx
+@testable import GotenxCore
 
 // MARK: - Mock Source Model for Testing
 

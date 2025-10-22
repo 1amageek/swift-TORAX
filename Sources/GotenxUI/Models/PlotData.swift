@@ -6,7 +6,7 @@
 // - Density: m^-3 → 10^20 m^-3
 
 import Foundation
-import Gotenx
+import GotenxCore
 
 /// Complete simulation output data for 2D plotting
 public struct PlotData: Sendable {

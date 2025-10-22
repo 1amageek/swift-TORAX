@@ -1,6 +1,6 @@
 import Testing
 import MLX
-@testable import Gotenx
+@testable import GotenxCore
 
 @Suite("ConstantTransportModel Tests")
 struct ConstantTransportModelTests {

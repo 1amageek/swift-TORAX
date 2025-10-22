@@ -6,7 +6,7 @@
 
 import Testing
 import Foundation
-@testable import Gotenx
+@testable import GotenxCore
 import GotenxCLI
 import SystemPackage
 

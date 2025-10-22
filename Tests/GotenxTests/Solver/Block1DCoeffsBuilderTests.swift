@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import MLX
-@testable import Gotenx
+@testable import GotenxCore
 
 /// Tests for Block1DCoeffsBuilder functionality
 @Suite("Block1DCoeffsBuilder Tests")

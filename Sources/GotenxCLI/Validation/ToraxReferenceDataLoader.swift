@@ -3,7 +3,7 @@
 
 import Foundation
 import SwiftNetCDF
-import Gotenx
+import GotenxCore
 
 // MARK: - NetCDF Loading Extension
 

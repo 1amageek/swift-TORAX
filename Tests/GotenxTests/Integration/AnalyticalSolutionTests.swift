@@ -4,7 +4,7 @@
 import Testing
 import MLX
 import Foundation
-@testable import Gotenx
+@testable import GotenxCore
 
 @Suite("Analytical Solution Tests")
 struct AnalyticalSolutionTests {

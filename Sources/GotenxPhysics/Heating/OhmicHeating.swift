@@ -1,6 +1,6 @@
 import Foundation
 import MLX
-import Gotenx
+import GotenxCore
 
 /// Ohmic heating model
 ///

@@ -6,7 +6,7 @@
 import Testing
 import Foundation
 import MLX
-@testable import Gotenx
+@testable import GotenxCore
 
 @Suite("Conservation Drift Tests")
 struct ConservationDriftTests {

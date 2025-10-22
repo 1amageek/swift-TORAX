@@ -4,7 +4,7 @@
 import Testing
 import Foundation
 import SwiftNetCDF
-@testable import Gotenx
+@testable import GotenxCore
 
 @Suite("TORAX Reference Data Loading")
 struct ToraxReferenceDataTests {

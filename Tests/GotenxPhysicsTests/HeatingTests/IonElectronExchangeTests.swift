@@ -1,6 +1,6 @@
 import Testing
 import MLX
-@testable import Gotenx
+@testable import GotenxCore
 @testable import GotenxPhysics
 
 @Test("Ion-electron exchange equilibration")

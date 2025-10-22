@@ -3,7 +3,7 @@
 
 import Testing
 import MLX
-@testable import Gotenx
+@testable import GotenxCore
 
 @Suite("Conservation Tests")
 struct ConservationTests {

@@ -2,7 +2,7 @@
 // Interactive post-simulation menu for Gotenx
 
 import Foundation
-import Gotenx
+import GotenxCore
 import GotenxPhysics
 
 /// Interactive menu for post-simulation actions

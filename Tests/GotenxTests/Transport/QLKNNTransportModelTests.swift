@@ -1,7 +1,7 @@
 import Testing
 import MLX
 import FusionSurrogates
-@testable import Gotenx
+@testable import GotenxCore
 
 /// Tests for QLKNN Transport Model integration (MLX-native)
 @Suite("QLKNN Transport Model Tests")

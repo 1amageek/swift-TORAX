@@ -513,7 +513,7 @@ struct ConfigReaderFactory {
 
 import Configuration
 import Foundation
-import Gotenx
+import GotenxCore
 
 /// Configuration loader with validation
 struct ConfigurationLoader {

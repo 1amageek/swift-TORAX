@@ -3,7 +3,7 @@
 
 import Testing
 import Foundation
-@testable import Gotenx
+@testable import GotenxCore
 
 @Suite("Configuration Converter Tests")
 struct ConfigurationConverterTests {

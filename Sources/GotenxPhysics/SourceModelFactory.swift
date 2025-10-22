@@ -2,7 +2,7 @@
 // Factory for creating source models from configuration
 
 import Foundation
-import Gotenx
+import GotenxCore
 
 /// Factory for creating source models from configuration
 public struct SourceModelFactory {

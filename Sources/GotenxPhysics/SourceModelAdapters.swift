@@ -3,7 +3,7 @@
 
 import Foundation
 import MLX
-import Gotenx
+import GotenxCore
 
 // MARK: - Ohmic Heating Source
 

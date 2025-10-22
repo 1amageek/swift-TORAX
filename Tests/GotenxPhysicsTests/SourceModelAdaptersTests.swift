@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import MLX
-@testable import Gotenx
+@testable import GotenxCore
 @testable import GotenxPhysics
 
 /// Tests for SourceModelAdapters ensuring metadata is always provided

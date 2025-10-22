@@ -3,7 +3,7 @@
 
 import Testing
 import MLX
-@testable import Gotenx
+@testable import GotenxCore
 
 @Suite("FVM Integration Tests")
 struct FVMIntegrationTests {

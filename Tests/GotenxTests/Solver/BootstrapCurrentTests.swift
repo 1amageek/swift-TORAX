@@ -3,7 +3,7 @@
 
 import Testing
 import MLX
-@testable import Gotenx
+@testable import GotenxCore
 
 @Suite("Bootstrap Current Tests")
 struct BootstrapCurrentTests {

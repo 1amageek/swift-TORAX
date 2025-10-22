@@ -3,7 +3,7 @@
 
 import Testing
 import MLX
-@testable import Gotenx
+@testable import GotenxCore
 @testable import GotenxPhysics
 
 /// P0 Integration Test Suite

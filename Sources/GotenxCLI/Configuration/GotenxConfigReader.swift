@@ -4,7 +4,7 @@
 import Configuration
 import Foundation
 import SystemPackage
-import Gotenx
+import GotenxCore
 
 /// TORAX-specific ConfigReader wrapper
 ///
@@ -443,7 +443,7 @@ public actor GotenxConfigReader {
 
         let format = try await fetchEnum(
             forKey: "output.format",
-            default: Gotenx.OutputFormat.json
+            default: GotenxCore.OutputFormat.json
         )
 
         return OutputConfiguration(

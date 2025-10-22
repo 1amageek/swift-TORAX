@@ -495,7 +495,7 @@ public enum ToraxDataError: Error, CustomStringConvertible {
 ```swift
 import Testing
 import Foundation
-@testable import Gotenx
+@testable import GotenxCore
 
 @Suite("TORAX Reference Data Loading")
 struct ToraxReferenceDataTests {

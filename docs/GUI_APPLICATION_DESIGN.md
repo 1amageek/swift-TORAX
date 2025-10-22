@@ -49,7 +49,7 @@ import SwiftUI                   // UI framework (macOS 13+, iOS 16+)
 import Charts                    // 2D plotting (native Swift Charts)
 
 // Gotenx Core
-import Gotenx                    // Simulation engine
+import GotenxCore                // Simulation engine
 import GotenxPhysics             // Physics models
 import GotenxUI                  // Chart components
 
@@ -537,7 +537,7 @@ struct TimeSeriesDashboard: View {
 
 ```swift
 import SwiftUI
-import Gotenx
+import GotenxCore
 import GotenxPhysics
 import GotenxUI
 

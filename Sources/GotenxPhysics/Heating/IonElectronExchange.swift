@@ -1,6 +1,6 @@
 import Foundation
 import MLX
-import Gotenx
+import GotenxCore
 
 /// Ion-electron collisional heat exchange model
 ///

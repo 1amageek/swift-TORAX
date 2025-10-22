@@ -1,7 +1,7 @@
 import Testing
 import MLX
 import Foundation
-@testable import Gotenx
+@testable import GotenxCore
 
 /// Tests for GPU-based variable scaling in FlattenedState
 @Suite("Variable Scaling Tests")

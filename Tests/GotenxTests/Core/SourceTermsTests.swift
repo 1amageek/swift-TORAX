@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import MLX
-@testable import Gotenx
+@testable import GotenxCore
 
 /// Tests for SourceTerms metadata handling
 ///

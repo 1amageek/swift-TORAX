@@ -3,7 +3,7 @@
 
 import Testing
 import Foundation
-@testable import Gotenx
+@testable import GotenxCore
 
 @Suite("Validation Config Matcher Tests")
 struct ValidationConfigMatcherTests {

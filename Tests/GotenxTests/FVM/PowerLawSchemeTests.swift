@@ -3,7 +3,7 @@
 
 import Testing
 import MLX
-@testable import Gotenx
+@testable import GotenxCore
 
 @Suite("Power-Law Scheme Tests")
 struct PowerLawSchemeTests {

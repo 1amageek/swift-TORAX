@@ -3,7 +3,7 @@
 
 import ArgumentParser
 import Foundation
-import Gotenx
+import GotenxCore
 import GotenxPhysics
 
 struct RunCommand: AsyncParsableCommand {

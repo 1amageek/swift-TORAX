@@ -4,7 +4,7 @@
 import Testing
 import Foundation
 import MLX
-@testable import Gotenx
+@testable import GotenxCore
 
 @Suite("DerivedQuantitiesComputer Tests")
 struct DerivedQuantitiesComputerTests {

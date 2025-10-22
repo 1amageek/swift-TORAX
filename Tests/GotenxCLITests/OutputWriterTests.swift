@@ -4,7 +4,7 @@
 import Testing
 import Foundation
 @testable import GotenxCLI
-import Gotenx
+import GotenxCore
 
 @Suite("OutputWriter Tests")
 struct OutputWriterTests {

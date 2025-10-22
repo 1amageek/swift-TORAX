@@ -5,7 +5,7 @@ import Testing
 import Foundation
 import MLX
 import SwiftNetCDF
-@testable import Gotenx
+@testable import GotenxCore
 @testable import GotenxPhysics
 @testable import GotenxCLI
 

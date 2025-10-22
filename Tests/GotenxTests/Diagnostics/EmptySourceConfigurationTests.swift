@@ -3,7 +3,7 @@
 
 import Testing
 import MLX
-@testable import Gotenx
+@testable import GotenxCore
 @testable import GotenxPhysics
 
 /// Empty Source Configuration Tests
