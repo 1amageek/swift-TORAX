@@ -547,8 +547,269 @@ public struct SimulationOptions {
 
 ### Q3: Pause/Resume support?
 
-**Current**: Out of scope
-**Future**: Add `pause()` and `resume()` methods to `SimulationOrchestrator`
+**Status**: ✅ **IMPLEMENTED** (2025-10-23)
+
+See Phase 1 implementation summary above.
+
+---
+
+## 8. Protocol-Based Architecture for Testability
+
+**File**: `Sources/GotenxCore/Protocols/SimulationRunnable.swift`
+
+**Status**: ✅ **IMPLEMENTED** (2025-10-23)
+
+### Purpose
+
+Enable dependency injection for testing by defining a protocol for simulation execution. This allows the Gotenx App to use mock implementations during testing without running actual physics simulations.
+
+### SimulationRunnable Protocol
+
+```swift
+/// Protocol for simulation execution
+public protocol SimulationRunnable: Actor {
+    /// Initialize simulation with physics models
+    func initialize(
+        transportModel: any TransportModel,
+        sourceModels: [any SourceModel],
+        mhdModels: [any MHDModel]?
+    ) async throws
+
+    /// Run simulation with progress callback
+    func run(
+        progressCallback: (@Sendable (Float, ProgressInfo) -> Void)?
+    ) async throws -> SimulationResult
+
+    /// Pause the simulation
+    func pause() async
+
+    /// Resume the simulation
+    func resume() async
+
+    /// Check if simulation is paused
+    func isPaused() async -> Bool
+}
+```
+
+### SimulationRunner Conformance
+
+```swift
+// SimulationRunner now conforms to SimulationRunnable
+public actor SimulationRunner: SimulationRunnable {
+    // ... existing implementation (no changes required)
+}
+```
+
+### App Integration (Dependency Injection)
+
+```swift
+// Gotenx/ViewModels/AppViewModel.swift
+
+@MainActor
+@Observable
+final class AppViewModel {
+    private var currentRunner: (any SimulationRunnable)?
+
+    // ✅ Dependency injection for testing
+    private let runnerFactory: @Sendable (SimulationConfiguration) -> any SimulationRunnable
+
+    init(
+        workspace: Workspace,
+        runnerFactory: @Sendable @escaping (SimulationConfiguration) -> any SimulationRunnable = { config in
+            SimulationRunner(config: config)  // Default: real implementation
+        }
+    ) {
+        self.workspace = workspace
+        self.runnerFactory = runnerFactory
+    }
+
+    func runSimulation(_ simulation: Simulation) {
+        simulationTask = Task {
+            // ...
+
+            // ✅ Use factory instead of direct instantiation
+            let runner = runnerFactory(config)
+            await MainActor.run {
+                currentRunner = runner
+            }
+
+            // ... rest unchanged
+        }
+    }
+}
+```
+
+### MockSimulationRunner (App Test Target)
+
+```swift
+// GotenxTests/Mocks/MockSimulationRunner.swift
+
+actor MockSimulationRunner: SimulationRunnable {
+    // Test control
+    var shouldFail: Bool = false
+    var simulationDuration: TimeInterval = 0.1  // Fast for tests
+    var progressUpdatesCount: Int = 10
+
+    // State tracking
+    private(set) var isInitialized: Bool = false
+    private(set) var initializeCallCount: Int = 0
+    private(set) var runCallCount: Int = 0
+    private var _isPaused: Bool = false
+
+    func initialize(
+        transportModel: any TransportModel,
+        sourceModels: [any SourceModel],
+        mhdModels: [any MHDModel]?
+    ) async throws {
+        initializeCallCount += 1
+
+        if shouldFail {
+            throw SimulationError.modelInitializationFailed(
+                modelName: "Mock",
+                reason: "Test failure"
+            )
+        }
+
+        isInitialized = true
+    }
+
+    func run(
+        progressCallback: (@Sendable (Float, ProgressInfo) -> Void)?
+    ) async throws -> SimulationResult {
+        runCallCount += 1
+
+        guard isInitialized else {
+            throw SimulationError.notInitialized
+        }
+
+        if shouldFail {
+            throw SimulationError.executionFailed("Test failure")
+        }
+
+        // Simulate progress updates
+        let stepDuration = simulationDuration / Double(progressUpdatesCount)
+        for i in 0..<progressUpdatesCount {
+            try Task.checkCancellation()
+
+            let fraction = Float(i) / Float(progressUpdatesCount)
+            let progressInfo = ProgressInfo(
+                currentTime: fraction,
+                totalSteps: i,
+                lastDt: 1e-4,
+                converged: true
+            )
+
+            progressCallback?(fraction, progressInfo)
+            try await Task.sleep(for: .seconds(stepDuration))
+        }
+
+        // Return mock result
+        return SimulationResult(
+            finalProfiles: SerializableProfiles(/* mock data */),
+            statistics: SimulationStatistics(
+                totalIterations: 100,
+                totalSteps: 100,
+                converged: true,
+                maxResidualNorm: 1e-8,
+                wallTime: Float(simulationDuration)
+            )
+        )
+    }
+
+    func pause() async { _isPaused = true }
+    func resume() async { _isPaused = false }
+    func isPaused() async -> Bool { _isPaused }
+}
+```
+
+### Testing Example
+
+```swift
+// GotenxTests/ViewModels/AppViewModelTests.swift
+
+import Testing
+@testable import Gotenx
+
+@Suite("AppViewModel Tests")
+@MainActor
+struct AppViewModelTests {
+    @Test("Simulation runs successfully")
+    func simulationSuccess() async throws {
+        // Setup
+        let workspace = Workspace(name: "Test")
+        let mockRunner = MockSimulationRunner()
+
+        let viewModel = AppViewModel(workspace: workspace) { _ in
+            mockRunner  // Inject mock
+        }
+
+        let simulation = Simulation(
+            name: "Test Sim",
+            configurationData: createTestConfig()
+        )
+        workspace.simulations.append(simulation)
+        viewModel.selectedSimulation = simulation
+
+        // Execute
+        viewModel.runSimulation(simulation)
+
+        // Wait for completion
+        try await Task.sleep(for: .milliseconds(500))
+
+        // Verify
+        let isPaused = await mockRunner.isPaused()
+        #expect(!isPaused)
+        #expect(await mockRunner.runCallCount == 1)
+        #expect(simulation.status == .completed)
+    }
+
+    @Test("Simulation can be cancelled")
+    func simulationCancellation() async throws {
+        let workspace = Workspace(name: "Test")
+        let mockRunner = MockSimulationRunner()
+        mockRunner.simulationDuration = 10.0  // Long simulation
+
+        let viewModel = AppViewModel(workspace: workspace) { _ in mockRunner }
+
+        let simulation = Simulation(
+            name: "Test Sim",
+            configurationData: createTestConfig()
+        )
+        viewModel.selectedSimulation = simulation
+
+        // Start simulation
+        viewModel.runSimulation(simulation)
+        try await Task.sleep(for: .milliseconds(100))
+
+        // Cancel
+        viewModel.stopSimulation()
+        try await Task.sleep(for: .milliseconds(200))
+
+        // Verify
+        #expect(simulation.status == .cancelled)
+    }
+}
+```
+
+### Benefits
+
+1. **Testability**
+   - AppViewModel can be tested without running actual simulations (100x faster)
+   - Test various scenarios: success, failure, cancellation, pause/resume
+   - CI/CD friendly
+
+2. **Decoupling**
+   - AppViewModel doesn't depend on SimulationRunner implementation details
+   - Easy to switch implementations in the future
+
+3. **Extensibility**
+   - `RemoteSimulationRunner`: Cloud execution
+   - `CachedSimulationRunner`: Result caching
+   - `LoggingSimulationRunner`: Debug wrapper
+
+4. **Backward Compatibility**
+   - Existing SimulationRunner code unchanged
+   - Only added `: SimulationRunnable` conformance
 
 ---
 
@@ -560,5 +821,5 @@ For questions or discussions about this integration:
 
 ---
 
-**Document Version**: 1.0
-**Last Updated**: 2025-10-22
+**Document Version**: 2.0
+**Last Updated**: 2025-10-23

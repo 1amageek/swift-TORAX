@@ -11,7 +11,25 @@ import MLX
 /// - Running the simulation loop with provided models
 /// - Managing timesteps and progress
 /// - Coordinating with SimulationOrchestrator
-public actor SimulationRunner {
+///
+/// **Protocol Conformance**: Conforms to `SimulationRunnable` for dependency injection.
+/// This enables testing with `MockSimulationRunner` and future implementations
+/// like `RemoteSimulationRunner`.
+///
+/// ## Example
+///
+/// ```swift
+/// // Direct usage (production)
+/// let runner = SimulationRunner(config: config)
+/// try await runner.initialize(...)
+/// let result = try await runner.run()
+///
+/// // Protocol usage (testing)
+/// let runner: any SimulationRunnable = SimulationRunner(config: config)
+/// try await runner.initialize(...)
+/// let result = try await runner.run()
+/// ```
+public actor SimulationRunner: SimulationRunnable {
     private let config: SimulationConfiguration
     private var orchestrator: SimulationOrchestrator?
 
