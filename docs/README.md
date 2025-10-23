@@ -40,6 +40,16 @@ Detailed technical specifications extracted from CLAUDE.md for easier reference:
 - **[TRANSPORT_MODELS.md](TRANSPORT_MODELS.md)**
   Comparison of Constant, Bohm-GyroBohm, and QLKNN transport models.
 
+- **[PHASE8_MHD_IMPLEMENTATION.md](PHASE8_MHD_IMPLEMENTATION.md)** ✅ **Complete**
+  MHD (magnetohydrodynamics) implementation with sawtooth crash models:
+  - Simple trigger model (q=1 detection + shear checking)
+  - Simple redistribution model (conservation enforcement)
+  - 4 critical logic fixes (density usage, boundary continuity, poloidalFlux update, shear interpolation)
+  - 9 comprehensive tests with Swift Testing
+
+  **Status**: Physically-correct implementation, ready for validation
+  **Next**: Real simulation testing → Advanced trigger models (Porcelli, Kadomtsev)
+
 ---
 
 ## Physics & Diagnostics
@@ -106,6 +116,7 @@ Active improvement roadmaps and design specifications:
 | **MLX Best Practices** | [MLX_BEST_PRACTICES.md](MLX_BEST_PRACTICES.md) | ✅ Reference |
 | **Swift Concurrency** | [SWIFT_CONCURRENCY.md](SWIFT_CONCURRENCY.md) | ✅ Reference |
 | **Transport Models** | [TRANSPORT_MODELS.md](TRANSPORT_MODELS.md) | ✅ Reference |
+| **MHD Implementation** | [PHASE8_MHD_IMPLEMENTATION.md](PHASE8_MHD_IMPLEMENTATION.md) | ✅ Complete |
 | Conservation Laws | [CONSERVATION_AND_DIAGNOSTICS_DESIGN.md](CONSERVATION_AND_DIAGNOSTICS_DESIGN.md) | ✅ Implemented |
 | **FVM Improvements** | [FVM_NUMERICAL_IMPROVEMENTS_PLAN.md](FVM_NUMERICAL_IMPROVEMENTS_PLAN.md) | 🔥 **Priority** |
 | Visualization | [VISUALIZATION_DESIGN.md](VISUALIZATION_DESIGN.md) | 🚧 In Progress |
@@ -135,6 +146,9 @@ Active improvement roadmaps and design specifications:
 **Implementing conservation laws?**
 → See [CONSERVATION_AND_DIAGNOSTICS_DESIGN.md](CONSERVATION_AND_DIAGNOSTICS_DESIGN.md).
 
+**Working on MHD models?**
+→ See [PHASE8_MHD_IMPLEMENTATION.md](PHASE8_MHD_IMPLEMENTATION.md) for sawtooth implementation and physics.
+
 **Adding visualization?**
 → Check [VISUALIZATION_DESIGN.md](VISUALIZATION_DESIGN.md) and [GotenxUI_Requirements.md](GotenxUI_Requirements.md).
 
@@ -153,4 +167,4 @@ When adding new documentation:
 
 ---
 
-*Last updated: 2025-10-21* (Added FVM Numerical Improvements Plan)
+*Last updated: 2025-10-23* (Added Phase 8 MHD Implementation)
