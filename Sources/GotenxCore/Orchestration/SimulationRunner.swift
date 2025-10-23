@@ -133,6 +133,49 @@ public actor SimulationRunner {
         return result
     }
 
+    /// Pause the simulation
+    ///
+    /// **App Integration**: Call from UI to pause long-running simulation.
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// // From SwiftUI button
+    /// Button("Pause") {
+    ///     Task {
+    ///         await runner.pause()
+    ///     }
+    /// }
+    /// ```
+    public func pause() async {
+        await orchestrator?.pause()
+    }
+
+    /// Resume the simulation
+    ///
+    /// **App Integration**: Call from UI to resume paused simulation.
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// // From SwiftUI button
+    /// Button("Resume") {
+    ///     Task {
+    ///         await runner.resume()
+    ///     }
+    /// }
+    /// ```
+    public func resume() async {
+        await orchestrator?.resume()
+    }
+
+    /// Check if simulation is paused
+    ///
+    /// - Returns: true if simulation is currently paused
+    public func isPaused() async -> Bool {
+        await orchestrator?.getIsPaused() ?? false
+    }
+
     /// Generate initial profiles from boundary conditions
     private func generateInitialProfiles(
         mesh: MeshConfig,
@@ -212,9 +255,108 @@ public actor SimulationRunner {
     }
 }
 
-/// Simulation errors
-public enum SimulationError: Error {
+/// Simulation errors with user-friendly descriptions
+///
+/// **App Integration**: Conforms to `LocalizedError` for user-friendly error messages
+/// and recovery suggestions in the UI.
+///
+/// **Design Note**: This is a high-level error type for app integration.
+/// Internal errors (like `SolverError`) are thrown directly by lower-level components.
+/// Apps should catch both `SimulationError` and `SolverError`.
+///
+/// ## Example
+///
+/// ```swift
+/// do {
+///     try await runner.run()
+/// } catch let error as SimulationError {
+///     // High-level errors (initialization, configuration, validation)
+///     print(error.localizedDescription)
+///     if let suggestion = error.recoverySuggestion {
+///         print("Suggestion: \(suggestion)")
+///     }
+/// } catch let error as SolverError {
+///     // Low-level solver errors (convergence, numerical instability)
+///     print("Solver error: \(error)")
+/// }
+/// ```
+public enum SimulationError: Error, LocalizedError {
     case notInitialized
     case invalidConfiguration(String)
     case executionFailed(String)
+
+    // MARK: - Specific Errors
+
+    /// Model initialization failed
+    case modelInitializationFailed(modelName: String, reason: String)
+
+    /// Numeric instability detected during simulation
+    case numericInstability(time: Float, variable: String, value: Float)
+
+    /// Solver failed to converge
+    case convergenceFailure(iterations: Int, residual: Float)
+
+    /// Invalid boundary conditions
+    case invalidBoundaryConditions(String)
+
+    /// Mesh resolution too coarse
+    case meshTooCoarse(nCells: Int, minimum: Int)
+
+    /// Time step too small
+    case timeStepTooSmall(dt: Float, minimum: Float)
+
+    // MARK: - LocalizedError
+
+    public var errorDescription: String? {
+        switch self {
+        case .notInitialized:
+            return "Simulation not initialized. Call initialize() first."
+
+        case .invalidConfiguration(let msg):
+            return "Invalid configuration: \(msg)"
+
+        case .executionFailed(let msg):
+            return "Simulation execution failed: \(msg)"
+
+        case .modelInitializationFailed(let model, let reason):
+            return "Failed to initialize \(model): \(reason)"
+
+        case .numericInstability(let time, let variable, let value):
+            return "Numeric instability detected at t=\(time)s: \(variable) = \(value)"
+
+        case .convergenceFailure(let iters, let residual):
+            return "Solver failed to converge after \(iters) iterations (residual: \(residual))"
+
+        case .invalidBoundaryConditions(let msg):
+            return "Invalid boundary conditions: \(msg)"
+
+        case .meshTooCoarse(let nCells, let minimum):
+            return "Mesh too coarse: \(nCells) cells (minimum: \(minimum))"
+
+        case .timeStepTooSmall(let dt, let minimum):
+            return "Time step too small: \(dt)s (minimum: \(minimum))"
+        }
+    }
+
+    public var recoverySuggestion: String? {
+        switch self {
+        case .meshTooCoarse(_, let minimum):
+            return "Increase mesh resolution to at least \(minimum) cells"
+
+        case .timeStepTooSmall:
+            return "Increase initial time step or check for numerical instabilities"
+
+        case .convergenceFailure:
+            return "Try reducing time step or using a more robust solver"
+
+        case .invalidBoundaryConditions:
+            return "Check that temperature and density values are positive and realistic"
+
+        case .modelInitializationFailed:
+            return "Check model configuration and ensure all required parameters are provided"
+
+        default:
+            return nil
+        }
+    }
 }

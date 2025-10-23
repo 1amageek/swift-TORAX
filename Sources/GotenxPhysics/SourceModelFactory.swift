@@ -13,7 +13,8 @@ public struct SourceModelFactory {
     ///
     /// - Parameter config: Sources configuration
     /// - Returns: Composite source model containing all enabled sources
-    public static func create(config: SourcesConfig) -> any SourceModel {
+    /// - Throws: ConfigurationError if source initialization fails
+    public static func create(config: SourcesConfig) throws -> any SourceModel {
         var sources: [String: any SourceModel] = [:]
 
         // Add Ohmic heating if enabled
@@ -63,11 +64,7 @@ public struct SourceModelFactory {
                     "current_drive": ecrhConfig.currentDriveEnabled ? 1.0 : 0.0
                 ]
             )
-            do {
-                sources["ecrh"] = try ECRHSource(params: params)
-            } catch {
-                print("⚠️  Warning: Failed to initialize ECRH source: \(error)")
-            }
+            sources["ecrh"] = try ECRHSource(params: params)
         }
 
         // Add Gas Puff if enabled
@@ -79,11 +76,7 @@ public struct SourceModelFactory {
                     "penetration_depth": gasPuffConfig.penetrationDepth
                 ]
             )
-            do {
-                sources["gasPuff"] = try GasPuffSource(params: params)
-            } catch {
-                print("⚠️  Warning: Failed to initialize Gas Puff source: \(error)")
-            }
+            sources["gasPuff"] = try GasPuffSource(params: params)
         }
 
         // Add Impurity Radiation if enabled
@@ -105,11 +98,7 @@ public struct SourceModelFactory {
                     "atomic_number": atomicNumber
                 ]
             )
-            do {
-                sources["impurityRadiation"] = try ImpurityRadiationSource(params: params)
-            } catch {
-                print("⚠️  Warning: Failed to initialize Impurity Radiation source: \(error)")
-            }
+            sources["impurityRadiation"] = try ImpurityRadiationSource(params: params)
         }
 
         // Return composite model combining all sources

@@ -91,6 +91,16 @@ public struct SamplingConfig: Sendable, Codable, Equatable {
     /// **Phase 3+**: Enable for power balance analysis
     public let enableSourceCapture: Bool
 
+    /// Enable live plotting (includes profiles in ProgressInfo)
+    ///
+    /// **Cost**: Profile serialization ~100μs @ 100 cells, throttled by SimulationRunner (100ms)
+    ///
+    /// **App Integration**: When enabled, `ProgressInfo` includes current profiles and derived quantities
+    /// for real-time visualization. Disable for batch simulations to minimize overhead.
+    ///
+    /// **Performance**: Negligible impact (~0.1% overhead) due to throttling
+    public let enableLivePlotting: Bool
+
     // MARK: - Tier 3: 2D/3D Data (On-Demand Reconstruction)
 
     /// Enable 2D poloidal cross-section reconstruction
@@ -117,6 +127,7 @@ public struct SamplingConfig: Sendable, Codable, Equatable {
         enableDiagnostics: Bool = true,
         enableTransportCapture: Bool = false,
         enableSourceCapture: Bool = false,
+        enableLivePlotting: Bool = false,
         enable2DReconstruction: Bool = false,
         enable3DReconstruction: Bool = false
     ) {
@@ -125,6 +136,7 @@ public struct SamplingConfig: Sendable, Codable, Equatable {
         self.enableDiagnostics = enableDiagnostics
         self.enableTransportCapture = enableTransportCapture
         self.enableSourceCapture = enableSourceCapture
+        self.enableLivePlotting = enableLivePlotting
         self.enable2DReconstruction = enable2DReconstruction
         self.enable3DReconstruction = enable3DReconstruction
     }
@@ -144,6 +156,7 @@ extension SamplingConfig {
         enableDiagnostics: false,
         enableTransportCapture: false,
         enableSourceCapture: false,
+        enableLivePlotting: false,
         enable2DReconstruction: false,
         enable3DReconstruction: false
     )
@@ -159,6 +172,7 @@ extension SamplingConfig {
         enableDiagnostics: true,
         enableTransportCapture: false,
         enableSourceCapture: false,
+        enableLivePlotting: false,
         enable2DReconstruction: false,
         enable3DReconstruction: false
     )
@@ -174,6 +188,7 @@ extension SamplingConfig {
         enableDiagnostics: true,
         enableTransportCapture: false,
         enableSourceCapture: false,
+        enableLivePlotting: false,
         enable2DReconstruction: false,
         enable3DReconstruction: false
     )
@@ -189,7 +204,24 @@ extension SamplingConfig {
         enableDiagnostics: true,
         enableTransportCapture: true,
         enableSourceCapture: true,
+        enableLivePlotting: false,
         enable2DReconstruction: true,
+        enable3DReconstruction: false
+    )
+
+    /// Real-time plotting configuration: High-frequency sampling with live updates
+    ///
+    /// **Memory**: ~5.8 MB for 20k steps (2001 profile snapshots)
+    ///
+    /// **Use case**: Interactive app with live visualization (Gotenx app)
+    public static let realTimePlotting = SamplingConfig(
+        profileSamplingInterval: 10,
+        enableDerivedQuantities: true,
+        enableDiagnostics: false,
+        enableTransportCapture: false,
+        enableSourceCapture: false,
+        enableLivePlotting: true,  // ← Enable for live UI updates
+        enable2DReconstruction: false,
         enable3DReconstruction: false
     )
 }

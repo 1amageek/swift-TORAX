@@ -136,7 +136,7 @@ struct InteractiveMenu {
         // Initialize physics models
         print("🔧 Initializing physics models...")
         let transportModel = try TransportModelFactory.create(config: currentConfig.runtime.dynamic.transport)
-        let sourceModel = SourceModelFactory.create(config: currentConfig.runtime.dynamic.sources)
+        let sourceModel = try SourceModelFactory.create(config: currentConfig.runtime.dynamic.sources)
 
         // Initialize simulation runner
         let runner = SimulationRunner(config: currentConfig)

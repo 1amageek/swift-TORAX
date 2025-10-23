@@ -398,21 +398,49 @@ extension SimulationState {
 // MARK: - Progress Info
 
 /// Progress information for monitoring
+///
+/// **App Integration**: Supports live plotting by optionally including profiles and derived quantities.
+/// Enable via `SamplingConfig.enableLivePlotting` to receive profile data in progress callbacks.
+///
+/// ## Example
+///
+/// ```swift
+/// let result = try await runner.run { fraction, progressInfo in
+///     if let profiles = progressInfo.profiles {
+///         // Update live plot with current profiles
+///         updatePlot(profiles)
+///     }
+/// }
+/// ```
 public struct ProgressInfo: Sendable {
     public let currentTime: Float
     public let totalSteps: Int
     public let lastDt: Float
     public let converged: Bool
 
+    /// Current profiles (optional, enabled via SamplingConfig.enableLivePlotting)
+    ///
+    /// **Performance**: Serialization cost ~100μs @ 100 cells, throttled to 100ms by SimulationRunner
+    public let profiles: SerializableProfiles?
+
+    /// Derived quantities (optional, enabled via SamplingConfig.enableLivePlotting)
+    ///
+    /// Includes τE, Q, βN, central values, and volume-averaged quantities.
+    public let derived: DerivedQuantities?
+
     public init(
         currentTime: Float,
         totalSteps: Int,
         lastDt: Float,
-        converged: Bool
+        converged: Bool,
+        profiles: SerializableProfiles? = nil,
+        derived: DerivedQuantities? = nil
     ) {
         self.currentTime = currentTime
         self.totalSteps = totalSteps
         self.lastDt = lastDt
         self.converged = converged
+        self.profiles = profiles
+        self.derived = derived
     }
 }

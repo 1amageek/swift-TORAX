@@ -60,6 +60,14 @@ public actor SimulationOrchestrator {
     /// Geometry (cached for diagnostics computation)
     private let geometry: Geometry
 
+    // MARK: - Pause/Resume State
+
+    /// Pause state
+    private var isPaused: Bool = false
+
+    /// Continuation for pause/resume
+    private var pauseContinuation: CheckedContinuation<Void, Never>?
+
     // MARK: - Initialization
 
     public init(
@@ -144,6 +152,12 @@ public actor SimulationOrchestrator {
         }
 
         while state.time < endTime {
+            // Check for task cancellation
+            try Task.checkCancellation()
+
+            // Check for pause state
+            await checkPauseState()
+
             let stepStartTime = Date()
 
             // Perform single timestep
@@ -191,13 +205,64 @@ public actor SimulationOrchestrator {
     }
 
     /// Get current progress
+    ///
+    /// **App Integration**: Returns progress with optional profile data for live plotting.
+    /// Enable `SamplingConfig.enableLivePlotting` to include profiles and derived quantities.
+    ///
+    /// - Returns: Progress information with optional profiles
     public func getProgress() async -> ProgressInfo {
-        ProgressInfo(
+        let includeProfiles = samplingConfig.enableLivePlotting
+
+        return ProgressInfo(
             currentTime: state.time,
             totalSteps: state.statistics.totalSteps,
             lastDt: state.dt,
-            converged: state.statistics.converged
+            converged: state.statistics.converged,
+            profiles: includeProfiles ? state.profiles.toSerializable() : nil,
+            derived: includeProfiles ? state.derived : nil
         )
+    }
+
+    /// Pause the simulation
+    ///
+    /// **App Integration**: Call from UI to pause long-running simulation.
+    /// Simulation will pause at the beginning of the next timestep.
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// // From UI button handler
+    /// Task {
+    ///     await orchestrator.pause()
+    /// }
+    /// ```
+    public func pause() {
+        isPaused = true
+    }
+
+    /// Resume the simulation
+    ///
+    /// **App Integration**: Call from UI to resume paused simulation.
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// // From UI button handler
+    /// Task {
+    ///     await orchestrator.resume()
+    /// }
+    /// ```
+    public func resume() {
+        isPaused = false
+        pauseContinuation?.resume()
+        pauseContinuation = nil
+    }
+
+    /// Check if simulation is paused
+    ///
+    /// - Returns: true if simulation is currently paused
+    public func getIsPaused() -> Bool {
+        isPaused
     }
 
     /// Enable conservation enforcement
@@ -283,6 +348,27 @@ public actor SimulationOrchestrator {
             endTime: state.time,
             totalSteps: state.statistics.totalSteps
         )
+    }
+
+    // MARK: - Pause/Resume Helper
+
+    /// Check if simulation is paused and wait for resume
+    ///
+    /// This method is called at the beginning of each timestep to check if the simulation
+    /// should pause. If paused, it suspends execution until `resume()` is called.
+    ///
+    /// **Thread Safety**: Actor-isolated, so only one step can pause at a time.
+    private func checkPauseState() async {
+        // Use while loop instead of recursion to handle repeated pause/resume cycles
+        while isPaused {
+            await withCheckedContinuation { continuation in
+                // Store continuation for resume()
+                // If pause() is called multiple times before resume(), only the latest continuation is kept
+                // (previous steps will have already resumed)
+                pauseContinuation = continuation
+            }
+            // After resume, check isPaused again in case pause() was called during resume
+        }
     }
 
     // MARK: - Time Stepping

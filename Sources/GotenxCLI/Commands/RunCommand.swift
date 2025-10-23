@@ -193,7 +193,7 @@ struct RunCommand: AsyncParsableCommand {
         let transportModel = try createTransportModel(config: simulationConfig)
         print("  ✓ Transport model: \(simulationConfig.runtime.dynamic.transport.modelType)")
 
-        let sourceModel = createSourceModel(config: simulationConfig)
+        let sourceModel = try createSourceModel(config: simulationConfig)
         print("  ✓ Source models initialized")
 
         // Initialize simulation runner
@@ -409,8 +409,8 @@ struct RunCommand: AsyncParsableCommand {
     }
 
     /// Create source model from configuration
-    private func createSourceModel(config: SimulationConfiguration) -> any SourceModel {
-        return SourceModelFactory.create(config: config.runtime.dynamic.sources)
+    private func createSourceModel(config: SimulationConfiguration) throws -> any SourceModel {
+        return try SourceModelFactory.create(config: config.runtime.dynamic.sources)
     }
 
     // MARK: - Progress Callback
