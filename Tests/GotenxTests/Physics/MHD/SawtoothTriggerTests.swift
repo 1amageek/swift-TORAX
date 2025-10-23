@@ -122,13 +122,14 @@ struct SawtoothTriggerTests {
         let radii = MLXArray.linspace(Float(0.0), minorRadius, count: nCells)
 
         // Simple volume: V(r) ∝ r²
-        let volume = radii * radii * Float.pi * majorRadius
+        let pi: Float = .pi
+        let volume = radii * radii * pi * majorRadius
 
         // Simple safety factor profile: q(r) = q0 + (qEdge - q0) * (r/a)²
         let rhoNorm = radii / minorRadius
         let q0: Float = 0.8  // q < 1 on axis
         let qEdge: Float = 3.5
-        let safetyFactor = q0 + (qEdge - q0) * rhoNorm * rhoNorm
+        let safetyFactor = MLXArray(q0) + (MLXArray(qEdge) - MLXArray(q0)) * rhoNorm * rhoNorm
 
         // Geometry coefficients (simplified)
         let g0 = MLXArray.ones([nCells])
@@ -157,11 +158,11 @@ struct SawtoothTriggerTests {
         let rhoNorm = geometry.radii.value / geometry.minorRadius
 
         // Parabolic temperature profile
-        let Ti = 10000.0 * (1.0 - rhoNorm * rhoNorm)  // 10 keV on axis
+        let Ti = MLXArray(Float(10000.0)) * (MLXArray(Float(1.0)) - rhoNorm * rhoNorm)  // 10 keV on axis
         let Te = Ti  // Same for simplicity
 
         // Parabolic density profile
-        let ne = 1e20 * (1.0 - 0.5 * rhoNorm * rhoNorm)  // 10²⁰ m⁻³
+        let ne = MLXArray(Float(1e20)) * (MLXArray(Float(1.0)) - MLXArray(Float(0.5)) * rhoNorm * rhoNorm)  // 10²⁰ m⁻³
 
         // Create poloidal flux with high central current (q < 1)
         // ψ(ρ) chosen such that dψ/dr gives high B_θ at center
@@ -180,12 +181,12 @@ struct SawtoothTriggerTests {
         // Create less peaked profiles
         let rhoNorm = geometry.radii.value / geometry.minorRadius
 
-        let Ti = 5000.0 * (1.0 - 0.5 * rhoNorm * rhoNorm)
+        let Ti = MLXArray(Float(5000.0)) * (MLXArray(Float(1.0)) - MLXArray(Float(0.5)) * rhoNorm * rhoNorm)
         let Te = Ti
-        let ne = 5e19 * (1.0 - 0.3 * rhoNorm * rhoNorm)
+        let ne = MLXArray(Float(5e19)) * (MLXArray(Float(1.0)) - MLXArray(Float(0.3)) * rhoNorm * rhoNorm)
 
         // Lower central current (q > 1)
-        let psi = 0.5 * rhoNorm * rhoNorm
+        let psi = MLXArray(Float(0.5)) * rhoNorm * rhoNorm
 
         return CoreProfiles(
             ionTemperature: EvaluatedArray(evaluating: Ti),

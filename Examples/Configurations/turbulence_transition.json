@@ -1,0 +1,67 @@
+{
+  "runtime": {
+    "static": {
+      "mesh": {
+        "nCells": 100
+      },
+      "timeConfig": {
+        "duration": 2.0,
+        "timeStep": 0.01
+      },
+      "solver": {
+        "type": "linear"
+      }
+    },
+    "dynamic": {
+      "transport": {
+        "modelType": "densityTransition",
+        "parameters": {
+          "transition_density": 2.5e19,
+          "transition_width": 0.5e19,
+          "ion_mass_number": 2.0,
+          "ri_coefficient": 0.5
+        }
+      },
+      "sources": {
+        "fusion": {
+          "enabled": true
+        },
+        "ohmic": {
+          "enabled": true
+        },
+        "ionElectron": {
+          "enabled": true
+        },
+        "bremsstrahlung": {
+          "enabled": true
+        }
+      },
+      "boundaryConditions": {
+        "ionTemperature": {
+          "core": 20000.0,
+          "edge": 100.0
+        },
+        "electronTemperature": {
+          "core": 20000.0,
+          "edge": 100.0
+        },
+        "electronDensity": {
+          "core": 1.0e20,
+          "edge": 2.0e19
+        }
+      }
+    },
+    "geometry": {
+      "minorRadius": 2.0,
+      "majorRadius": 6.2,
+      "inverseAspectRatio": 0.32258,
+      "toroidalField": 5.3,
+      "plasmaCurrent": 15.0
+    }
+  },
+  "output": {
+    "format": "netcdf",
+    "outputPath": "output/turbulence_transition.nc",
+    "logToConsole": true
+  }
+}

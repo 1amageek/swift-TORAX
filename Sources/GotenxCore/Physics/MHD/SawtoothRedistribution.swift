@@ -154,7 +154,8 @@ public struct SimpleSawtoothRedistribution: Sendable {
     ///
     /// Creates a linear profile:
     /// - At r=0: T(0) = flatteningFactor × T(rho_q1)
-    /// - At r=rho_q1: T(rho_q1) unchanged
+    /// - At r<rho_q1: Linear gradient from axis to q=1 surface
+    /// - At r=rho_q1 and beyond: Use transition/original profile
     /// - Between rho_q1 and rho_mix: Linear interpolation to original profile
     /// - Beyond rho_mix: Original profile unchanged
     ///
@@ -175,37 +176,45 @@ public struct SimpleSawtoothRedistribution: Sendable {
         // Value at magnetic axis (flattened)
         let valueAxis = flatteningFactor * valueQ1
 
-        // Create flattened region (0 to upToIndex, inclusive)
+        // Create flattened region (0 to upToIndex, INCLUSIVE)
         // Linear profile: T(i) = T_axis + (T_q1 - T_axis) * (i / upToIndex)
-        // NOTE: Use 0...upToIndex (inclusive) to ensure exact match at boundary
-        let nInner = upToIndex + 1
-        let indices = MLXArray(0..<nInner)
-        let fractions = indices.asType(.float32) / Float(upToIndex)
-        let innerFlattened = valueAxis + (valueQ1 - valueAxis) * fractions
+        // CRITICAL: Must include upToIndex to ensure continuity at boundary
+        if upToIndex > 0 {
+            let nInner = upToIndex + 1  // Include upToIndex
+            let indices = MLXArray(0..<nInner)
+            let fractions = indices.asType(.float32) / Float(upToIndex)
+            let innerFlattened = valueAxis + (valueQ1 - valueAxis) * fractions
+            // innerFlattened[upToIndex] = valueAxis + (valueQ1 - valueAxis) × 1.0 = valueQ1 ✓
 
-        // Transition region (upToIndex+1 to mixingIndex)
-        // Linear interpolation from valueQ1 to original profile
-        let transitionStart = upToIndex + 1
-        let transitionLength = mixingIndex - upToIndex
+            // Transition region (upToIndex+1 to mixingIndex)
+            // Linear interpolation from valueQ1 to original profile
+            let transitionStart = upToIndex + 1  // Start AFTER upToIndex
+            let transitionEnd = mixingIndex
+            let transitionLength = transitionEnd - transitionStart + 1
 
-        if transitionLength > 0 {
-            let transitionIndices = MLXArray(0..<transitionLength)
-            let transitionFractions = transitionIndices.asType(.float32) / Float(transitionLength)
+            if transitionLength > 0 && mixingIndex < profile.count {
+                let transitionIndices = MLXArray(0..<transitionLength)
+                let transitionFractions = transitionIndices.asType(.float32) / Float(max(1, transitionLength - 1))
 
-            let transitionOriginal = profile[transitionStart..<(transitionStart + transitionLength)]
+                let transitionOriginal = profile[transitionStart...(transitionStart + transitionLength - 1)]
 
-            // Blend from valueQ1 (at upToIndex) to original values
-            let transitionBlend = valueQ1 + (transitionOriginal - valueQ1) * transitionFractions
+                // Blend from valueQ1 (at upToIndex) to original values
+                let transitionBlend = valueQ1 + (transitionOriginal - valueQ1) * transitionFractions
 
-            // Outer region (beyond mixing radius)
-            let outerRegion = profile[mixingIndex...]
+                // Outer region (beyond mixing radius)
+                let outerRegion = profile[(mixingIndex + 1)...]
 
-            // Concatenate: [0...upToIndex] + [upToIndex+1...mixingIndex-1] + [mixingIndex...]
-            return concatenated([innerFlattened, transitionBlend, outerRegion], axis: 0)
+                // Concatenate: [0...upToIndex] + [upToIndex+1...mixingIndex] + [(mixingIndex+1)...]
+                // Sizes: (upToIndex+1) + transitionLength + (nCells - mixingIndex - 1) = nCells
+                return concatenated([innerFlattened, transitionBlend, outerRegion], axis: 0)
+            } else {
+                // No transition region: use original from upToIndex+1 onward
+                let outerRegion = profile[(upToIndex + 1)...]
+                return concatenated([innerFlattened, outerRegion], axis: 0)
+            }
         } else {
-            // No transition region: directly connect to outer region
-            let outerRegion = profile[transitionStart...]
-            return concatenated([innerFlattened, outerRegion], axis: 0)
+            // upToIndex == 0: return original profile
+            return profile
         }
     }
 
@@ -230,23 +239,23 @@ public struct SimpleSawtoothRedistribution: Sendable {
         volume: MLXArray,
         upToIndex: Int
     ) -> MLXArray {
-        // Extract region where conservation is enforced
-        let n_old = profileOld[..<upToIndex]
-        let n_new = profileNew[..<upToIndex]
-        let V = volume[..<upToIndex]
+        // Extract region where conservation is enforced (up to mixing radius)
+        let n_old = profileOld[...upToIndex]
+        let n_new = profileNew[...upToIndex]
+        let V = volume[...upToIndex]
 
         // Compute total particle numbers
         let N_old = sum(n_old * V)
         let N_new = sum(n_new * V)
 
         // Compute scaling factor
-        let scalingFactor = N_old / (N_new + 1e-10)
+        let scalingFactor = N_old / (N_new + MLXArray(Float(1e-10)))
 
         // Scale inner region
         let n_inner_conserved = n_new * scalingFactor
 
         // Keep outer region unchanged
-        let n_outer = profileNew[upToIndex...]
+        let n_outer = profileNew[(upToIndex+1)...]
 
         // Concatenate
         return concatenated([n_inner_conserved, n_outer], axis: 0)
@@ -275,24 +284,24 @@ public struct SimpleSawtoothRedistribution: Sendable {
         volume: MLXArray,
         upToIndex: Int
     ) -> MLXArray {
-        // Extract region where conservation is enforced
-        let T_old = profileOld[..<upToIndex]
-        let T_new = profileNew[..<upToIndex]
-        let n = density[..<upToIndex]
-        let V = volume[..<upToIndex]
+        // Extract region where conservation is enforced (up to mixing radius)
+        let T_old = profileOld[...upToIndex]
+        let T_new = profileNew[...upToIndex]
+        let n = density[...upToIndex]
+        let V = volume[...upToIndex]
 
         // Compute total thermal energies
         let W_old = sum(T_old * n * V)
         let W_new = sum(T_new * n * V)
 
         // Compute scaling factor
-        let scalingFactor = W_old / (W_new + 1e-10)
+        let scalingFactor = W_old / (W_new + MLXArray(Float(1e-10)))
 
         // Scale inner region
         let T_inner_conserved = T_new * scalingFactor
 
         // Keep outer region unchanged
-        let T_outer = profileNew[upToIndex...]
+        let T_outer = profileNew[(upToIndex+1)...]
 
         // Concatenate
         return concatenated([T_inner_conserved, T_outer], axis: 0)

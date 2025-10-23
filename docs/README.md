@@ -50,6 +50,17 @@ Detailed technical specifications extracted from CLAUDE.md for easier reference:
   **Status**: Physically-correct implementation, ready for validation
   **Next**: Real simulation testing → Advanced trigger models (Porcelli, Kadomtsev)
 
+- **[PHASE9_TURBULENCE_TRANSITION_IMPLEMENTATION.md](PHASE9_TURBULENCE_TRANSITION_IMPLEMENTATION.md)** ✅ **Complete**
+  Density-dependent turbulence transition (ITG→RI) based on Kinoshita et al., PRL 132, 235101 (2024):
+  - Resistive-Interchange (RI) turbulence model at high density
+  - Sigmoid transition from ITG (low n) to RI (high n) regimes
+  - Correct isotope effects: χ_D ≈ 2χ_H via ρ_s² scaling
+  - 4 critical bug fixes (isotope scaling, array shapes, type generalization, redundant eval)
+  - 5 test suites (13 tests) with Swift Testing
+
+  **Status**: Cutting-edge physics implementation, validated with comprehensive tests
+  **Innovation**: First implementation of 2024 experimental discovery (not in TORAX)
+
 ---
 
 ## Physics & Diagnostics

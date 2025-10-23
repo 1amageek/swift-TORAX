@@ -41,6 +41,7 @@ public enum TransportModelType: String, Codable, Sendable, CaseIterable {
     case constant
     case bohmGyrobohm
     case qlknn
+    case densityTransition
 }
 
 // MARK: - Conversion to Runtime Parameters

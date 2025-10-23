@@ -199,11 +199,12 @@ struct SawtoothRedistributionTests {
         let radii = MLXArray.linspace(Float(0.0), minorRadius, count: nCells)
 
         // Simple volume: V(r) ∝ r² for circular cross-section
-        let volume = radii * radii * Float.pi * majorRadius
+        let pi: Float = .pi
+        let volume = radii * radii * pi * majorRadius
 
         // Simple safety factor profile
         let rhoNorm = radii / minorRadius
-        let safetyFactor = 1.0 + 2.5 * rhoNorm * rhoNorm
+        let safetyFactor = Float(1.0) + Float(2.5) * rhoNorm * rhoNorm
 
         // Geometry coefficients (simplified)
         let g0 = MLXArray.ones([nCells])

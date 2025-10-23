@@ -29,6 +29,31 @@ public struct TransportModelFactory {
                 feature: "QLKNN transport model (macOS only, requires FusionSurrogates)"
             )
             #endif
+
+        case .densityTransition:
+            // Extract parameters with defaults
+            let riCoefficient = params.params["ri_coefficient"] ?? 0.5
+            let transitionDensity = params.params["transition_density"] ?? 2.5e19
+            let transitionWidth = params.params["transition_width"] ?? 0.5e19
+            let ionMassNumber = params.params["ion_mass_number"] ?? 2.0
+
+            // Create ITG model (default: Bohm-GyroBohm)
+            let itgModel = BohmGyroBohmTransportModel()
+
+            // Create RI model
+            let riModel = ResistiveInterchangeModel(
+                coefficientRI: riCoefficient,
+                ionMassNumber: ionMassNumber
+            )
+
+            // Create density transition model
+            return DensityTransitionModel(
+                itgModel: itgModel,
+                riModel: riModel,
+                transitionDensity: transitionDensity,
+                transitionWidth: transitionWidth,
+                ionMassNumber: ionMassNumber
+            )
         }
     }
 

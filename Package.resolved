@@ -1,5 +1,5 @@
 {
-  "originHash" : "3d2356173f02061ecae6e752e94fd8e190d477f1cf1a7670c2935919989c2b3a",
+  "originHash" : "5f6ea4b5ec307dd318a41f510a9f32ad59b3853e54561f418b1559f8b2a9d9d9",
   "pins" : [
     {
       "identity" : "mlx-swift",
@@ -42,8 +42,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-configuration",
       "state" : {
-        "revision" : "7e5bc11e2c455da4aa8b73f4be356d7f0c3dc763",
-        "version" : "0.1.1"
+        "revision" : "9d5e40727efd060fb9b41b69932738f478abaa43",
+        "version" : "0.2.0"
       }
     },
     {
