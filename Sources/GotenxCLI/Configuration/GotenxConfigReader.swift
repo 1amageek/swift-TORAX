@@ -312,28 +312,38 @@ public actor GotenxConfigReader {
         )
 
         // Sawtooth parameters
-        let qCritical = try await configReader.fetchDouble(
-            forKey: "runtime.dynamic.mhd.sawtooth.qCritical",
-            default: 1.0
+        let minimumRadius = try await configReader.fetchDouble(
+            forKey: "runtime.dynamic.mhd.sawtooth.minimumRadius",
+            default: 0.2
         )
-        let inversionRadius = try await configReader.fetchDouble(
-            forKey: "runtime.dynamic.mhd.sawtooth.inversionRadius",
-            default: 0.3
-        )
-        let mixingTime = try await configReader.fetchDouble(
-            forKey: "runtime.dynamic.mhd.sawtooth.mixingTime",
-            default: 1e-4
+        let sCritical = try await configReader.fetchDouble(
+            forKey: "runtime.dynamic.mhd.sawtooth.sCritical",
+            default: 0.2
         )
         let minCrashInterval = try await configReader.fetchDouble(
             forKey: "runtime.dynamic.mhd.sawtooth.minCrashInterval",
             default: 0.01
         )
+        let flatteningFactor = try await configReader.fetchDouble(
+            forKey: "runtime.dynamic.mhd.sawtooth.flatteningFactor",
+            default: 1.01
+        )
+        let mixingRadiusMultiplier = try await configReader.fetchDouble(
+            forKey: "runtime.dynamic.mhd.sawtooth.mixingRadiusMultiplier",
+            default: 1.5
+        )
+        let crashStepDuration = try await configReader.fetchDouble(
+            forKey: "runtime.dynamic.mhd.sawtooth.crashStepDuration",
+            default: 1e-3
+        )
 
         let sawtoothParams = SawtoothParameters(
-            qCritical: Float(qCritical),
-            inversionRadius: Float(inversionRadius),
-            mixingTime: Float(mixingTime),
-            minCrashInterval: Float(minCrashInterval)
+            minimumRadius: Float(minimumRadius),
+            sCritical: Float(sCritical),
+            minCrashInterval: Float(minCrashInterval),
+            flatteningFactor: Float(flatteningFactor),
+            mixingRadiusMultiplier: Float(mixingRadiusMultiplier),
+            crashStepDuration: Float(crashStepDuration)
         )
 
         let ntmEnabled = try await configReader.fetchBool(

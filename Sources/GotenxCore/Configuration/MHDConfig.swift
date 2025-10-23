@@ -30,38 +30,76 @@ public struct MHDConfig: Codable, Sendable, Equatable {
 
 /// Parameters for sawtooth crash model
 ///
-/// Sawteeth are periodic MHD instabilities that flatten the central core profiles
+/// Sawteeth are m=1, n=1 kink instabilities that flatten the central core profiles
 /// when the safety factor q(0) drops below 1.
+///
+/// **Implementation**: Based on TORAX simple trigger + simple redistribution models
 public struct SawtoothParameters: Codable, Sendable, Equatable {
-    /// Critical q value for sawtooth trigger
-    /// Default: 1.0 (physical threshold)
-    public var qCritical: Float
+    // MARK: - Trigger Parameters
 
-    /// Inversion radius (normalized)
-    /// Profiles are flattened between r=0 and r=r_inv
-    /// Default: 0.3 (typical experimental value)
-    public var inversionRadius: Float
+    /// Minimum normalized radius for q=1 surface
+    ///
+    /// Prevents crashes when q=1 surface is too close to magnetic axis.
+    /// Crash occurs only if rho_norm_q1 > minimumRadius.
+    ///
+    /// **Typical value**: 0.2 (20% of minor radius)
+    public var minimumRadius: Float
 
-    /// Mixing time scale (seconds)
-    /// How fast the profile flattening occurs
-    /// Default: 1e-4 s (fast MHD timescale)
-    public var mixingTime: Float
+    /// Critical magnetic shear threshold
+    ///
+    /// Crash occurs when shear s = (r/q)(dq/dr) at q=1 surface exceeds this value.
+    ///
+    /// **Typical value**: 0.2
+    public var sCritical: Float
 
     /// Minimum time between crashes (seconds)
-    /// Prevents unphysically rapid crash sequences
-    /// Default: 0.01 s
+    ///
+    /// Prevents unphysically rapid crash sequences.
+    ///
+    /// **Typical value**: 0.01 s (10 ms)
     public var minCrashInterval: Float
 
+    // MARK: - Redistribution Parameters
+
+    /// Profile flattening factor
+    ///
+    /// Controls how flat the profile becomes at r=0 relative to r=rho_q1.
+    /// - 1.0: Perfect flattening (T(0) = T(rho_q1))
+    /// - 1.01: Slight gradient (T(0) = 1.01 × T(rho_q1))
+    ///
+    /// **Typical value**: 1.01
+    public var flatteningFactor: Float
+
+    /// Mixing radius multiplier
+    ///
+    /// Defines the extent of profile redistribution:
+    /// rho_mix = mixingRadiusMultiplier × rho_q1
+    ///
+    /// **Typical value**: 1.5 (mixing extends 50% beyond q=1 surface)
+    public var mixingRadiusMultiplier: Float
+
+    /// Duration of crash event (seconds)
+    ///
+    /// Time step duration during which crash occurs.
+    /// During crash, PDE solver is bypassed and time advances by this amount.
+    ///
+    /// **Typical value**: 1e-3 s (1 ms, fast MHD timescale)
+    public var crashStepDuration: Float
+
     public init(
-        qCritical: Float = 1.0,
-        inversionRadius: Float = 0.3,
-        mixingTime: Float = 1e-4,
-        minCrashInterval: Float = 0.01
+        minimumRadius: Float = 0.2,
+        sCritical: Float = 0.2,
+        minCrashInterval: Float = 0.01,
+        flatteningFactor: Float = 1.01,
+        mixingRadiusMultiplier: Float = 1.5,
+        crashStepDuration: Float = 1e-3
     ) {
-        self.qCritical = qCritical
-        self.inversionRadius = inversionRadius
-        self.mixingTime = mixingTime
+        self.minimumRadius = minimumRadius
+        self.sCritical = sCritical
         self.minCrashInterval = minCrashInterval
+        self.flatteningFactor = flatteningFactor
+        self.mixingRadiusMultiplier = mixingRadiusMultiplier
+        self.crashStepDuration = crashStepDuration
     }
 }
 

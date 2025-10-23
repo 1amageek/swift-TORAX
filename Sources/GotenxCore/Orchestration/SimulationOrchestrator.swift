@@ -30,6 +30,9 @@ public actor SimulationOrchestrator {
     /// Source models
     private let sources: [any SourceModel]
 
+    /// MHD models (sawteeth, NTMs, etc.)
+    private let mhdModels: [any MHDModel]
+
     /// Timestep calculator
     private let timeStepCalculator: TimeStepCalculator
 
@@ -64,12 +67,14 @@ public actor SimulationOrchestrator {
         initialProfiles: SerializableProfiles,
         transport: any TransportModel,
         sources: [any SourceModel] = [],
+        mhdModels: [any MHDModel] = [],
         samplingConfig: SamplingConfig = .balanced,
         adaptiveConfig: AdaptiveTimestepConfig = .default
     ) async {
         self.staticParams = staticParams
         self.transport = transport
         self.sources = sources
+        self.mhdModels = mhdModels
         self.samplingConfig = samplingConfig
 
         // Create geometry from static params
@@ -290,7 +295,68 @@ public actor SimulationOrchestrator {
         // Construct geometry from mesh configuration
         let geometry = createGeometry(from: staticParams.mesh)
 
-        // Compute transport coefficients
+        // Calculate adaptive timestep (before MHD check)
+        let dt: Float
+        if state.step > 0 {
+            // Compute transport coefficients for timestep calculation
+            let transportCoeffs = transport.computeCoefficients(
+                profiles: state.profiles,
+                geometry: geometry,
+                params: dynamicParams.transportParams
+            )
+            dt = timeStepCalculator.compute(
+                transportCoeffs: transportCoeffs,
+                dr: staticParams.mesh.dr
+            )
+        } else {
+            // First step: use fixed small timestep
+            dt = 1e-5
+        }
+
+        // Check for MHD events (sawteeth, NTMs, etc.)
+        for model in mhdModels {
+            // Apply MHD model - if it triggers, profiles are modified
+            let modifiedProfiles = model.apply(
+                to: state.profiles,
+                geometry: geometry,
+                time: state.time,
+                dt: dt
+            )
+
+            // Check if profiles were modified (MHD event occurred)
+            if modifiedProfiles != state.profiles {
+                // MHD event occurred: bypass PDE solver and advance time
+
+                // Get crash step duration if this is a sawtooth model
+                let crashDt: Float
+                if let sawtoothModel = model as? SawtoothModel {
+                    crashDt = sawtoothModel.params.crashStepDuration
+                } else {
+                    crashDt = dt  // Use normal dt for other MHD models
+                }
+
+                // Update state with modified profiles
+                let newStats = SimulationStatistics(
+                    totalIterations: state.statistics.totalIterations,
+                    totalSteps: state.statistics.totalSteps + 1,
+                    converged: true,
+                    maxResidualNorm: 0.0,  // No solver used
+                    wallTime: state.statistics.wallTime
+                )
+
+                state = state.advanced(
+                    by: crashDt,
+                    profiles: modifiedProfiles,
+                    statistics: newStats
+                )
+
+                // MHD event handled, skip PDE solver
+                return
+            }
+        }
+
+        // No MHD event: proceed with normal PDE solver step
+        // Recompute transport coefficients (may have been done above, but ensure fresh values)
         let transportCoeffs = transport.computeCoefficients(
             profiles: state.profiles,
             geometry: geometry,
@@ -310,18 +376,7 @@ public actor SimulationOrchestrator {
             }
         }
 
-        // Calculate adaptive timestep
-        let dt: Float
-        if state.step > 0 {
-            // Use adaptive timestep based on transport coefficients
-            dt = timeStepCalculator.compute(
-                transportCoeffs: transportCoeffs,
-                dr: staticParams.mesh.dr
-            )
-        } else {
-            // First step: use fixed small timestep
-            dt = 1e-5
-        }
+        // dt already calculated above (line 299-314)
 
         // Build CoeffsCallback with closure capture
         // Note: Source terms are computed inside the callback because they depend

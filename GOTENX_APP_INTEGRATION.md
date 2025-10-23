@@ -356,7 +356,7 @@ final class PlotDataSnapshotTests: XCTestCase {
 
 ```swift
 import XCTest
-@testable import GotenxCore
+@testable import Gotenx
 
 final class SimulationOrchestratorProgressTests: XCTestCase {
     func testProgressCallback() async throws {
@@ -397,7 +397,7 @@ final class SimulationOrchestratorProgressTests: XCTestCase {
 
 ```swift
 import SwiftUI
-import GotenxCore
+import Gotenx
 import GotenxUI
 
 @MainActor

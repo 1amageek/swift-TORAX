@@ -24,10 +24,12 @@ public actor SimulationRunner {
     /// - Parameters:
     ///   - transportModel: Pre-created transport model
     ///   - sourceModels: Pre-created source models
+    ///   - mhdModels: MHD models (optional, default: created from config)
     /// - Throws: ConfigurationError if initialization fails
     public func initialize(
         transportModel: any TransportModel,
-        sourceModels: [any SourceModel]
+        sourceModels: [any SourceModel],
+        mhdModels: [any MHDModel]? = nil
     ) async throws {
         // Create static runtime parameters
         let staticParams = try config.runtime.static.toRuntimeParams()
@@ -41,18 +43,30 @@ public actor SimulationRunner {
         // Convert to serializable format
         let serializableProfiles = initialProfiles.toSerializable()
 
+        // Create MHD models from config if not provided
+        let mhdModelsToUse: [any MHDModel]
+        if let provided = mhdModels {
+            mhdModelsToUse = provided
+        } else {
+            mhdModelsToUse = MHDModelFactory.createAllModels(config: config.runtime.dynamic.mhd)
+        }
+
         // Initialize orchestrator with provided models
         self.orchestrator = await SimulationOrchestrator(
             staticParams: staticParams,
             initialProfiles: serializableProfiles,
             transport: transportModel,
-            sources: sourceModels
+            sources: sourceModels,
+            mhdModels: mhdModelsToUse
         )
 
         print("✓ Simulation initialized")
         print("  Mesh: \(staticParams.mesh.nCells) cells")
         print("  Solver: \(staticParams.solverType)")
         print("  Transport: \(config.runtime.dynamic.transport.modelType)")
+        if !mhdModelsToUse.isEmpty {
+            print("  MHD models: \(mhdModelsToUse.count) enabled")
+        }
     }
 
     /// Run the simulation
