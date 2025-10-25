@@ -65,6 +65,21 @@ extension CoreProfiles {
             poloidalFlux: tuple.3.value
         )
     }
+
+    /// Clamp electron density to a minimum value (useful for solver projections)
+    ///
+    /// - Parameter minimum: Minimum allowed density [m^-3]
+    /// - Returns: New CoreProfiles instance with clamped density
+    public func withElectronDensityClamped(minimum: Float = 1e18) -> CoreProfiles {
+        let clampedDensity = maximum(electronDensity.value, MLXArray(minimum))
+
+        return CoreProfiles(
+            ionTemperature: ionTemperature,
+            electronTemperature: electronTemperature,
+            electronDensity: EvaluatedArray(evaluating: clampedDensity),
+            poloidalFlux: poloidalFlux
+        )
+    }
 }
 
 // MARK: - Helper Functions

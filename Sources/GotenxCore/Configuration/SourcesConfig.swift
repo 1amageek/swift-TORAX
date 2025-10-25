@@ -204,6 +204,14 @@ extension SourcesConfig {
     public func toSourceParams() -> [String: SourceParameters] {
         var params: [String: SourceParameters] = [:]
 
+        // Add "composite" entry for CompositeSourceModel
+        // (CompositeSourceModel doesn't use params, but orchestrator requires it)
+        params["composite"] = SourceParameters(
+            modelType: "composite",
+            params: [:],
+            timeDependent: false
+        )
+
         if fusionPower, let fusionConfig = fusionConfig {
             params["fusion"] = SourceParameters(
                 modelType: "fusion",

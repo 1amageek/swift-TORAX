@@ -10,6 +10,7 @@ import Foundation
 /// - Source parameters
 /// - Transport coefficients
 /// - MHD model parameters
+/// - Initial profile shape
 public struct DynamicConfig: Codable, Sendable, Equatable {
     /// Boundary conditions (can be time-dependent)
     public let boundaries: BoundaryConfig
@@ -29,13 +30,17 @@ public struct DynamicConfig: Codable, Sendable, Equatable {
     /// Restart configuration
     public let restart: RestartConfig
 
+    /// Initial profile configuration
+    public let initialProfile: InitialProfileConfig
+
     public init(
         boundaries: BoundaryConfig,
         transport: TransportConfig,
         sources: SourcesConfig = .default,
         pedestal: PedestalConfig? = nil,
         mhd: MHDConfig = .default,
-        restart: RestartConfig = .default
+        restart: RestartConfig = .default,
+        initialProfile: InitialProfileConfig = .default
     ) {
         self.boundaries = boundaries
         self.transport = transport
@@ -43,6 +48,7 @@ public struct DynamicConfig: Codable, Sendable, Equatable {
         self.pedestal = pedestal
         self.mhd = mhd
         self.restart = restart
+        self.initialProfile = initialProfile
     }
 
     /// Convenience initializer with default transport
@@ -51,7 +57,8 @@ public struct DynamicConfig: Codable, Sendable, Equatable {
         sources: SourcesConfig = .default,
         pedestal: PedestalConfig? = nil,
         mhd: MHDConfig = .default,
-        restart: RestartConfig = .default
+        restart: RestartConfig = .default,
+        initialProfile: InitialProfileConfig = .default
     ) {
         self.boundaries = boundaries
         self.transport = TransportConfig(modelType: .constant)
@@ -59,6 +66,7 @@ public struct DynamicConfig: Codable, Sendable, Equatable {
         self.pedestal = pedestal
         self.mhd = mhd
         self.restart = restart
+        self.initialProfile = initialProfile
     }
 }
 
@@ -90,31 +98,29 @@ extension DynamicConfig {
         )
     }
 
-    /// Generate default profile conditions from boundary values
+    /// Generate profile conditions from boundary values and initial profile configuration
     ///
-    /// Creates parabolic profiles assuming:
-    /// - Core temperature is 10× edge temperature (typical tokamak profile)
-    /// - Core density is 3× edge density (flatter density profile)
-    /// - Current density is uniform (placeholder)
+    /// Creates parabolic profiles using configurable ratios and exponents.
+    /// This replaces hardcoded values with user-configurable settings.
     ///
     /// **Units**: eV for temperature, m^-3 for density (no conversion)
     /// This maintains consistency with CoreProfiles and BoundaryConditions.
     func toProfileConditions() -> ProfileConditions {
         ProfileConditions(
             ionTemperature: .parabolic(
-                peak: boundaries.ionTemperature * 10.0,  // eV, core ~10× edge
+                peak: boundaries.ionTemperature * initialProfile.temperaturePeakRatio,
                 edge: boundaries.ionTemperature,
-                exponent: 2.0
+                exponent: initialProfile.temperatureExponent
             ),
             electronTemperature: .parabolic(
-                peak: boundaries.electronTemperature * 10.0,
+                peak: boundaries.electronTemperature * initialProfile.temperaturePeakRatio,
                 edge: boundaries.electronTemperature,
-                exponent: 2.0
+                exponent: initialProfile.temperatureExponent
             ),
             electronDensity: .parabolic(
-                peak: boundaries.density * 3.0,  // m^-3, core ~3× edge
+                peak: boundaries.density * initialProfile.densityPeakRatio,
                 edge: boundaries.density,
-                exponent: 1.5  // Flatter density profile
+                exponent: initialProfile.densityExponent
             ),
             currentDensity: .constant(1.0)  // Placeholder: 1 MA/m^2
         )

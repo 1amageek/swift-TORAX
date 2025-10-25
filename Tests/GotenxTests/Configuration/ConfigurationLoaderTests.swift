@@ -40,7 +40,14 @@ struct ConfigurationLoaderTests {
                         electronTemperature: 120.0,
                         density: 2e19
                     ),
-                    transport: TransportConfig(modelType: .constant)
+                    transport: TransportConfig(
+                        modelType: .constant,
+                        parameters: [
+                            "chi_ion": 0.01,
+                            "chi_electron": 0.01,
+                            "particle_diffusivity": 0.005
+                        ]
+                    )
                 )
             ),
             time: TimeConfiguration(
@@ -108,7 +115,14 @@ struct ConfigurationLoaderTests {
                         electronTemperature: 150.0,
                         density: 1.5e19
                     ),
-                    transport: TransportConfig(modelType: .constant)
+                    transport: TransportConfig(
+                        modelType: .constant,
+                        parameters: [
+                            "chi_ion": 0.01,
+                            "chi_electron": 0.01,
+                            "particle_diffusivity": 0.005
+                        ]
+                    )
                 )
             ),
             time: TimeConfiguration(
@@ -161,7 +175,14 @@ struct ConfigurationLoaderTests {
                         electronTemperature: 200.0,
                         density: 3e19
                     ),
-                    transport: TransportConfig(modelType: .constant)
+                    transport: TransportConfig(
+                        modelType: .constant,
+                        parameters: [
+                            "chi_ion": 0.01,
+                            "chi_electron": 0.01,
+                            "particle_diffusivity": 0.005
+                        ]
+                    )
                 )
             ),
             time: TimeConfiguration(
@@ -220,7 +241,14 @@ struct ConfigurationLoaderTests {
                         electronTemperature: 100.0,
                         density: 1e19
                     ),
-                    transport: TransportConfig(modelType: .constant)
+                    transport: TransportConfig(
+                        modelType: .constant,
+                        parameters: [
+                            "chi_ion": 0.01,
+                            "chi_electron": 0.01,
+                            "particle_diffusivity": 0.005
+                        ]
+                    )
                 )
             ),
             time: TimeConfiguration(
@@ -273,7 +301,14 @@ struct ConfigurationLoaderTests {
                         electronTemperature: 100.0,
                         density: 1e19
                     ),
-                    transport: TransportConfig(modelType: .constant)
+                    transport: TransportConfig(
+                        modelType: .constant,
+                        parameters: [
+                            "chi_ion": 0.01,
+                            "chi_electron": 0.01,
+                            "particle_diffusivity": 0.005
+                        ]
+                    )
                 )
             ),
             time: TimeConfiguration(

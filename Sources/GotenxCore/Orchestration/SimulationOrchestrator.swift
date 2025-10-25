@@ -152,11 +152,22 @@ public actor SimulationOrchestrator {
         }
 
         while state.time < endTime {
+            // 🐛 DEBUG: Loop iteration
+            if state.step % 10 == 0 || state.step < 5 {
+                print("[DEBUG] Loop iteration: step=\(state.step), time=\(state.time)s / \(endTime)s")
+            }
+
             // Check for task cancellation
             try Task.checkCancellation()
 
             // Check for pause state
             await checkPauseState()
+
+            // Yield control periodically to allow getProgress() and other tasks to run
+            // This prevents actor starvation when the simulation loop is running fast
+            if state.step % 10 == 0 {
+                await Task.yield()
+            }
 
             let stepStartTime = Date()
 
@@ -192,6 +203,12 @@ public actor SimulationOrchestrator {
             timeSeries.append(captureTimePoint())
         }
 
+        // 🐛 DEBUG: Log timeSeries capture
+        print("[DEBUG-Orchestrator] Simulation complete: \(timeSeries.count) time points captured")
+        if !timeSeries.isEmpty {
+            print("[DEBUG-Orchestrator] Time range: [\(timeSeries.first!.time)s, \(timeSeries.last!.time)s]")
+        }
+
         // Update final statistics
         let wallTime = Float(Date().timeIntervalSince(startWallTime))
         var finalStats = state.statistics
@@ -213,12 +230,25 @@ public actor SimulationOrchestrator {
     public func getProgress() async -> ProgressInfo {
         let includeProfiles = samplingConfig.enableLivePlotting
 
+        // 🐛 DEBUG: Log when getProgress() is called
+        print("[DEBUG-getProgress] Called: time=\(state.time)s, step=\(state.step), includeProfiles=\(includeProfiles)")
+
+        // Convert profiles if needed
+        let serializedProfiles: SerializableProfiles?
+        if includeProfiles {
+            print("[DEBUG-getProgress] Converting state.profiles to SerializableProfiles...")
+            serializedProfiles = state.profiles.toSerializable()
+            print("[DEBUG-getProgress] Conversion complete, returning ProgressInfo with profiles")
+        } else {
+            serializedProfiles = nil
+        }
+
         return ProgressInfo(
             currentTime: state.time,
             totalSteps: state.statistics.totalSteps,
             lastDt: state.dt,
             converged: state.statistics.converged,
-            profiles: includeProfiles ? state.profiles.toSerializable() : nil,
+            profiles: serializedProfiles,
             derived: includeProfiles ? state.derived : nil
         )
     }
@@ -378,6 +408,11 @@ public actor SimulationOrchestrator {
 
     /// Perform single timestep
     private func performStep(dynamicParams: DynamicRuntimeParams) async throws {
+        // 🐛 DEBUG: performStep start
+        if state.step < 5 {
+            print("[DEBUG] performStep START: step=\(state.step), time=\(state.time)s")
+        }
+
         // Construct geometry from mesh configuration
         let geometry = createGeometry(from: staticParams.mesh)
 
@@ -394,9 +429,16 @@ public actor SimulationOrchestrator {
                 transportCoeffs: transportCoeffs,
                 dr: staticParams.mesh.dr
             )
+
+            // 🐛 DEBUG: Adaptive dt
+            if state.step < 5 {
+                print("[DEBUG] Adaptive dt=\(dt)s")
+            }
         } else {
-            // First step: use fixed small timestep
-            dt = 1e-5
+            // First step: use configured timestep with safety lower bound
+            // ✅ FIXED: Use dynamicParams.dt instead of hardcoded value
+            dt = max(dynamicParams.dt, 1e-5)  // Enforce minimum for numerical stability
+            print("[DEBUG] First step: dt=\(dt)s (configured: \(dynamicParams.dt)s)")
         }
 
         // Check for MHD events (sawteeth, NTMs, etc.)
@@ -510,6 +552,11 @@ public actor SimulationOrchestrator {
         var finalResult: SolverResult? = nil
 
         while attempt <= maxSolverRetries {
+            // 🐛 DEBUG: solver.solve() call
+            if state.step < 5 {
+                print("[DEBUG] Calling solver.solve(): step=\(state.step), dt=\(dtAttempt)s, attempt=\(attempt)")
+            }
+
             let result = solver.solve(
                 dt: dtAttempt,
                 staticParams: staticParams,
@@ -522,6 +569,11 @@ public actor SimulationOrchestrator {
                 coreProfilesTplusDt: state.profiles,
                 coeffsCallback: coeffsCallback
             )
+
+            // 🐛 DEBUG: solver.solve() returned
+            if state.step < 5 {
+                print("[DEBUG] solver.solve() returned: converged=\(result.converged), iterations=\(result.iterations), residual=\(result.residualNorm)")
+            }
 
             accumulatedIterations += result.iterations
             worstResidual = max(worstResidual, result.residualNorm)
@@ -584,6 +636,11 @@ public actor SimulationOrchestrator {
             sources: sourceTerms,
             geometry: geometry
         )
+
+        // 🐛 DEBUG: state updated
+        if state.step < 5 || state.step % 10 == 0 {
+            print("[DEBUG] performStep END: step=\(state.step), time=\(state.time)s, dt=\(state.dt)s")
+        }
 
         // Apply conservation enforcement if enabled
         if let enforcer = conservationEnforcer, enforcer.shouldEnforce(step: state.step) {
@@ -722,9 +779,13 @@ public actor SimulationOrchestrator {
     ///
     /// - Returns: TimePoint with current state data
     private func captureTimePoint() -> TimePoint {
-        TimePoint(
+        print("[DEBUG-captureTimePoint] Capturing TimePoint at t=\(state.time)s, step=\(state.step)")
+        let serialized = state.profiles.toSerializable()
+        print("[DEBUG-captureTimePoint] TimePoint created for timeSeries")
+
+        return TimePoint(
             time: state.time,
-            profiles: state.profiles.toSerializable(),
+            profiles: serialized,
             derived: state.derived,
             diagnostics: state.diagnostics
         )

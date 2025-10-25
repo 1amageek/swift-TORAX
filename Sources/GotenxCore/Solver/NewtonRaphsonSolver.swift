@@ -60,17 +60,61 @@ public struct NewtonRaphsonSolver: PDESolver {
         coreProfilesTplusDt: CoreProfiles,
         coeffsCallback: @escaping CoeffsCallback
     ) -> SolverResult {
+        // 🐛 DEBUG: Check initial profiles for inf/nan
+        let ti_init = coreProfilesTplusDt.ionTemperature.value
+        let te_init = coreProfilesTplusDt.electronTemperature.value
+        let ne_init = coreProfilesTplusDt.electronDensity.value
+        let psi_init = coreProfilesTplusDt.poloidalFlux.value
+
+        // Check for inf/nan in initial profiles
+        let ti_min = ti_init.min(keepDims: false).item(Float.self)
+        let ti_max = ti_init.max(keepDims: false).item(Float.self)
+        let ne_min = ne_init.min(keepDims: false).item(Float.self)
+        let ne_max = ne_init.max(keepDims: false).item(Float.self)
+
+        print("[DEBUG-NR-INIT] Initial profiles:")
+        print("[DEBUG-NR-INIT]   Ti: min=\(ti_min), max=\(ti_max)")
+        print("[DEBUG-NR-INIT]   ne: min=\(ne_min), max=\(ne_max)")
+
+        if !ti_min.isFinite || !ti_max.isFinite || !ne_min.isFinite || !ne_max.isFinite {
+            print("[DEBUG-NR-INIT] ❌ Initial profiles contain inf/nan!")
+        }
+
         // Flatten initial guess
         let xFlat = try! FlattenedState(profiles: coreProfilesTplusDt)
         let xOldFlat = try! FlattenedState(profiles: CoreProfiles.fromTuple(xOld))
         let layout = xFlat.layout
 
+        // 🐛 DEBUG: Check flattened state
+        let xFlat_min = xFlat.values.value.min(keepDims: false).item(Float.self)
+        let xFlat_max = xFlat.values.value.max(keepDims: false).item(Float.self)
+        print("[DEBUG-NR-INIT] Flattened state: min=\(xFlat_min), max=\(xFlat_max)")
+        if !xFlat_min.isFinite || !xFlat_max.isFinite {
+            print("[DEBUG-NR-INIT] ❌ Flattened state contains inf/nan!")
+        }
+
         // GPU Variable Scaling: Create reference state for normalization
         // Uses absolute values to handle both positive and negative values
         let referenceState = xFlat.asScalingReference(minScale: 1e-10)
 
+        // 🐛 DEBUG: Check referenceState for inf/nan
+        let ref_min = referenceState.values.value.min(keepDims: false).item(Float.self)
+        let ref_max = referenceState.values.value.max(keepDims: false).item(Float.self)
+        print("[DEBUG-NR-SCALE] referenceState: min=\(ref_min), max=\(ref_max)")
+        if !ref_min.isFinite || !ref_max.isFinite {
+            print("[DEBUG-NR-SCALE] ❌ referenceState contains inf/nan!")
+        }
+
         // Scale initial state to O(1)
         var xScaled = xFlat.scaled(by: referenceState)
+
+        // 🐛 DEBUG: Check xScaled for inf/nan
+        let xScaled_min = xScaled.values.value.min(keepDims: false).item(Float.self)
+        let xScaled_max = xScaled.values.value.max(keepDims: false).item(Float.self)
+        print("[DEBUG-NR-SCALE] xScaled: min=\(xScaled_min), max=\(xScaled_max)")
+        if !xScaled_min.isFinite || !xScaled_max.isFinite {
+            print("[DEBUG-NR-SCALE] ❌ xScaled contains inf/nan!")
+        }
 
         // Get coefficients at old time
         let coeffsOld = coeffsCallback(coreProfilesT, geometryT)
@@ -83,7 +127,10 @@ public struct NewtonRaphsonSolver: PDESolver {
         let residualFnPhysical: (MLXArray) -> MLXArray = { xNewFlatPhysical in
             // Unflatten to CoreProfiles (physical units)
             let xNewState = FlattenedState(values: EvaluatedArray(evaluating: xNewFlatPhysical), layout: layout)
-            let profilesNew = xNewState.toCoreProfiles()
+            // Clamp density to maintain physical feasibility during iteration
+            let profilesNew = xNewState
+                .toCoreProfiles()
+                .withElectronDensityClamped()
 
             // Get coefficients at new time (via callback)
             let coeffsNew = coeffsCallback(profilesNew, geometryTplusDt)
@@ -128,27 +175,65 @@ public struct NewtonRaphsonSolver: PDESolver {
         for iter in 0..<maxIterations {
             iterations = iter + 1
 
+            // 🐛 DEBUG: Iteration start
+            if iter < 3 {
+                print("[DEBUG-NR] ===== Iteration \(iter) start =====")
+            }
+
             // Compute residual in scaled space
             let residualScaled = residualFnScaled(xScaled.values.value)
             eval(residualScaled)
 
+            // 🐛 DEBUG: Check residualScaled for inf/nan
+            if iter < 3 {
+                let res_min = residualScaled.min(keepDims: false).item(Float.self)
+                let res_max = residualScaled.max(keepDims: false).item(Float.self)
+                print("[DEBUG-NR] iter=\(iter): residualScaled: min=\(res_min), max=\(res_max)")
+            }
+
             // Compute residual norm (scaled space)
             residualNorm = sqrt((residualScaled * residualScaled).mean()).item(Float.self)
+
+            // 🐛 DEBUG: Residual norm
+            if iter < 3 {
+                print("[DEBUG-NR] iter=\(iter): residualNorm=\(String(format: "%.2e", residualNorm)), tolerance=\(String(format: "%.2e", tolerance))")
+            }
 
             // Check convergence
             if residualNorm < tolerance {
                 converged = true
+                if iter < 3 {
+                    print("[DEBUG-NR] iter=\(iter): CONVERGED")
+                }
                 break
             }
 
             // Compute Jacobian via vjp() in scaled space (efficient!)
+            // 🐛 DEBUG: Before Jacobian computation
+            if iter < 3 {
+                print("[DEBUG-NR] iter=\(iter): computing Jacobian via vjp()")
+            }
             let jacobianScaled = computeJacobianViaVJP(residualFnScaled, xScaled.values.value)
             eval(jacobianScaled)
+            // 🐛 DEBUG: After Jacobian computation
+            if iter < 3 {
+                print("[DEBUG-NR] iter=\(iter): Jacobian computed, shape=\(jacobianScaled.shape)")
+            }
 
             // Solve linear system: J * Δx = -R using hybrid solver
             let deltaScaled: MLXArray
             do {
+                // 🐛 DEBUG: Before linearSolver.solve()
+                if iter < 3 {
+                    print("[DEBUG-NR] iter=\(iter): calling linearSolver.solve()")
+                }
+
                 deltaScaled = try linearSolver.solve(jacobianScaled, -residualScaled)
+
+                // 🐛 DEBUG: After linearSolver.solve()
+                if iter < 3 {
+                    print("[DEBUG-NR] iter=\(iter): linearSolver.solve() returned")
+                }
             } catch {
                 print("[NewtonRaphsonSolver] Linear solver failed: \(error)")
                 // Return partial solution (unscale before returning)
@@ -165,9 +250,23 @@ public struct NewtonRaphsonSolver: PDESolver {
                     ]
                 )
             }
+
+            // 🐛 DEBUG: Before eval(deltaScaled)
+            if iter < 3 {
+                print("[DEBUG-NR] iter=\(iter): calling eval(deltaScaled)")
+            }
             eval(deltaScaled)
+            // 🐛 DEBUG: After eval(deltaScaled)
+            if iter < 3 {
+                print("[DEBUG-NR] iter=\(iter): eval(deltaScaled) done")
+            }
 
             // Update solution with line search (in scaled space)
+            // 🐛 DEBUG: Before lineSearch
+            if iter < 3 {
+                print("[DEBUG-NR] iter=\(iter): calling lineSearch()")
+            }
+
             let alpha = lineSearch(
                 residualFn: residualFnScaled,
                 x: xScaled.values.value,
@@ -176,8 +275,18 @@ public struct NewtonRaphsonSolver: PDESolver {
                 maxAlpha: 1.0
             )
 
+            // 🐛 DEBUG: After lineSearch
+            if iter < 3 {
+                print("[DEBUG-NR] iter=\(iter): lineSearch() returned, alpha=\(alpha)")
+            }
+
             let xNewScaled = xScaled.values.value + alpha * deltaScaled
             xScaled = FlattenedState(values: EvaluatedArray(evaluating: xNewScaled), layout: layout)
+
+            // 🐛 DEBUG: End of iteration
+            if iter < 3 {
+                print("[DEBUG-NR] iter=\(iter): iteration complete")
+            }
         }
 
         // Unscale final solution to physical units

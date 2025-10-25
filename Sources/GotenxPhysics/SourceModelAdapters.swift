@@ -155,10 +155,12 @@ public struct IonElectronExchangeSource: SourceModel {
         )
 
         // IonElectronExchange.applyToSources now takes geometry parameter
+        let safeProfiles = profiles.withElectronDensityClamped()
+
         do {
             let sourceTerms = try model.applyToSources(
                 emptySourceTerms,
-                profiles: profiles,
+                profiles: safeProfiles,
                 geometry: geometry
             )
 
@@ -203,10 +205,12 @@ public struct BremsstrahlungSource: SourceModel {
         )
 
         // Bremsstrahlung.applyToSources now takes geometry parameter
+        let safeProfiles = profiles.withElectronDensityClamped()
+
         do {
             let sourceTerms = try model.applyToSources(
                 emptySourceTerms,
-                profiles: profiles,
+                profiles: safeProfiles,
                 geometry: geometry
             )
 

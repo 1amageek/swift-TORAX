@@ -116,6 +116,7 @@ extension SimulationConfiguration {
         public var pedestal: PedestalConfig? = nil
         public var mhd: MHDConfig = .default
         public var restart: RestartConfig = .default
+        public var initialProfile: InitialProfileConfig = .default
 
         public func build() -> DynamicConfig {
             DynamicConfig(
@@ -124,7 +125,8 @@ extension SimulationConfiguration {
                 sources: sources,
                 pedestal: pedestal,
                 mhd: mhd,
-                restart: restart
+                restart: restart,
+                initialProfile: initialProfile
             )
         }
     }

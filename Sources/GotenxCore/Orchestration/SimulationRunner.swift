@@ -52,10 +52,13 @@ public actor SimulationRunner: SimulationRunnable {
         // Create static runtime parameters
         let staticParams = try config.runtime.static.toRuntimeParams()
 
-        // Generate initial profiles from boundary conditions
+        // Get ProfileConditions from DynamicConfig
+        let profileConditions = config.runtime.dynamic.toProfileConditions()
+
+        // Generate initial profiles using ProfileConditions
         let initialProfiles = try generateInitialProfiles(
             mesh: config.runtime.static.mesh,
-            boundaries: config.runtime.dynamic.boundaries
+            profileConditions: profileConditions
         )
 
         // Convert to serializable format
@@ -75,7 +78,8 @@ public actor SimulationRunner: SimulationRunnable {
             initialProfiles: serializableProfiles,
             transport: transportModel,
             sources: sourceModels,
-            mhdModels: mhdModelsToUse
+            mhdModels: mhdModelsToUse,
+            samplingConfig: .realTimePlotting  // ✅ Enable live plotting for real-time chart updates
         )
 
         print("✓ Simulation initialized")
@@ -115,19 +119,43 @@ public actor SimulationRunner: SimulationRunnable {
         // Start background task for progress monitoring
         let progressTask: Task<Void, Never>? = if let callback = progressCallback {
             Task {
+                print("[DEBUG] progressTask started")
+                var iterationCount = 0
                 while !Task.isCancelled {
+                    iterationCount += 1
+
+                    // 🐛 DEBUG: Before getProgress()
+                    if iterationCount <= 5 || iterationCount % 10 == 0 {
+                        print("[DEBUG] progressTask iteration \(iterationCount): calling getProgress()")
+                    }
+
                     let progress = await orchestrator.getProgress()
+
+                    // 🐛 DEBUG: After getProgress()
+                    if iterationCount <= 5 || iterationCount % 10 == 0 {
+                        print("[DEBUG] progressTask: got progress, time=\(progress.currentTime)s")
+                    }
+
                     let fraction = progress.currentTime / endTime
                     callback(fraction, progress)
 
                     // Update every 0.1 seconds
                     try? await Task.sleep(for: .milliseconds(100))
 
-                    // Stop when simulation completes
+                    // Stop when simulation completes OR if no progress is being made
+                    // (prevents infinite loop on errors)
                     if progress.currentTime >= endTime {
+                        print("[DEBUG] progressTask: simulation complete, exiting")
+                        break
+                    }
+
+                    // ✅ NEW: Stop if simulation has stalled (likely due to error)
+                    if iterationCount > 50 && progress.totalSteps == 0 {
+                        print("[DEBUG] progressTask: simulation stalled (no progress after 50 iterations), exiting")
                         break
                     }
                 }
+                print("[DEBUG] progressTask ended")
             }
         } else {
             nil
@@ -194,47 +222,47 @@ public actor SimulationRunner: SimulationRunnable {
         await orchestrator?.getIsPaused() ?? false
     }
 
-    /// Generate initial profiles from boundary conditions
+    /// Generate initial profiles from ProfileConditions
+    ///
+    /// Uses ProfileConditions.evaluate(at:) to generate initial plasma profiles.
+    /// This replaces the previous hardcoded profile generation with configuration-driven approach.
+    ///
+    /// - Parameters:
+    ///   - mesh: Mesh configuration
+    ///   - profileConditions: Profile conditions from DynamicConfig
+    /// - Returns: Initial CoreProfiles
     private func generateInitialProfiles(
         mesh: MeshConfig,
-        boundaries: BoundaryConfig
+        profileConditions: ProfileConditions
     ) throws -> CoreProfiles {
         let nCells = mesh.nCells
 
-        // Generate parabolic profiles from boundary values
-        // Ti(r) = Ti_edge + (Ti_core - Ti_edge) * (1 - (r/a)^2)^2
+        // Generate normalized radial coordinate [0, 1]
         var rNorm = [Float](repeating: 0.0, count: nCells)
         for i in 0..<nCells {
             rNorm[i] = Float(i) / Float(nCells - 1)
         }
 
-        // Temperature profiles [eV]
-        let tiEdge = boundaries.ionTemperature
-        let tiCore = tiEdge * 10.0  // Core ~10× edge
+        // Evaluate profiles using ProfileConditions
         var ti = [Float](repeating: 0.0, count: nCells)
-        for i in 0..<nCells {
-            let factor = pow(1.0 - rNorm[i] * rNorm[i], 2.0)
-            ti[i] = tiEdge + (tiCore - tiEdge) * factor
-        }
-
-        let teEdge = boundaries.electronTemperature
-        let teCore = teEdge * 10.0
         var te = [Float](repeating: 0.0, count: nCells)
-        for i in 0..<nCells {
-            let factor = pow(1.0 - rNorm[i] * rNorm[i], 2.0)
-            te[i] = teEdge + (teCore - teEdge) * factor
-        }
-
-        // Density profile [m^-3]
-        let neEdge = boundaries.density
-        let neCore = neEdge * 3.0  // Core ~3× edge
         var ne = [Float](repeating: 0.0, count: nCells)
+
         for i in 0..<nCells {
-            let factor = pow(1.0 - rNorm[i] * rNorm[i], 1.5)
-            ne[i] = neEdge + (neCore - neEdge) * factor
+            ti[i] = profileConditions.ionTemperature.evaluate(at: rNorm[i])
+            te[i] = profileConditions.electronTemperature.evaluate(at: rNorm[i])
+            ne[i] = profileConditions.electronDensity.evaluate(at: rNorm[i])
         }
 
-        // Poloidal flux (initially zero)
+        // ✅ Apply density floor to prevent negative/zero densities during solver iteration
+        // (consistent with Block1DCoeffsBuilder's ne_floor = 1e18)
+        let ne_floor: Float = 1e18
+        for i in 0..<nCells {
+            ne[i] = max(ne[i], ne_floor)
+        }
+
+        // Poloidal flux: initially zero (physical initial condition)
+        // Note: In Phase 2, this could be made configurable via ProfileConditions
         let psi = [Float](repeating: 0.0, count: nCells)
 
         // Create evaluated arrays

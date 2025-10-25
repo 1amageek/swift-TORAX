@@ -101,7 +101,8 @@ struct UnitConversionTests {
 
         let dynamicConfig = DynamicConfig(
             boundaries: boundaries,
-            transport: TransportConfig(modelType: .constant)
+            transport: TransportConfig(modelType: .constant),
+            initialProfile: .realistic  // Use 10× temperature ratio
         )
 
         let profileConditions = dynamicConfig.toProfileConditions()
@@ -127,7 +128,8 @@ struct UnitConversionTests {
 
         let dynamicConfig = DynamicConfig(
             boundaries: boundaries,
-            transport: TransportConfig(modelType: .constant)
+            transport: TransportConfig(modelType: .constant),
+            initialProfile: .realistic  // Use 3× density ratio
         )
 
         let profileConditions = dynamicConfig.toProfileConditions()

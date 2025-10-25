@@ -589,6 +589,44 @@ public protocol SimulationRunnable: Actor {
     /// Check if simulation is paused
     func isPaused() async -> Bool
 }
+
+// MARK: - Convenience Methods
+
+extension SimulationRunnable {
+    /// Initialize without MHD models (convenience)
+    public func initialize(
+        transportModel: any TransportModel,
+        sourceModels: [any SourceModel]
+    ) async throws {
+        try await initialize(
+            transportModel: transportModel,
+            sourceModels: sourceModels,
+            mhdModels: nil
+        )
+    }
+
+    /// Run without progress callback (convenience)
+    public func run() async throws -> SimulationResult {
+        try await run(progressCallback: nil)
+    }
+}
+```
+
+**Note**: Swift protocols don't support default arguments, so convenience methods are provided via protocol extension. This allows both concise and explicit calling styles:
+
+```swift
+// ✅ Concise (using convenience method)
+try await runner.initialize(
+    transportModel: transport,
+    sourceModels: sources
+)
+
+// ✅ Explicit (with MHD models)
+try await runner.initialize(
+    transportModel: transport,
+    sourceModels: sources,
+    mhdModels: mhdModels
+)
 ```
 
 ### SimulationRunner Conformance

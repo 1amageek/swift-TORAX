@@ -62,7 +62,14 @@ public struct DefaultConfigurationProvider: ConfigurationProvider {
                         electronTemperature: 100.0,
                         density: 1e19
                     ),
-                    transport: TransportConfig(modelType: .constant),
+                    transport: TransportConfig(
+                        modelType: .constant,
+                        parameters: [
+                            "chi_ion": 0.01,        // CFL-safe for typical mesh/timestep
+                            "chi_electron": 0.01,   // CFL-safe for typical mesh/timestep
+                            "particle_diffusivity": 0.005
+                        ]
+                    ),
                     sources: .default,
                     pedestal: nil
                 )

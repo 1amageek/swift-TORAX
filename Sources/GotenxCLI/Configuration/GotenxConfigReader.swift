@@ -74,12 +74,19 @@ public actor GotenxConfigReader {
 
     /// Fetch complete SimulationConfiguration
     public func fetchConfiguration() async throws -> SimulationConfiguration {
+        // Fetch basic configuration first
         let runtime = try await fetchRuntimeConfig()
         let time = try await fetchTimeConfig()
         let output = try await fetchOutputConfig()
 
-        let config = SimulationConfiguration(
+        // Apply CFL-aware defaults to transport if needed
+        let runtimeWithDefaults = try applyTransportDefaults(
             runtime: runtime,
+            time: time
+        )
+
+        let config = SimulationConfiguration(
+            runtime: runtimeWithDefaults,
             time: time,
             output: output
         )
@@ -88,6 +95,105 @@ public actor GotenxConfigReader {
         try ConfigurationValidator.validate(config)
 
         return config
+    }
+
+    /// Apply CFL-aware defaults to transport configuration
+    ///
+    /// This method computes safe default values for transport parameters based on
+    /// mesh resolution and timestep to ensure CFL stability.
+    ///
+    /// - Parameters:
+    ///   - runtime: Runtime configuration
+    ///   - time: Time configuration
+    /// - Returns: Runtime configuration with defaults applied
+    private func applyTransportDefaults(
+        runtime: RuntimeConfiguration,
+        time: TimeConfiguration
+    ) throws -> RuntimeConfiguration {
+        let transport = runtime.dynamic.transport
+
+        // If parameters are already specified, use them as-is
+        if !transport.parameters.isEmpty {
+            return runtime
+        }
+
+        // Compute CFL-safe defaults
+        let defaults = computeCFLSafeDefaults(
+            modelType: transport.modelType,
+            mesh: runtime.static.mesh,
+            time: time
+        )
+
+        // Create new transport config with defaults
+        let transportWithDefaults = TransportConfig(
+            modelType: transport.modelType,
+            parameters: defaults
+        )
+
+        // Rebuild runtime configuration
+        let dynamicWithDefaults = DynamicConfig(
+            boundaries: runtime.dynamic.boundaries,
+            transport: transportWithDefaults,
+            sources: runtime.dynamic.sources,
+            pedestal: runtime.dynamic.pedestal,
+            mhd: runtime.dynamic.mhd,
+            restart: runtime.dynamic.restart,
+            initialProfile: runtime.dynamic.initialProfile
+        )
+
+        return RuntimeConfiguration(
+            static: runtime.static,
+            dynamic: dynamicWithDefaults
+        )
+    }
+
+    /// Compute CFL-safe transport parameter defaults
+    ///
+    /// Design constraint: CFL = χ * Δt / Δx² < cflLimit
+    ///   => χ_max = cflLimit * Δx² / Δt
+    ///
+    /// - Parameters:
+    ///   - modelType: Transport model type
+    ///   - mesh: Mesh configuration (for Δx)
+    ///   - time: Time configuration (for Δt)
+    ///   - cflLimit: CFL stability limit (default: 0.5)
+    /// - Returns: CFL-safe default parameters
+    private func computeCFLSafeDefaults(
+        modelType: TransportModelType,
+        mesh: MeshConfig,
+        time: TimeConfiguration,
+        cflLimit: Float = 0.5
+    ) -> [String: Float] {
+        // Calculate cell spacing
+        let dx = mesh.minorRadius / Float(mesh.nCells)
+        let dt = time.initialDt
+
+        // CFL-safe maximum diffusivity
+        let chiMax = cflLimit * dx * dx / dt
+
+        switch modelType {
+        case .constant:
+            // Conservative defaults: Use 90% of CFL limit for safety margin
+            let safetyFactor: Float = 0.9
+            return [
+                "chi_ion": chiMax * safetyFactor,
+                "chi_electron": chiMax * safetyFactor,
+                "particle_diffusivity": chiMax * safetyFactor * 0.2  // Typically lower
+            ]
+
+        case .bohmGyrobohm, .qlknn:
+            // Computed by model, no explicit parameters needed
+            return [:]
+
+        case .densityTransition:
+            // Model-specific parameters (not CFL-limited)
+            return [
+                "ri_coefficient": 0.5,
+                "transition_density": 2.5e19,
+                "transition_width": 0.5e19,
+                "ion_mass_number": 2.0
+            ]
+        }
     }
 
     /// Reload configuration by creating a new GotenxConfigReader

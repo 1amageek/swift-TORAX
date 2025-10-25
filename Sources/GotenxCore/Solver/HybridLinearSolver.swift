@@ -67,8 +67,15 @@ public struct HybridLinearSolver: Sendable {
     /// - Returns: Solution x [n]
     /// - Throws: SolverError if solution fails to converge
     public func solve(_ A: MLXArray, _ b: MLXArray, usePreconditioner: Bool = true) throws -> MLXArray {
+        // 🐛 DEBUG: HybridLinearSolver.solve() called
+        print("[DEBUG-HLS] solve() called, matrix shape: \(A.shape)")
+
         // Estimate condition number using power iteration
+        // 🐛 DEBUG: Before estimateConditionNumber
+        print("[DEBUG-HLS] calling estimateConditionNumber()")
         let estimatedCond = estimateConditionNumber(A, maxIter: 20)
+        // 🐛 DEBUG: After estimateConditionNumber
+        print("[DEBUG-HLS] estimateConditionNumber() returned: \(String(format: "%.2e", estimatedCond))")
 
         if estimatedCond < conditionThreshold {
             // Well-conditioned → Try direct solver
@@ -185,9 +192,12 @@ public struct HybridLinearSolver: Sendable {
     private func estimateConditionNumber(_ A: MLXArray, maxIter: Int = 20) -> Float {
         let n = A.shape[0]
 
+        // 🐛 DEBUG: estimateConditionNumber start
+        print("[DEBUG-HLS-COND] estimateConditionNumber start, n=\(n)")
+
         // Estimate ||A|| using power iteration
         var v = MLXArray.ones([n])  // Use ones instead of random for deterministic behavior
-        for _ in 0..<maxIter {
+        for iter in 0..<maxIter {
             v = matmul(A, v)
 
             // CRITICAL: Force evaluation before calling .item()
@@ -196,9 +206,22 @@ public struct HybridLinearSolver: Sendable {
             eval(vnormArray)
             let vnorm = vnormArray.item(Float.self)
 
+            // 🐛 DEBUG: Power iteration progress
+            if iter < 3 || iter % 5 == 0 {
+                print("[DEBUG-HLS-COND] power iter \(iter): vnorm=\(String(format: "%.2e", vnorm))")
+            }
+
             if vnorm < 1e-10 {
+                print("[DEBUG-HLS-COND] Matrix essentially singular, returning 1e15")
                 return 1e15  // Matrix is essentially singular
             }
+
+            // 🐛 DEBUG: Check for NaN/Inf
+            if !vnorm.isFinite {
+                print("[DEBUG-HLS-COND] vnorm is not finite: \(vnorm), returning 1e15")
+                return 1e15
+            }
+
             v = v / vnorm
         }
 

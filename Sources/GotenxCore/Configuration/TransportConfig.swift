@@ -44,6 +44,68 @@ public enum TransportModelType: String, Codable, Sendable, CaseIterable {
     case densityTransition
 }
 
+// MARK: - Parameter Access
+
+extension TransportConfig {
+    /// Get parameter value (returns nil if missing)
+    ///
+    /// Use this when you need to handle missing values explicitly.
+    ///
+    /// - Parameter key: Parameter key (e.g., "chi_ion")
+    /// - Returns: Parameter value or nil if not found
+    ///
+    /// Example:
+    /// ```swift
+    /// if let chiIon = transport.parameter("chi_ion") {
+    ///     print("chi_ion = \(chiIon) m²/s")
+    /// } else {
+    ///     print("chi_ion not specified")
+    /// }
+    /// ```
+    public func parameter(_ key: String) -> Float? {
+        parameters[key]
+    }
+
+    /// Get required parameter (throws if missing)
+    ///
+    /// Use this for parameters that are mandatory for the model.
+    ///
+    /// - Parameter key: Parameter key (e.g., "chi_ion")
+    /// - Returns: Parameter value
+    /// - Throws: ConfigurationError.missingRequired if parameter not found
+    ///
+    /// Example:
+    /// ```swift
+    /// let chiIon = try transport.requireParameter("chi_ion")
+    /// ```
+    public func requireParameter(_ key: String) throws -> Float {
+        guard let value = parameters[key] else {
+            throw ConfigurationError.missingRequired(
+                key: "transport.parameters.\(key) for model \(modelType)"
+            )
+        }
+        return value
+    }
+
+    /// Get parameter with explicit default
+    ///
+    /// Use this when you have a context-independent fallback value.
+    ///
+    /// - Parameters:
+    ///   - key: Parameter key (e.g., "chi_ion")
+    ///   - defaultValue: Fallback value
+    /// - Returns: Parameter value or default
+    ///
+    /// Example:
+    /// ```swift
+    /// // particle_diffusivity is optional for some models
+    /// let particleDiff = transport.parameter("particle_diffusivity", default: 0.0)
+    /// ```
+    public func parameter(_ key: String, default defaultValue: Float) -> Float {
+        parameters[key] ?? defaultValue
+    }
+}
+
 // MARK: - Conversion to Runtime Parameters
 
 extension TransportConfig {
