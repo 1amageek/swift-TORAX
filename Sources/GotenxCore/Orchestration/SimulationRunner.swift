@@ -254,6 +254,14 @@ public actor SimulationRunner: SimulationRunnable {
             ne[i] = profileConditions.electronDensity.evaluate(at: rNorm[i])
         }
 
+        // Phase 1a: Check for missing electron temperature (Sprint 1 robustness)
+        // If Te is zero/missing, use physically sound fallback Te = Ti
+        let te_max = te.max() ?? 0.0
+        if te_max <= 0.0 {
+            print("[INIT-WARNING] Electron temperature missing or zero, using Te = Ti fallback")
+            te = ti
+        }
+
         // ✅ Apply density floor to prevent negative/zero densities during solver iteration
         // (consistent with Block1DCoeffsBuilder's ne_floor = 1e18)
         let ne_floor: Float = 1e18
@@ -273,12 +281,28 @@ public actor SimulationRunner: SimulationRunnable {
             MLXArray(psi)
         ])
 
-        return CoreProfiles(
+        let profiles = CoreProfiles(
             ionTemperature: evaluated[0],
             electronTemperature: evaluated[1],
             electronDensity: evaluated[2],
             poloidalFlux: evaluated[3]
         )
+
+        // Phase 1a: Validate initial profiles (Sprint 1 robustness)
+        // Critical: Ensures no NaN/Inf/negative values enter simulation
+        guard let validatedProfiles = ValidatedProfiles.validateMinimal(profiles) else {
+            fatalError("""
+                [INIT-FAIL] Initial profile validation failed.
+                Diagnostic info:
+                - Ti range: [\(ti.min() ?? Float.nan), \(ti.max() ?? Float.nan)] eV
+                - Te range: [\(te.min() ?? Float.nan), \(te.max() ?? Float.nan)] eV
+                - ne range: [\(ne.min() ?? Float.nan), \(ne.max() ?? Float.nan)] m⁻³
+                Check ProfileConditions in configuration.
+                """)
+        }
+
+        // Convert back to CoreProfiles (validation passed)
+        return validatedProfiles.toCoreProfiles()
     }
 
     /// Adapt timestep based on stability criteria

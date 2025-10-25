@@ -6,8 +6,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 swift-Gotenx is a Swift implementation of Google DeepMind's TORAX (https://github.com/google-deepmind/torax), a differentiable tokamak core transport simulator. It leverages Swift 6.2 and Apple's MLX framework to achieve high-performance fusion plasma simulations optimized for Apple Silicon.
 
-**For detailed architecture information**: See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-
 ### Key Technologies
 
 - **Swift 6.2**: Strict concurrency, value semantics, protocol-oriented design
@@ -16,40 +14,31 @@ swift-Gotenx is a Swift implementation of Google DeepMind's TORAX (https://githu
 - **Swift Configuration**: Type-safe hierarchical configuration management
 - **NetCDF-4**: Compressed output with DEFLATE level 6
 
-### Quick Library Selection Guide
+---
 
-| Operation | Library | Reason |
-|-----------|---------|--------|
-| Array operations on GPU | MLX | Auto-differentiable, GPU-accelerated |
-| Scalar special functions | Swift Numerics | `gamma()`, `erfc()`, Complex numbers |
-| High-precision accumulation | Swift Numerics | `Float.Augmented` for time stepping |
+## 📚 Documentation Structure
 
-**Detailed guidelines**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+All detailed technical documentation is in `docs/` for easier maintenance:
+
+| Topic | Document | Purpose |
+|-------|----------|---------|
+| **Architecture** | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | TORAX concepts, Swift patterns, future extensions |
+| **Unit System** | [docs/UNIT_SYSTEM.md](docs/UNIT_SYSTEM.md) | SI-based units (eV, m⁻³), conversion guidelines |
+| **Configuration** | [docs/CONFIGURATION_SYSTEM.md](docs/CONFIGURATION_SYSTEM.md) | Hierarchical config (CLI, env, JSON) |
+| **Numerical Precision** | [docs/NUMERICAL_PRECISION.md](docs/NUMERICAL_PRECISION.md) | Float32 policy, GPU constraints, stability |
+| **Numerical Robustness** | [docs/NUMERICAL_ROBUSTNESS_DESIGN.md](docs/NUMERICAL_ROBUSTNESS_DESIGN.md) | 🔥 **NaN crash prevention, validation** |
+| **MLX Best Practices** | [docs/MLX_BEST_PRACTICES.md](docs/MLX_BEST_PRACTICES.md) | Lazy evaluation, eval() patterns |
+| **Swift Concurrency** | [docs/SWIFT_CONCURRENCY.md](docs/SWIFT_CONCURRENCY.md) | EvaluatedArray, actor isolation |
+| **Transport Models** | [docs/TRANSPORT_MODELS.md](docs/TRANSPORT_MODELS.md) | Constant, Bohm-GyroBohm, QLKNN |
+| **🔥 FVM Improvements** | [docs/FVM_NUMERICAL_IMPROVEMENTS_PLAN.md](docs/FVM_NUMERICAL_IMPROVEMENTS_PLAN.md) | **PRIORITY**: Power-law scheme, Sauter bootstrap |
+
+**Complete documentation catalog**: [docs/README.md](docs/README.md)
 
 ---
 
-## Documentation Structure
+## ⚠️ Critical Constraints for Development
 
-All detailed technical documentation has been extracted to `docs/` for easier maintenance:
-
-| Topic | Document | Description |
-|-------|----------|-------------|
-| Architecture | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | TORAX concepts, Swift patterns, future extensions |
-| Unit System | [docs/UNIT_SYSTEM.md](docs/UNIT_SYSTEM.md) | SI-based units (eV, m⁻³), conversion guidelines |
-| Configuration | [docs/CONFIGURATION_SYSTEM.md](docs/CONFIGURATION_SYSTEM.md) | Hierarchical config (CLI, env, JSON) |
-| Numerical Precision | [docs/NUMERICAL_PRECISION.md](docs/NUMERICAL_PRECISION.md) | Float32 policy, GPU constraints, stability |
-| MLX Best Practices | [docs/MLX_BEST_PRACTICES.md](docs/MLX_BEST_PRACTICES.md) | Lazy evaluation, eval() patterns |
-| Swift Concurrency | [docs/SWIFT_CONCURRENCY.md](docs/SWIFT_CONCURRENCY.md) | EvaluatedArray, actor isolation |
-| Transport Models | [docs/TRANSPORT_MODELS.md](docs/TRANSPORT_MODELS.md) | Constant, Bohm-GyroBohm, QLKNN |
-| **🔥 FVM Improvements** | [docs/FVM_NUMERICAL_IMPROVEMENTS_PLAN.md](docs/FVM_NUMERICAL_IMPROVEMENTS_PLAN.md) | **PRIORITY**: Power-law scheme, Sauter bootstrap, tolerance config |
-
-**Navigation**: [docs/README.md](docs/README.md)
-
----
-
-## Critical Constraints for Development
-
-### ⚠️ Apple Silicon GPU Limitations
+### Apple Silicon GPU Limitations
 
 **Float64 is NOT supported on Apple Silicon GPUs.** All MLXArray computations MUST use Float32.
 
@@ -65,7 +54,9 @@ let array = MLXArray([1.0, 2.0], dtype: .float32)
 
 **Full details**: [docs/NUMERICAL_PRECISION.md](docs/NUMERICAL_PRECISION.md)
 
-### ⚠️ MLXArray Initialization
+---
+
+### MLXArray Initialization
 
 **CRITICAL**: MLXArray initialization methods differ from standard Swift arrays. Using incorrect initializers will cause compilation errors.
 
@@ -74,13 +65,11 @@ let array = MLXArray([1.0, 2.0], dtype: .float32)
 **❌ WRONG - `repeating:` does NOT exist**:
 ```swift
 let Ti = MLXArray(repeating: 5000.0, [nCells])  // ❌ Compilation error
-let Te = MLXArray(repeating: 5000.0, [nCells])  // ❌ Compilation error
 ```
 
 **✅ CORRECT - Use `MLXArray.full()`**:
 ```swift
 let Ti = MLXArray.full([nCells], values: MLXArray(5000.0))
-let Te = MLXArray.full([nCells], values: MLXArray(Float(5000.0)))
 ```
 
 **❌ WRONG - `linspace` is NOT a standalone function**:
@@ -98,58 +87,32 @@ let psi = MLXArray.linspace(0.0, 1.0, count: nCells)
 ```swift
 // 1. Fill with constant value
 let ones = MLXArray.full([nCells], values: MLXArray(1.0))
-let constants = MLXArray.full([10, 20], values: MLXArray(Float(42.0)))
 
-// 2. Zeros
+// 2. Zeros and ones
 let zeros = MLXArray.zeros([nCells])
-let zerosMatrix = MLXArray.zeros([10, 20])
-
-// 3. Ones
 let ones = MLXArray.ones([nCells])
-let onesMatrix = MLXArray.ones([10, 20])
 
-// 4. Linearly spaced values
-let linspace = MLXArray.linspace(0.0, 1.0, count: 100)  // [0.0, 0.01, 0.02, ..., 1.0]
+// 3. Linearly spaced values
+let linspace = MLXArray.linspace(0.0, 1.0, count: 100)
 
-// 5. From array literal
+// 4. From array literal
 let array = MLXArray([Float(1.0), Float(2.0), Float(3.0)])
-let array2D = MLXArray([[1.0, 2.0], [3.0, 4.0]])
 
-// 6. Scalar value
+// 5. Scalar value
 let scalar = MLXArray(Float(42.0))
-let scalar2 = MLXArray(3.14)
-```
-
-#### Data Type Specifications
-
-```swift
-// Explicit dtype (use .float32 for GPU compatibility)
-let array = MLXArray.zeros([100], dtype: .float32)
-let full = MLXArray.full([50], values: MLXArray(1.0), dtype: .float32)
-
-// ⚠️ Remember: Float64 is NOT supported on Apple Silicon GPUs
-let badArray = MLXArray.zeros([100], dtype: .float64)  // ❌ Will fail at runtime on GPU
-```
-
-#### Creating Arrays Like Another
-
-```swift
-let template = MLXArray.zeros([100])
-
-// Create zeros with same shape
-let zeros = MLXArray.zeros(like: template)
-
-// Create ones with same shape
-let ones = MLXArray.ones(like: template)
 ```
 
 **Key Rules**:
 1. Always use `MLXArray.` static methods for array creation
 2. Use `MLXArray(value)` to wrap scalar values for `values:` parameter
 3. Prefer explicit `Float()` casts to avoid type ambiguity
-4. Use `.float32` dtype for GPU operations (default is usually fine)
+4. Use `.float32` dtype for GPU operations
 
-### ⚠️ MLX Lazy Evaluation
+**Full details**: [docs/MLX_BEST_PRACTICES.md](docs/MLX_BEST_PRACTICES.md)
+
+---
+
+### MLX Lazy Evaluation
 
 **Operations are NOT executed immediately** - they queue until `eval()` is called.
 
@@ -172,7 +135,9 @@ return result
 
 **Full details**: [docs/MLX_BEST_PRACTICES.md](docs/MLX_BEST_PRACTICES.md)
 
-### ⚠️ Swift 6 Concurrency
+---
+
+### Swift 6 Concurrency
 
 MLXArray is NOT Sendable. Use `EvaluatedArray` wrapper for all data crossing actor boundaries:
 
@@ -190,104 +155,10 @@ public struct EvaluatedArray: @unchecked Sendable {
 public struct CoreProfiles: Sendable {
     public let ionTemperature: EvaluatedArray
     public let electronTemperature: EvaluatedArray
-    // ...
 }
 ```
 
 **Full details**: [docs/SWIFT_CONCURRENCY.md](docs/SWIFT_CONCURRENCY.md)
-
-### ⚠️ MLXArray Initialization
-
-**CRITICAL**: MLXArray initialization methods differ from standard Swift arrays. Using incorrect initializers will cause compilation errors.
-
-#### Common Mistakes and Corrections
-
-**❌ WRONG - `repeating:` does NOT exist**:
-```swift
-let Ti = MLXArray(repeating: 5000.0, [nCells])  // ❌ Compilation error
-let Te = MLXArray(repeating: 5000.0, [nCells])  // ❌ Compilation error
-```
-
-**✅ CORRECT - Use `MLXArray.full()`**:
-```swift
-let Ti = MLXArray.full([nCells], values: MLXArray(5000.0))
-let Te = MLXArray.full([nCells], values: MLXArray(Float(5000.0)))
-```
-
-**❌ WRONG - `linspace` is NOT a standalone function**:
-```swift
-let psi = MLXArray(linspace(0.0, 1.0, count: nCells))  // ❌ Compilation error
-```
-
-**✅ CORRECT - Use `MLXArray.linspace()`**:
-```swift
-let psi = MLXArray.linspace(0.0, 1.0, count: nCells)
-```
-
-#### Standard Initialization Methods
-
-```swift
-// 1. Fill with constant value
-let ones = MLXArray.full([nCells], values: MLXArray(1.0))
-let constants = MLXArray.full([10, 20], values: MLXArray(Float(42.0)))
-
-// 2. Zeros
-let zeros = MLXArray.zeros([nCells])
-let zerosMatrix = MLXArray.zeros([10, 20])
-
-// 3. Ones
-let ones = MLXArray.ones([nCells])
-let onesMatrix = MLXArray.ones([10, 20])
-
-// 4. Linearly spaced values
-let linspace = MLXArray.linspace(0.0, 1.0, count: 100)  // [0.0, 0.01, 0.02, ..., 1.0]
-
-// 5. From array literal
-let array = MLXArray([Float(1.0), Float(2.0), Float(3.0)])
-let array2D = MLXArray([[1.0, 2.0], [3.0, 4.0]])
-
-// 6. Scalar value
-let scalar = MLXArray(Float(42.0))
-let scalar2 = MLXArray(3.14)
-```
-
-#### Data Type Specifications
-
-```swift
-// Explicit dtype (use .float32 for GPU compatibility)
-let array = MLXArray.zeros([100], dtype: .float32)
-let full = MLXArray.full([50], values: MLXArray(1.0), dtype: .float32)
-
-// ⚠️ Remember: Float64 is NOT supported on Apple Silicon GPUs
-let badArray = MLXArray.zeros([100], dtype: .float64)  // ❌ Will fail at runtime on GPU
-```
-
-#### Creating Arrays Like Another
-
-```swift
-let template = MLXArray.zeros([100])
-
-// Create zeros with same shape
-let zeros = MLXArray.zeros(like: template)
-
-// Create ones with same shape
-let ones = MLXArray.ones(like: template)
-```
-
-**Key Rules**:
-1. Always use `MLXArray.` static methods for array creation
-2. Use `MLXArray(value)` to wrap scalar values for `values:` parameter
-3. Prefer explicit `Float()` casts to avoid type ambiguity
-4. Use `.float32` dtype for GPU operations (default is usually fine)
-
----
-
-## NetCDF Compression Guidelines
-
-NetCDF profiles use DEFLATE level 6 with shuffle, chunked as `[min(256, nTime), nRho]`:
-- Achieves 51× compression (verified in `NetCDFCompressionTests.swift`)
-- CLI path expects 20-25× compression (`OutputWriterTests.swift`)
-- Test `testChunkingStrategies` validates different access patterns
 
 ---
 
@@ -329,20 +200,6 @@ let config = try await configReader.fetchConfiguration()
 
 ---
 
-## Transport Models
-
-| Model | Use Case | Performance | Platform |
-|-------|----------|-------------|----------|
-| Constant | Testing/debugging | ~1μs | All |
-| Bohm-GyroBohm | Fast empirical | ~10μs | All |
-| QLKNN | High-fidelity physics | ~1ms | macOS only |
-
-**Example**: See `Examples/Configurations/iter_like_qlknn.json` and `README_QLKNN.md`
-
-**Full details**: [docs/TRANSPORT_MODELS.md](docs/TRANSPORT_MODELS.md)
-
----
-
 ## Common Development Commands
 
 ### Build and Test
@@ -381,68 +238,6 @@ swift package show-dependencies
 
 ---
 
-## Critical Implementation Guidelines
-
-### MLX Optimization
-
-**Compilation**:
-```swift
-let compiledStep = compile(
-    inputs: [state],
-    outputs: [state],
-    shapeless: true  // Prevents recompilation on grid changes
-)(stepFunction)
-```
-
-**Evaluation timing**:
-```swift
-for step in 0..<nSteps {
-    state = compiledStep(state)
-    eval(state.coreProfiles)  // Once per step
-}
-```
-
-**Efficient Jacobian computation**: Use flattened state with `vjp()` instead of separate `grad()` calls.
-
-**Full details**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/MLX_BEST_PRACTICES.md](docs/MLX_BEST_PRACTICES.md)
-
-### Numerical Stability
-
-Key strategies (all GPU-based):
-1. **Variable scaling**: Normalize to O(1) for uniform precision
-2. **Diagonal preconditioning**: Improve condition number κ ~ 10⁸ → 10⁴
-3. **Epsilon regularization**: Prevent division by zero
-4. **Conservation enforcement**: Periodic particle/energy renormalization
-5. **Double for time**: CPU-only time accumulation (negligible cost)
-
-**Full details**: [docs/NUMERICAL_PRECISION.md](docs/NUMERICAL_PRECISION.md)
-
-### Actor Isolation
-
-**❌ DON'T** capture actor self in `compile()`:
-```swift
-// ❌ WRONG
-self.compiledStep = compile { state in
-    self.transport.compute(...)  // Actor self escapes!
-}
-```
-
-**✅ DO** use pure functions:
-```swift
-// ✅ CORRECT
-self.compiledStep = compile(
-    Self.makeStepFunction(
-        staticParams: staticParams,
-        transport: transport,
-        sources: sources
-    )
-)
-```
-
-**Full details**: [docs/SWIFT_CONCURRENCY.md](docs/SWIFT_CONCURRENCY.md)
-
----
-
 ## SwiftUI Preview Best Practices
 
 **CRITICAL**: `@Previewable` declarations MUST appear first in `#Preview` body:
@@ -465,54 +260,9 @@ self.compiledStep = compile(
 
 ---
 
-## TORAX Core Concepts
-
-Key architecture patterns from original Python/JAX implementation:
-
-1. **Static vs Dynamic Parameters**
-   - Static: Trigger recompilation (mesh, solver type, equations)
-   - Dynamic: Hot-reloadable (boundaries, sources, transport)
-
-2. **State Separation**
-   - `CoreProfiles`: Variables evolved by PDEs (Ti, Te, ne, psi)
-   - `SimulationState`: Complete state (profiles + transport + sources + geometry + time)
-
-3. **FVM Data Structures**
-   - `CellVariable`: Grid variables with boundary conditions
-   - `Block1DCoeffs`: FVM coefficients (transient, diffusion, convection, source)
-   - `CoeffsCallback`: Bridge between physics models and solver
-
-4. **Solver Flow**
-   - Physics models → `CoeffsCallback` → `Block1DCoeffs` → FVM solver
-   - Theta method for time discretization (θ=1: implicit)
-
-**Full details**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-
----
-
-## Future Extensions
-
-Planned enhancements (from TORAX roadmap arXiv:2406.06718v2):
-
-**High Priority**:
-- Forward sensitivity analysis (gradient-based optimization)
-- Time-dependent geometry (evolving equilibrium)
-- Stationary state solver (∂/∂t = 0)
-- Compilation caching
-
-**Medium Priority**:
-- Multi-ion species
-- Impurity transport
-- MHD models (sawteeth, NTMs)
-- Core-edge coupling
-
-**Full details**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/PHASE5_7_IMPLEMENTATION_PLAN.md](docs/PHASE5_7_IMPLEMENTATION_PLAN.md)
-
----
-
 ## Project Status
 
-**Phase 4 Complete** (October 2025):
+**Current Capabilities** (October 2025):
 - ✅ Core simulation infrastructure
 - ✅ Transport models (Constant, Bohm-GyroBohm, QLKNN)
 - ✅ Source models (Fusion, Ohmic, Ion-Electron, Bremsstrahlung)
@@ -521,13 +271,34 @@ Planned enhancements (from TORAX roadmap arXiv:2406.06718v2):
 - ✅ NetCDF output with compression
 - ✅ Conservation enforcement
 
-**Current Capabilities**:
-- Run time-stepping simulations with adaptive timesteps
-- Compute transport coefficients (3 models)
-- Apply source terms (4 types)
-- Solve transport PDEs
-- Save results to JSON/NetCDF
-- Validate conservation laws
+**Priority Improvements**:
+- 🔥 FVM numerical enhancements (power-law scheme, Sauter bootstrap) - See [docs/FVM_NUMERICAL_IMPROVEMENTS_PLAN.md](docs/FVM_NUMERICAL_IMPROVEMENTS_PLAN.md)
+- 🚧 Configuration system refactoring - See [docs/CONFIGURATION_ARCHITECTURE_REFACTORING.md](docs/CONFIGURATION_ARCHITECTURE_REFACTORING.md)
+
+---
+
+## Quick Reference for Common Tasks
+
+### Starting a New Feature
+1. Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for design patterns
+2. Check relevant technical docs in [docs/README.md](docs/README.md)
+3. Follow Swift 6 concurrency patterns from [docs/SWIFT_CONCURRENCY.md](docs/SWIFT_CONCURRENCY.md)
+
+### Working with MLX
+1. Use correct initialization: `MLXArray.full()`, `MLXArray.linspace()`
+2. Call `eval()` at computation chain ends
+3. Wrap results in `EvaluatedArray` for Sendable compliance
+
+### Handling Configuration
+1. Use hierarchical priority: CLI > Env > JSON > Default
+2. Validate with `ConfigurationValidator` - See [docs/CONFIGURATION_VALIDATION_SPEC.md](docs/CONFIGURATION_VALIDATION_SPEC.md)
+3. Follow CFL-aware defaults pattern
+
+### Debugging Numerical Issues
+1. **Encountering NaN/Inf crashes?** 🔥 See [docs/NUMERICAL_ROBUSTNESS_DESIGN.md](docs/NUMERICAL_ROBUSTNESS_DESIGN.md) for validation and crash prevention
+2. Check Float32 constraints: [docs/NUMERICAL_PRECISION.md](docs/NUMERICAL_PRECISION.md)
+3. Verify unit consistency: [docs/UNIT_SYSTEM.md](docs/UNIT_SYSTEM.md)
+4. Review MLX evaluation patterns: [docs/MLX_BEST_PRACTICES.md](docs/MLX_BEST_PRACTICES.md)
 
 ---
 
@@ -547,13 +318,8 @@ Planned enhancements (from TORAX roadmap arXiv:2406.06718v2):
 - **Swift Configuration**: https://github.com/apple/swift-configuration (https://deepwiki.com/apple/swift-configuration)
 - **Swift Argument Parser**: https://github.com/apple/swift-argument-parser
 
-### Fusion Science
-- **QLKNN Paper**: van de Plassche et al., Physics of Plasmas 27, 022310 (2020)
-- **QuaLiKiz**: Bourdelle et al., Physics of Plasmas 14, 112501 (2007)
-- **Numerical Methods**: Higham, "Accuracy and Stability of Numerical Algorithms" (2002)
-
 ---
 
 **For detailed information, see**: [docs/README.md](docs/README.md)
 
-*Last updated: 2025-10-21* (Added MLXArray initialization guidelines)
+*Last updated: 2025-10-25* (Documentation reorganization)

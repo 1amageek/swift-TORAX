@@ -171,14 +171,34 @@ extension IonElectronExchange {
         geometry: Geometry
     ) throws -> SourceTerms {
 
+        // Phase 1b: Input validation (Sprint 1 robustness)
+        // CRITICAL: Prevents NaN propagation that caused production crash
+        guard let validatedProfiles = ValidatedProfiles.validateMinimal(profiles) else {
+            print("[ION-ELECTRON-EXCHANGE] Invalid input profiles, skipping heat exchange")
+            // Fail-safe: Return current sources unchanged (preserve simulation)
+            return sources
+        }
+
         let Q_ie_watts = try compute(
-            ne: profiles.electronDensity.value,
-            Te: profiles.electronTemperature.value,
-            Ti: profiles.ionTemperature.value
+            ne: validatedProfiles.electronDensity.value,
+            Te: validatedProfiles.electronTemperature.value,
+            Ti: validatedProfiles.ionTemperature.value
         )
 
         // Convert to MW/m³ for SourceTerms
         let Q_ie = PhysicsConstants.wattsToMegawatts(Q_ie_watts)
+
+        // Phase 1b: Output validation (Sprint 1 robustness)
+        // Detect NaN/Inf in computed exchange power before adding to sources
+        let Q_ie_min = Q_ie.min().item(Float.self)
+        let Q_ie_max = Q_ie.max().item(Float.self)
+        guard !Q_ie_min.isNaN && !Q_ie_min.isInfinite &&
+              !Q_ie_max.isNaN && !Q_ie_max.isInfinite else {
+            print("[ION-ELECTRON-EXCHANGE] Output contains NaN/Inf, skipping heat exchange")
+            print("  Q_ie range: [\(Q_ie_min), \(Q_ie_max)] MW/m³")
+            // Fail-safe: Return current sources unchanged
+            return sources
+        }
 
         // Compute metadata for power balance tracking
         // Reuse Q_ie_watts to avoid duplicate computation
