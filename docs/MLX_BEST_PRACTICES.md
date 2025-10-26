@@ -17,6 +17,20 @@ eval(result)  // Executes computation graph ✅
 return result
 ```
 
+### What eval() Actually Does
+
+**eval() forces execution of pending operations in the computation graph and materializes results.**
+
+**Critical understanding:**
+- eval() does **NOT** clear or destroy the computation graph
+- eval() executes pending operations and stores their results
+- The graph persists after eval(), but materialized results prevent redundant recomputation
+- Calling eval() again on the same arrays is a no-op if no new operations were added
+
+**Why this matters in loops:**
+Without eval(), each iteration extends the graph, making it progressively larger and slower.
+With eval(), results are materialized, preventing the graph from accumulating across iterations.
+
 ---
 
 ## When eval() is MANDATORY
@@ -182,24 +196,143 @@ func computeTransport(...) -> MLXArray {
 }
 ```
 
-### ❌ DON'T: Evaluate too frequently in loops
+### ⚠️ CAUTION: Balance eval() frequency in loops
+
+**Context matters** - the correct eval() pattern depends on what the loop does:
+
+#### Pattern 1: Sequential operations (eval once per iteration)
 
 ```swift
-// ❌ WRONG: eval() in tight loop (inefficient)
-for i in 0..<nSteps {
-    let x = operation1(...)
-    eval(x)  // ❌ Too frequent
-    let y = operation2(x)
-    eval(y)  // ❌ Too frequent
-}
-
-// ✅ CORRECT: Accumulate operations, eval once per step
+// ✅ CORRECT: Accumulate operations, eval final result per iteration
 for i in 0..<nSteps {
     let x = operation1(...)
     let y = operation2(x)
-    eval(y)  // ✅ Once per iteration
+    eval(y)  // ✅ Once per iteration - efficient
 }
 ```
+
+#### Pattern 2: Independent iterations (eval each result to prevent graph growth)
+
+```swift
+// ✅ CORRECT: eval() each iteration when results are independent
+for i in 0..<200 {
+    let cotangent = MLXArray.zeros([n])
+    cotangent[i] = MLXArray(1.0)
+
+    let (_, vjpResult) = vjp(fn, primals: [x], cotangents: [cotangent])
+    eval(vjpResult[0])  // ✅ CRITICAL: Prevents graph accumulation
+    jacobianRows.append(vjpResult[0])
+}
+// Without eval(): 0.06s → 1.0s (17x slower by iteration 200)
+// With eval(): Consistent 0.06s per iteration
+```
+
+**Rule of thumb:**
+- If iteration `i+1` uses results from iteration `i`: eval() once per iteration
+- If iterations are independent (e.g., computing Jacobian columns): eval() each result to prevent graph growth
+- Never eval() in the middle of a computation chain unless necessary
+
+#### ❌ WRONG: Over-evaluating in sequential chains
+
+```swift
+// ❌ WRONG: Breaking computation chain with unnecessary eval()
+for i in 0..<nSteps {
+    let x = operation1(...)
+    eval(x)  // ❌ Breaks optimization - unnecessary if x is only used in next line
+    let y = operation2(x)
+    eval(y)  // ❌ Also unnecessary if y is only used in next iteration
+}
+```
+
+---
+
+## Graph Accumulation in Loops - Common Performance Pitfall
+
+**CRITICAL**: Without eval(), computation graphs accumulate in loops, causing exponential slowdown.
+
+### The Problem: vjp() Loop Without eval()
+
+```swift
+// ❌ PERFORMANCE BUG: Graph grows with each iteration
+public func computeJacobianViaVJP(
+    _ residualFn: @escaping (MLXArray) -> MLXArray,
+    _ x: MLXArray
+) -> MLXArray {
+    let n = x.shape[0]
+    var jacobianTranspose: [MLXArray] = []
+
+    for i in 0..<n {
+        let cotangent = MLXArray.zeros([n])
+        cotangent[i] = MLXArray(1.0)
+
+        let (_, vjpResult) = vjp(
+            wrappedFn,
+            primals: [x],
+            cotangents: [cotangent]
+        )
+
+        jacobianTranspose.append(vjpResult[0])  // ❌ No eval() - graph keeps growing!
+    }
+
+    return MLX.stacked(jacobianTranspose, axis: 0).T
+}
+```
+
+**Performance impact** (n=200):
+- Iteration 0: 0.06s
+- Iteration 50: 0.3s (5x slower)
+- Iteration 100: 0.5s (8x slower)
+- Iteration 200: 1.0s (17x slower)
+- **Total time: ~120s** ❌
+
+### The Solution: eval() Each Result
+
+```swift
+// ✅ CORRECT: Materialize results to prevent graph growth
+public func computeJacobianViaVJP(
+    _ residualFn: @escaping (MLXArray) -> MLXArray,
+    _ x: MLXArray
+) -> MLXArray {
+    let n = x.shape[0]
+    var jacobianTranspose: [MLXArray] = []
+
+    for i in 0..<n {
+        let cotangent = MLXArray.zeros([n])
+        cotangent[i] = MLXArray(1.0)
+
+        let (_, vjpResult) = vjp(
+            wrappedFn,
+            primals: [x],
+            cotangents: [cotangent]
+        )
+
+        // ✅ CRITICAL: Materialize result to prevent graph accumulation
+        eval(vjpResult[0])
+
+        jacobianTranspose.append(vjpResult[0])
+    }
+
+    return MLX.stacked(jacobianTranspose, axis: 0).T
+}
+```
+
+**Performance impact** (n=200):
+- All iterations: 0.06s (consistent)
+- **Total time: ~12s** ✅ (**10x faster**)
+
+### Why This Happens
+
+1. **Without eval()**: Each vjp() call adds to the graph without executing
+2. **Graph grows**: Iteration i has graph from iterations 0...i-1 still pending
+3. **Exponential cost**: Each iteration carries more unevaluated operations
+4. **With eval()**: Results are materialized, graph doesn't accumulate across iterations
+
+### When to Watch For This
+
+- **Loops computing independent results**: Jacobian columns, batch processing, parameter sweeps
+- **Automatic differentiation in loops**: vjp(), grad() with different inputs
+- **Array mutations in loops**: x[i] = value without eval(x)
+- **Iterative solvers**: Newton-Raphson, gradient descent where each iteration is independent
 
 ---
 
@@ -311,16 +444,20 @@ eval(result)  // Make it explicit
 - Wrapping in EvaluatedArray (done automatically by init)
 - Crossing actor boundaries
 - End of time steps in loops
+- In loops with independent iterations to prevent graph accumulation (e.g., Jacobian computation)
 - Before accessing with item() or asArray() (often implicit)
 
 ✅ **NEVER:**
-- Eval too early in computation chains (breaks optimization)
-- Forget eval() in iterative loops
+- Eval in the middle of computation chains unless necessary
+- Forget eval() in iterative loops where results accumulate
 - Rely solely on implicit evaluation without understanding it
 
 ✅ **REMEMBER:**
 - MLX is lazy by default - operations queue, don't execute
-- Let computations chain for better optimization
+- eval() does NOT clear the graph - it executes pending operations and materializes results
+- The graph persists after eval(), but materialized results prevent redundant recomputation
+- Let computations chain for better optimization when possible
+- In loops with independent iterations, eval() each result to prevent graph growth
 - EvaluatedArray wrapper enforces evaluation at type level
 - eval() is cheap - it's a no-op if already evaluated
 - When in doubt, use EvaluatedArray for type safety

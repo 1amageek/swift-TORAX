@@ -35,7 +35,7 @@ public struct NewtonRaphsonSolver: PDESolver {
 
     public init(
         tolerance: Float = 1e-6,
-        maxIterations: Int = 30,
+        maxIterations: Int = 100,  // ✅ INCREASED: Allow more iterations for ill-conditioned systems
         theta: Float = 1.0,
         linearSolver: HybridLinearSolver = HybridLinearSolver()
     ) {
@@ -69,14 +69,17 @@ public struct NewtonRaphsonSolver: PDESolver {
         // Check for inf/nan in initial profiles
         let ti_min = ti_init.min(keepDims: false).item(Float.self)
         let ti_max = ti_init.max(keepDims: false).item(Float.self)
+        let te_min = te_init.min(keepDims: false).item(Float.self)
+        let te_max = te_init.max(keepDims: false).item(Float.self)
         let ne_min = ne_init.min(keepDims: false).item(Float.self)
         let ne_max = ne_init.max(keepDims: false).item(Float.self)
 
         print("[DEBUG-NR-INIT] Initial profiles:")
         print("[DEBUG-NR-INIT]   Ti: min=\(ti_min), max=\(ti_max)")
+        print("[DEBUG-NR-INIT]   Te: min=\(te_min), max=\(te_max)")
         print("[DEBUG-NR-INIT]   ne: min=\(ne_min), max=\(ne_max)")
 
-        if !ti_min.isFinite || !ti_max.isFinite || !ne_min.isFinite || !ne_max.isFinite {
+        if !ti_min.isFinite || !ti_max.isFinite || !te_min.isFinite || !te_max.isFinite || !ne_min.isFinite || !ne_max.isFinite {
             print("[DEBUG-NR-INIT] ❌ Initial profiles contain inf/nan!")
         }
 
@@ -94,13 +97,18 @@ public struct NewtonRaphsonSolver: PDESolver {
         }
 
         // GPU Variable Scaling: Create reference state for normalization
-        // Uses absolute values to handle both positive and negative values
-        let referenceState = xFlat.asScalingReference(minScale: 1e-10)
+        // Uses physically meaningful scales per variable (Ti~1keV, Te~1keV, ne~10^20, psi~1Wb)
+        // This prevents Float32 precision loss from extreme scale differences (e.g., psi=0 vs ne=10^20)
+        let referenceState = xFlat.asPhysicalScalingReference()
 
         // 🐛 DEBUG: Check referenceState for inf/nan
         let ref_min = referenceState.values.value.min(keepDims: false).item(Float.self)
         let ref_max = referenceState.values.value.max(keepDims: false).item(Float.self)
         print("[DEBUG-NR-SCALE] referenceState: min=\(ref_min), max=\(ref_max)")
+
+        // 🐛 DEBUG: Confirm GPU execution
+        let defaultDevice = Device.defaultDevice()
+        print("[DEBUG-NR-DEVICE] Default device: \(defaultDevice.deviceType ?? .gpu) (all MLX ops run on this device)")
         if !ref_min.isFinite || !ref_max.isFinite {
             print("[DEBUG-NR-SCALE] ❌ referenceState contains inf/nan!")
         }
@@ -175,9 +183,29 @@ public struct NewtonRaphsonSolver: PDESolver {
         for iter in 0..<maxIterations {
             iterations = iter + 1
 
-            // 🐛 DEBUG: Iteration start
-            if iter < 3 {
-                print("[DEBUG-NR] ===== Iteration \(iter) start =====")
+            // 🐛 DEBUG: Iteration start with timer
+            let iterStartTime = Date()
+            print("[DEBUG-NR] ===== Iteration \(iter) start =====")
+
+            // 🐛 DEBUG: Check xScaled for numerical issues at iteration start
+            let xScaled_min = xScaled.values.value.min(keepDims: false)
+            let xScaled_max = xScaled.values.value.max(keepDims: false)
+            eval(xScaled_min, xScaled_max)
+            let x_min = xScaled_min.item(Float.self)
+            let x_max = xScaled_max.item(Float.self)
+
+            if !x_min.isFinite || !x_max.isFinite {
+                print("[DEBUG-NR] ⚠️  iter=\(iter): xScaled contains NaN/Inf! min=\(x_min), max=\(x_max)")
+                print("[DEBUG-NR] ⚠️  Stopping iteration to prevent divergence")
+                break
+            }
+
+            if x_min.magnitude > 1e10 || x_max.magnitude > 1e10 {
+                print("[DEBUG-NR] ⚠️  iter=\(iter): xScaled has extreme values! min=\(x_min), max=\(x_max)")
+            }
+
+            if iter < 5 {
+                print("[DEBUG-NR] iter=\(iter): xScaled range: [\(x_min), \(x_max)]")
             }
 
             // Compute residual in scaled space
@@ -210,30 +238,35 @@ public struct NewtonRaphsonSolver: PDESolver {
 
             // Compute Jacobian via vjp() in scaled space (efficient!)
             // 🐛 DEBUG: Before Jacobian computation
-            if iter < 3 {
-                print("[DEBUG-NR] iter=\(iter): computing Jacobian via vjp()")
-            }
+            print("[DEBUG-NR] iter=\(iter): computing Jacobian via vjp()")
+
+            // 🐛 DEBUG: Measure residualFn evaluation time (first call in vjp)
+            let t0 = Date()
+            let _ = residualFnScaled(xScaled.values.value)
+            eval()
+            let residualTime = Date().timeIntervalSince(t0)
+            print("[DEBUG-NR] iter=\(iter): single residualFn call took \(String(format: "%.3f", residualTime))s")
+
+            // 🐛 DEBUG: Measure Jacobian computation time
+            let tJacStart = Date()
             let jacobianScaled = computeJacobianViaVJP(residualFnScaled, xScaled.values.value)
             eval(jacobianScaled)
+            let jacTime = Date().timeIntervalSince(tJacStart)
             // 🐛 DEBUG: After Jacobian computation
-            if iter < 3 {
-                print("[DEBUG-NR] iter=\(iter): Jacobian computed, shape=\(jacobianScaled.shape)")
-            }
+            print("[DEBUG-NR] iter=\(iter): Jacobian computed in \(String(format: "%.2f", jacTime))s, shape=\(jacobianScaled.shape)")
 
             // Solve linear system: J * Δx = -R using hybrid solver
             let deltaScaled: MLXArray
+            let tLinearStart = Date()
             do {
                 // 🐛 DEBUG: Before linearSolver.solve()
-                if iter < 3 {
-                    print("[DEBUG-NR] iter=\(iter): calling linearSolver.solve()")
-                }
+                print("[DEBUG-NR] iter=\(iter): calling linearSolver.solve()")
 
                 deltaScaled = try linearSolver.solve(jacobianScaled, -residualScaled)
 
+                let linearTime = Date().timeIntervalSince(tLinearStart)
                 // 🐛 DEBUG: After linearSolver.solve()
-                if iter < 3 {
-                    print("[DEBUG-NR] iter=\(iter): linearSolver.solve() returned")
-                }
+                print("[DEBUG-NR] iter=\(iter): linearSolver.solve() returned in \(String(format: "%.3f", linearTime))s")
             } catch {
                 print("[NewtonRaphsonSolver] Linear solver failed: \(error)")
                 // Return partial solution (unscale before returning)
@@ -252,21 +285,16 @@ public struct NewtonRaphsonSolver: PDESolver {
             }
 
             // 🐛 DEBUG: Before eval(deltaScaled)
-            if iter < 3 {
-                print("[DEBUG-NR] iter=\(iter): calling eval(deltaScaled)")
-            }
+            print("[DEBUG-NR] iter=\(iter): calling eval(deltaScaled)")
             eval(deltaScaled)
             // 🐛 DEBUG: After eval(deltaScaled)
-            if iter < 3 {
-                print("[DEBUG-NR] iter=\(iter): eval(deltaScaled) done")
-            }
+            print("[DEBUG-NR] iter=\(iter): eval(deltaScaled) done")
 
             // Update solution with line search (in scaled space)
             // 🐛 DEBUG: Before lineSearch
-            if iter < 3 {
-                print("[DEBUG-NR] iter=\(iter): calling lineSearch()")
-            }
+            print("[DEBUG-NR] iter=\(iter): calling lineSearch()")
 
+            let tLineSearchStart = Date()
             let alpha = lineSearch(
                 residualFn: residualFnScaled,
                 x: xScaled.values.value,
@@ -274,19 +302,17 @@ public struct NewtonRaphsonSolver: PDESolver {
                 residual: residualScaled,
                 maxAlpha: 1.0
             )
+            let lineSearchTime = Date().timeIntervalSince(tLineSearchStart)
 
             // 🐛 DEBUG: After lineSearch
-            if iter < 3 {
-                print("[DEBUG-NR] iter=\(iter): lineSearch() returned, alpha=\(alpha)")
-            }
+            print("[DEBUG-NR] iter=\(iter): lineSearch() returned in \(String(format: "%.3f", lineSearchTime))s, alpha=\(alpha)")
 
             let xNewScaled = xScaled.values.value + alpha * deltaScaled
             xScaled = FlattenedState(values: EvaluatedArray(evaluating: xNewScaled), layout: layout)
 
-            // 🐛 DEBUG: End of iteration
-            if iter < 3 {
-                print("[DEBUG-NR] iter=\(iter): iteration complete")
-            }
+            // 🐛 DEBUG: End of iteration with total time
+            let iterElapsed = Date().timeIntervalSince(iterStartTime)
+            print("[DEBUG-NR] iter=\(iter): iteration complete in \(String(format: "%.2f", iterElapsed))s")
         }
 
         // Unscale final solution to physical units
@@ -323,7 +349,8 @@ public struct NewtonRaphsonSolver: PDESolver {
         boundaryConditions: BoundaryConditions
     ) -> MLXArray {
         let nCells = geometry.nCells
-        let layout = StateLayout(nCells: nCells)
+        // nCells is guaranteed valid (from Geometry), so try! is safe here
+        let layout = try! FlattenedState.StateLayout(nCells: nCells)
 
         // Unflatten state vectors
         let Ti_old = xOld[layout.tiRange]
@@ -349,6 +376,9 @@ public struct NewtonRaphsonSolver: PDESolver {
         let dTe_dt = transientCoeff_Te * (Te_new - Te_old) / dt
         let dne_dt = transientCoeff_ne * (ne_new - ne_old) / dt
         let dpsi_dt = transientCoeff_psi * (psi_new - psi_old) / dt
+
+        // 🐛 DEBUG: Measure spatial operator time
+        let t_spatial_start = Date()
 
         // Spatial operators at new time (VECTORIZED) - with boundary conditions
         let f_Ti_new = applySpatialOperatorVectorized(
@@ -408,11 +438,35 @@ public struct NewtonRaphsonSolver: PDESolver {
             boundaryCondition: boundaryConditions.poloidalFlux
         )
 
+        // 🐛 DEBUG: Report spatial operator time
+        let t_spatial_elapsed = Date().timeIntervalSince(t_spatial_start)
+        if t_spatial_elapsed > 0.1 {
+            print("[DEBUG-RESIDUAL] Spatial operators took \(String(format: "%.3f", t_spatial_elapsed))s")
+        }
+
         // Residuals: R = dψ/dt - θ*f(ψ_new) - (1-θ)*f(ψ_old)
-        let R_Ti = dTi_dt - theta * f_Ti_new - (1.0 - theta) * f_Ti_old
-        let R_Te = dTe_dt - theta * f_Te_new - (1.0 - theta) * f_Te_old
-        let R_ne = dne_dt - theta * f_ne_new - (1.0 - theta) * f_ne_old
-        let R_psi = dpsi_dt - theta * f_psi_new - (1.0 - theta) * f_psi_old
+        let R_Ti_raw = dTi_dt - theta * f_Ti_new - (1.0 - theta) * f_Ti_old
+        let R_Te_raw = dTe_dt - theta * f_Te_new - (1.0 - theta) * f_Te_old
+        let R_ne_raw = dne_dt - theta * f_ne_new - (1.0 - theta) * f_ne_old
+        let R_psi_raw = dpsi_dt - theta * f_psi_new - (1.0 - theta) * f_psi_old
+
+        // ✅ FIX: Normalize residuals by dividing by transient coefficients
+        // This converts the equation from:
+        //   n_e ∂T/∂t = RHS  (units: [eV/(m³·s)])
+        // to:
+        //   ∂T/∂t = RHS/n_e  (units: [eV/s])
+        //
+        // Problem: With n_e = 2×10¹⁹ m⁻³ and source = 10²⁴ eV/(m³·s),
+        //          raw residual = 10²⁴, which causes Newton-Raphson to fail
+        //
+        // Solution: Divide by n_e to get ∂T/∂t ~ 10⁵ eV/s (manageable scale)
+        //
+        // Physical interpretation: We solve for temperature rate of change [eV/s]
+        //                          instead of density-weighted rate [eV/(m³·s)]
+        let R_Ti = R_Ti_raw / (transientCoeff_Ti + 1e-10)  // [eV/s]
+        let R_Te = R_Te_raw / (transientCoeff_Te + 1e-10)  // [eV/s]
+        let R_ne = R_ne_raw / (transientCoeff_ne + 1e-10)  // [m⁻³/s]
+        let R_psi = R_psi_raw / (transientCoeff_psi + 1e-10)  // [Wb/s]
 
         // Flatten residuals
         return concatenated([R_Ti, R_Te, R_ne, R_psi], axis: 0)
@@ -532,6 +586,54 @@ public struct NewtonRaphsonSolver: PDESolver {
 
         // 7. Total spatial operator
         let F = fluxDivergence + source + sourceMatrix * u  // [nCells]
+
+        // 🐛 DEBUG: Print components to identify large residual source
+        // Rate-limited to reduce log spam (800+ warnings per Newton iteration → 3-6 warnings total)
+        #if DEBUG
+        let flux_min = fluxDivergence.min().item(Float.self)
+        let flux_max = fluxDivergence.max().item(Float.self)
+
+        // Static variables for rate limiting
+        // Using nonisolated(unsafe) because this is debug-only logging
+        // Race conditions here only affect log output, not correctness
+        struct SpatialOpLogger {
+            nonisolated(unsafe) static var warningCount = 0
+            nonisolated(unsafe) static var lastWarningTime = Date.distantPast
+            static let maxInitialWarnings = 3
+            static let throttleInterval: TimeInterval = 5.0  // seconds
+        }
+
+        let now = Date()
+        let shouldPrint = (SpatialOpLogger.warningCount < SpatialOpLogger.maxInitialWarnings) ||
+                          (now.timeIntervalSince(SpatialOpLogger.lastWarningTime) >= SpatialOpLogger.throttleInterval)
+
+        if shouldPrint && (!flux_min.isFinite || !flux_max.isFinite ||
+                           flux_min.magnitude > 1e20 || flux_max.magnitude > 1e20) {
+            let source_min = source.min().item(Float.self)
+            let source_max = source.max().item(Float.self)
+            let F_min = F.min().item(Float.self)
+            let F_max = F.max().item(Float.self)
+
+            print("[SPATIAL-OP] ⚠️  fluxDivergence: [\(flux_min), \(flux_max)] eV/(m³·s)")
+            print("[SPATIAL-OP] ⚠️  source: [\(source_min), \(source_max)] eV/(m³·s)")
+            print("[SPATIAL-OP] ⚠️  F total: [\(F_min), \(F_max)] eV/(m³·s)")
+
+            // Print geometry factors
+            let jacob_min = jacobianCells.min().item(Float.self)
+            let jacob_max = jacobianCells.max().item(Float.self)
+            let dx_min = dx_padded.min().item(Float.self)
+            let dx_max = dx_padded.max().item(Float.self)
+            print("[SPATIAL-OP] ⚠️  jacobian: [\(jacob_min), \(jacob_max)] m")
+            print("[SPATIAL-OP] ⚠️  dx_padded: [\(dx_min), \(dx_max)]")
+
+            SpatialOpLogger.warningCount += 1
+            SpatialOpLogger.lastWarningTime = now
+
+            if SpatialOpLogger.warningCount == SpatialOpLogger.maxInitialWarnings {
+                print("[SPATIAL-OP] ℹ️  Further warnings throttled (max \(SpatialOpLogger.throttleInterval)s interval)")
+            }
+        }
+        #endif
 
         return F
     }

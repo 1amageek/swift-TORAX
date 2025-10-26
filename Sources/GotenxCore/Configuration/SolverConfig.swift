@@ -60,7 +60,7 @@ public struct SolverConfig: Codable, Sendable, Equatable, Hashable {
         tolerance: Float? = nil,
         tolerances: NumericalTolerances? = .iterScale,
         physicalThresholds: PhysicalThresholds? = .default,
-        maxIterations: Int = 30,
+        maxIterations: Int = 100,  // ✅ INCREASED: Match NewtonRaphsonSolver default
         lineSearchEnabled: Bool = true,
         lineSearchMaxAlpha: Float = 1.0
     ) {

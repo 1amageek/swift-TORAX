@@ -221,12 +221,25 @@ public struct GeometricFactors: Sendable {
             fatalError("GeometricFactors.from: g2 shape mismatch. Expected \(nFaces) (nFaces), got \(geometry.g2.value.shape[0])")
         }
 
-        // Convert face-centered to cell-centered via arithmetic average
+        // ✅ FIX: Use 1D cylindrical approximation for Jacobian
+        // In 1D cylindrical coordinates: √g = 2πR₀ (constant)
+        // The original implementation used g0 = (R₀ + r)², which varies with r
+        // This caused flux divergence to become O(10³⁰), leading to solver failure
+        //
+        // Physical justification for constant Jacobian:
+        // - Large aspect ratio: R₀ >> a → R₀ + r ≈ R₀
+        // - 1D reduction: Toroidal variation averaged out → √g = 2πR₀
+        //
+        // Alternative (if full toroidal geometry needed):
+        // - Use 2D (r, θ) solver instead of 1D approximation
+        let jacobianValue = 2.0 * Float.pi * geometry.majorRadius
+        let jacobian = MLXArray.full([nCells], values: MLXArray(jacobianValue))
+
+        // Keep g1, g2 from geometry (not critical for 1D cylindrical)
         let g0Faces = geometry.g0.value
         let g1Faces = geometry.g1.value
         let g2Faces = geometry.g2.value
 
-        let jacobian = 0.5 * (g0Faces[0..<nCells] + g0Faces[1..<(nCells+1)])
         let g1 = 0.5 * (g1Faces[0..<nCells] + g1Faces[1..<(nCells+1)])
         let g2 = 0.5 * (g2Faces[0..<nCells] + g2Faces[1..<(nCells+1)])
 

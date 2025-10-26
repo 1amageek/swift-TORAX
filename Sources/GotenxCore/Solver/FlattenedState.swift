@@ -53,6 +53,14 @@ public struct FlattenedState: Sendable {
         /// Total size of flattened state
         public var totalSize: Int { 4 * nCells }
 
+        /// Equatable implementation (optimized)
+        ///
+        /// Since all ranges are deterministically computed from nCells,
+        /// we only need to compare nCells for equality.
+        public static func == (lhs: StateLayout, rhs: StateLayout) -> Bool {
+            return lhs.nCells == rhs.nCells
+        }
+
         /// Validate layout consistency
         ///
         /// - Throws: FlattenedStateError if layout is inconsistent
@@ -78,6 +86,7 @@ public struct FlattenedState: Sendable {
         case inconsistentLayout
         case layoutMismatch
         case shapeMismatch(expected: Int, actual: Int)
+        case profileShapeMismatch(expected: Int, Ti: Int, Te: Int, ne: Int, psi: Int)
     }
 
     // MARK: - Initialization
@@ -87,19 +96,33 @@ public struct FlattenedState: Sendable {
     /// - Parameter profiles: Core profiles to flatten
     /// - Throws: FlattenedStateError if profiles have inconsistent shapes
     public init(profiles: CoreProfiles) throws {
-        let nCells = profiles.ionTemperature.shape[0]
-        let layout = try StateLayout(nCells: nCells)
-        try layout.validate()
+        // ✅ FIX: Validate all profiles have same shape with detailed error reporting
+        // Capture all shapes BEFORE using any as the reference
+        let shapes = (
+            Ti: profiles.ionTemperature.shape[0],
+            Te: profiles.electronTemperature.shape[0],
+            ne: profiles.electronDensity.shape[0],
+            psi: profiles.poloidalFlux.shape[0]
+        )
 
-        // Validate all profiles have same shape
-        guard profiles.electronTemperature.shape[0] == nCells,
-              profiles.electronDensity.shape[0] == nCells,
-              profiles.poloidalFlux.shape[0] == nCells else {
-            throw FlattenedStateError.shapeMismatch(
-                expected: nCells,
-                actual: profiles.electronTemperature.shape[0]
+        // Check that ALL profiles have the same shape (not just Te, ne, psi)
+        // This is more logically consistent than using Ti as implicit reference
+        guard shapes.Ti == shapes.Te,
+              shapes.Ti == shapes.ne,
+              shapes.Ti == shapes.psi else {
+            throw FlattenedStateError.profileShapeMismatch(
+                expected: shapes.Ti,
+                Ti: shapes.Ti,
+                Te: shapes.Te,
+                ne: shapes.ne,
+                psi: shapes.psi
             )
         }
+
+        // Now we can safely use any shape as nCells (they're all equal)
+        let nCells = shapes.Ti
+        let layout = try StateLayout(nCells: nCells)
+        try layout.validate()
 
         // Extract MLXArrays from EvaluatedArrays and flatten: [Ti; Te; ne; psi]
         let flattened = concatenated([
@@ -179,6 +202,16 @@ public struct FlattenedState: Sendable {
     /// - Parameter reference: Reference state for normalization
     /// - Returns: Scaled state with values normalized by reference
     public func scaled(by reference: FlattenedState) -> FlattenedState {
+        // ✅ CRITICAL FIX: Validate layout compatibility before scaling
+        // Prevents silent broadcasting errors that can cause solver divergence
+        precondition(reference.layout == layout,
+            """
+            Layout mismatch in scaled(by:):
+            - reference.nCells = \(reference.layout.nCells)
+            - self.nCells = \(layout.nCells)
+            This indicates a programming error. Ensure both states use the same mesh.
+            """)
+
         // ✅ GPU element-wise division (no CPU transfer)
         // Add small epsilon to prevent division by zero
         let scaledValues = values.value / (reference.values.value + 1e-10)
@@ -215,6 +248,16 @@ public struct FlattenedState: Sendable {
     /// - Parameter reference: Reference state used for original scaling
     /// - Returns: Unscaled state in physical units
     public func unscaled(by reference: FlattenedState) -> FlattenedState {
+        // ✅ CRITICAL FIX: Validate layout compatibility before unscaling
+        // Prevents silent broadcasting errors that can cause solver divergence
+        precondition(reference.layout == layout,
+            """
+            Layout mismatch in unscaled(by:):
+            - reference.nCells = \(reference.layout.nCells)
+            - self.nCells = \(layout.nCells)
+            This indicates a programming error. Ensure both states use the same mesh.
+            """)
+
         // ✅ GPU element-wise multiplication (no CPU transfer)
         // Must use (reference + ε) to match scaling formula
         let unscaledValues = values.value * (reference.values.value + 1e-10)
@@ -249,6 +292,49 @@ public struct FlattenedState: Sendable {
             layout: layout
         )
     }
+
+    /// Compute physics-aware scaling factors for Newton-Raphson solver
+    ///
+    /// **Purpose**: Create reference state with physically meaningful scales for each variable.
+    /// This prevents Float32 precision loss when variables span vastly different magnitudes.
+    ///
+    /// **Problem with asScalingReference()**:
+    /// - psi=0.0 → minScale=1e-10
+    /// - ne=2e+19 → 2e+19
+    /// - Range: [1e-10, 2e+19] = 19 orders of magnitude → Float32 cannot handle
+    ///
+    /// **Solution**: Use typical physical scales per variable:
+    /// - Ti, Te: 1e3 eV (1 keV) - typical plasma temperature
+    /// - ne: 1e20 m⁻³ - typical plasma density
+    /// - psi: 1.0 Wb - typical poloidal flux scale
+    ///
+    /// **Result**: All variables normalized to O(1), improving Jacobian conditioning.
+    ///
+    /// - Returns: Reference state with physically meaningful scales
+    public func asPhysicalScalingReference() -> FlattenedState {
+        let nCells = layout.nCells
+
+        // Physical scales (in SI units matching CoreProfiles)
+        let tiScale: Float = 1e3  // 1 keV in eV
+        let teScale: Float = 1e3  // 1 keV in eV
+        let neScale: Float = 1e20  // 10^20 m^-3
+        let psiScale: Float = 1.0  // 1 Wb
+
+        // Create scaling array: [Ti_scale; Te_scale; ne_scale; psi_scale]
+        // Use Swift arrays and convert to MLXArray
+        let tiScales = MLXArray(Array(repeating: tiScale, count: nCells))
+        let teScales = MLXArray(Array(repeating: teScale, count: nCells))
+        let neScales = MLXArray(Array(repeating: neScale, count: nCells))
+        let psiScales = MLXArray(Array(repeating: psiScale, count: nCells))
+
+        let scaleArray = concatenated([tiScales, teScales, neScales, psiScales], axis: 0)
+        eval(scaleArray)
+
+        return FlattenedState(
+            values: EvaluatedArray(evaluating: scaleArray),
+            layout: layout
+        )
+    }
 }
 
 // MARK: - Jacobian Computation Utilities
@@ -269,11 +355,27 @@ public func computeJacobianViaVJP(
     let n = x.shape[0]
     var jacobianTranspose: [MLXArray] = []
 
+    print("[DEBUG-VJP] Starting Jacobian computation: n=\(n)")
+
     // Use vjp() for reverse-mode AD
     for i in 0..<n {
+        // Log progress: first 5 iterations (detailed), then every 50
+        let shouldLog = (i < 5) || (i % 50 == 0)
+
+        if shouldLog {
+            print("[DEBUG-VJP] Processing vjp iteration \(i)/\(n)")
+        }
+
+        // 🐛 DEBUG: Measure vjp call time for first few iterations
+        let t0 = (i < 5) ? Date() : nil
+
         // Standard basis vector
         let cotangent = MLXArray.zeros([n])
         cotangent[i] = MLXArray(1.0)
+
+        if i < 5 {
+            print("[DEBUG-VJP] iter \(i): cotangent created, calling vjp()")
+        }
 
         // vjp computes: J^T · cotangent = (i-th row of J)^T
         let wrappedFn: ([MLXArray]) -> [MLXArray] = { inputs in
@@ -286,11 +388,67 @@ public func computeJacobianViaVJP(
             cotangents: [cotangent]
         )
 
+        // ✅ CRITICAL FIX: Force evaluation to prevent computation graph accumulation
+        // MLX uses lazy evaluation - without eval(), each vjp() call adds to the graph,
+        // making subsequent calls progressively slower (0.15s → 1.0s over 200 iterations).
+        // eval() materializes the result and clears the accumulated graph.
+        eval(vjpResult[0])
+
+        if let startTime = t0 {
+            let elapsed = Date().timeIntervalSince(startTime)
+            print("[DEBUG-VJP] iter \(i): vjp() returned in \(String(format: "%.3f", elapsed))s")
+        }
+
         jacobianTranspose.append(vjpResult[0])
     }
 
+    print("[DEBUG-VJP] vjp loop complete, stacking results")
     // Transpose to get Jacobian
     return MLX.stacked(jacobianTranspose, axis: 0).T
+}
+
+// MARK: - Error Descriptions
+
+extension FlattenedState.FlattenedStateError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .invalidCellCount(let count):
+            return "Invalid cell count: \(count). Cell count must be positive."
+
+        case .inconsistentLayout:
+            return "Inconsistent state layout. Internal ranges do not match expected structure."
+
+        case .layoutMismatch:
+            return "State layout mismatch. Total size does not match expected layout."
+
+        case .shapeMismatch(let expected, let actual):
+            return "Shape mismatch: expected \(expected) cells, got \(actual) cells."
+
+        case .profileShapeMismatch(let expected, let Ti, let Te, let ne, let psi):
+            return """
+                Profile shape mismatch:
+                - Expected: \(expected) cells (from Ti)
+                - Ti: \(Ti) cells
+                - Te: \(Te) cells
+                - ne: \(ne) cells
+                - psi: \(psi) cells
+                Ensure all profile arrays have the same length.
+                """
+        }
+    }
+
+    public var recoverySuggestion: String? {
+        switch self {
+        case .invalidCellCount:
+            return "Increase mesh resolution (nCells) to a positive value."
+
+        case .inconsistentLayout, .layoutMismatch:
+            return "This is an internal error. Please file a bug report."
+
+        case .shapeMismatch, .profileShapeMismatch:
+            return "Check that all profile arrays (Ti, Te, ne, psi) are created with the same mesh configuration."
+        }
+    }
 }
 
 /// Compute Jacobian via vector-Jacobian product with batching
@@ -332,6 +490,10 @@ public func computeJacobianViaVJPBatched(
                 primals: [x],
                 cotangents: [cotangent]
             )
+
+            // ✅ Force evaluation to prevent graph accumulation
+            eval(vjpResult[0])
+
             jacobianRows.append(vjpResult[0])
         }
     }

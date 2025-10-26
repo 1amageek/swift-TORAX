@@ -188,19 +188,6 @@ public struct ToleranceScaler {
     }
 }
 
-/// State layout helper for flattened state vector
-public struct StateLayout {
-    public let nCells: Int
-    public let tiRange: Range<Int>
-    public let teRange: Range<Int>
-    public let neRange: Range<Int>
-    public let psiRange: Range<Int>
-
-    public init(nCells: Int) {
-        self.nCells = nCells
-        self.tiRange = 0..<nCells
-        self.teRange = nCells..<(2 * nCells)
-        self.neRange = (2 * nCells)..<(3 * nCells)
-        self.psiRange = (3 * nCells)..<(4 * nCells)
-    }
-}
+// StateLayout is now defined in FlattenedState.swift to avoid duplication
+// Import it via typealias for backward compatibility
+public typealias StateLayout = FlattenedState.StateLayout

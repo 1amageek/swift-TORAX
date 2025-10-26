@@ -254,6 +254,11 @@ public actor SimulationRunner: SimulationRunnable {
             ne[i] = profileConditions.electronDensity.evaluate(at: rNorm[i])
         }
 
+        // 🐛 DEBUG: Print initial profile values before validation
+        print("[INIT-PROFILES] Ti range: [\(ti.min() ?? Float.nan), \(ti.max() ?? Float.nan)] eV")
+        print("[INIT-PROFILES] Te range: [\(te.min() ?? Float.nan), \(te.max() ?? Float.nan)] eV")
+        print("[INIT-PROFILES] ne range: [\(ne.min() ?? Float.nan), \(ne.max() ?? Float.nan)] m⁻³")
+
         // Phase 1a: Check for missing electron temperature (Sprint 1 robustness)
         // If Te is zero/missing, use physically sound fallback Te = Ti
         let te_max = te.max() ?? 0.0
