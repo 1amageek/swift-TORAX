@@ -36,6 +36,9 @@ public actor SimulationOrchestrator {
     /// Timestep calculator
     private let timeStepCalculator: TimeStepCalculator
 
+    /// Adaptive timestep configuration (stored for growth cap enforcement)
+    private let adaptiveConfig: AdaptiveTimestepConfig
+
     /// Solver
     private let solver: any PDESolver
 
@@ -84,6 +87,15 @@ public actor SimulationOrchestrator {
         self.sources = sources
         self.mhdModels = mhdModels
         self.samplingConfig = samplingConfig
+        self.adaptiveConfig = adaptiveConfig
+
+        // 🐛 DEBUG: Configuration values received
+        print("[DEBUG-INIT] AdaptiveTimestepConfig received:")
+        print("[DEBUG-INIT]   minDt: \(adaptiveConfig.minDt?.description ?? "nil")")
+        print("[DEBUG-INIT]   minDtFraction: \(adaptiveConfig.minDtFraction?.description ?? "nil")")
+        print("[DEBUG-INIT]   maxDt: \(adaptiveConfig.maxDt)")
+        print("[DEBUG-INIT]   effectiveMinDt: \(adaptiveConfig.effectiveMinDt)")
+        print("[DEBUG-INIT]   maxTimestepGrowth: \(adaptiveConfig.maxTimestepGrowth)")
 
         // Create geometry from static params
         self.geometry = Geometry(config: staticParams.mesh)
@@ -425,10 +437,26 @@ public actor SimulationOrchestrator {
                 geometry: geometry,
                 params: dynamicParams.transportParams
             )
-            dt = timeStepCalculator.compute(
+            let rawDt = timeStepCalculator.compute(
                 transportCoeffs: transportCoeffs,
                 dr: staticParams.mesh.dr
             )
+
+            // ✅ CRITICAL: Enforce dt growth cap to prevent Newton solver instability
+            // Limits dt increase to maxTimestepGrowth per step (default 1.2)
+            // This prevents aggressive dt jumps that cause:
+            // - Jacobian condition number explosion (κ > 1e6)
+            // - Linear solver accuracy degradation (errors > 1e-2)
+            // - Invalid Newton descent direction (Δ·(-R) < 0)
+            let growthCap = adaptiveConfig.maxTimestepGrowth
+            let cappedDt = min(rawDt, state.dt * growthCap)
+
+            if cappedDt < rawDt {
+                let growthRatio = rawDt / state.dt
+                print("[DEBUG] dt growth capped: \(String(format: "%.2e", rawDt))s → \(String(format: "%.2e", cappedDt))s (attempted \(String(format: "%.2f", growthRatio))× growth, limit: \(growthCap)×)")
+            }
+
+            dt = cappedDt
 
             // 🐛 DEBUG: Adaptive dt
             if state.step < 5 {
@@ -587,8 +615,17 @@ public actor SimulationOrchestrator {
             attempt += 1
             let nextDt = dtAttempt * 0.5
 
+            // 🐛 DEBUG: リトライ判定の詳細
+            print("[DEBUG-RETRY] Solver did not converge, evaluating retry:")
+            print("[DEBUG-RETRY]   Current dt: \(dtAttempt)")
+            print("[DEBUG-RETRY]   Next dt (halved): \(nextDt)")
+            print("[DEBUG-RETRY]   Minimum timestep: \(timeStepCalculator.minimumTimestep)")
+            print("[DEBUG-RETRY]   nextDt < minimum? \(nextDt < timeStepCalculator.minimumTimestep)")
+            print("[DEBUG-RETRY]   attempt=\(attempt), maxRetries=\(maxSolverRetries)")
+
             if nextDt < timeStepCalculator.minimumTimestep {
                 // これ以上タイムステップを縮小できないので即時エラー
+                print("[DEBUG-RETRY] ❌ Cannot retry: nextDt (\(nextDt)) < minimumTimestep (\(timeStepCalculator.minimumTimestep))")
                 throw SolverError.convergenceFailure(
                     iterations: accumulatedIterations,
                     residualNorm: result.residualNorm

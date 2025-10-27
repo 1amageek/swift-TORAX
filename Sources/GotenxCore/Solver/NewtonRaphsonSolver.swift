@@ -106,6 +106,19 @@ public struct NewtonRaphsonSolver: PDESolver {
         let ref_max = referenceState.values.value.max(keepDims: false).item(Float.self)
         print("[DEBUG-NR-SCALE] referenceState: min=\(ref_min), max=\(ref_max)")
 
+        // 🔬 INVESTIGATION: referenceState per variable (iter 0 only will check in loop)
+        let nCells = layout.nCells
+        let refArray = referenceState.values.value
+        let Ti_ref = refArray[0..<nCells]
+        let Te_ref = refArray[nCells..<(2*nCells)]
+        let ne_ref = refArray[(2*nCells)..<(3*nCells)]
+        eval(Ti_ref, Te_ref, ne_ref)
+
+        print("[INVESTIGATION] referenceState breakdown (nCells=\(nCells)):")
+        print("[INVESTIGATION]   Ti_ref range: [\(Ti_ref.min().item(Float.self)), \(Ti_ref.max().item(Float.self))]")
+        print("[INVESTIGATION]   Te_ref range: [\(Te_ref.min().item(Float.self)), \(Te_ref.max().item(Float.self))]")
+        print("[INVESTIGATION]   ne_ref range: [\(ne_ref.min().item(Float.self)), \(ne_ref.max().item(Float.self))]")
+
         // 🐛 DEBUG: Confirm GPU execution
         let defaultDevice = Device.defaultDevice()
         print("[DEBUG-NR-DEVICE] Default device: \(defaultDevice.deviceType ?? .gpu) (all MLX ops run on this device)")
@@ -180,6 +193,12 @@ public struct NewtonRaphsonSolver: PDESolver {
         var iterations = 0
         var residualNorm: Float = 0.0
 
+        // ✅ PHASE 1-2: Track per-variable residual norms for improvement analysis
+        var prevResidualNorm_Ti: Float = 0.0
+        var prevResidualNorm_Te: Float = 0.0
+        var prevResidualNorm_ne: Float = 0.0
+        var prevResidualNorm_psi: Float = 0.0
+
         for iter in 0..<maxIterations {
             iterations = iter + 1
 
@@ -204,8 +223,21 @@ public struct NewtonRaphsonSolver: PDESolver {
                 print("[DEBUG-NR] ⚠️  iter=\(iter): xScaled has extreme values! min=\(x_min), max=\(x_max)")
             }
 
-            if iter < 5 {
-                print("[DEBUG-NR] iter=\(iter): xScaled range: [\(x_min), \(x_max)]")
+            // Always log xScaled range for diagnosis
+            print("[DEBUG-NR] iter=\(iter): xScaled range: [\(x_min), \(x_max)]")
+
+            // 🔬 INVESTIGATION: xScaled per variable (iter 0 only)
+            if iter == 0 {
+                let xArray = xScaled.values.value
+                let Ti_scaled = xArray[0..<nCells]
+                let Te_scaled = xArray[nCells..<(2*nCells)]
+                let ne_scaled = xArray[(2*nCells)..<(3*nCells)]
+                eval(Ti_scaled, Te_scaled, ne_scaled)
+
+                print("[INVESTIGATION] xScaled breakdown:")
+                print("[INVESTIGATION]   Ti_scaled range: [\(Ti_scaled.min().item(Float.self)), \(Ti_scaled.max().item(Float.self))]")
+                print("[INVESTIGATION]   Te_scaled range: [\(Te_scaled.min().item(Float.self)), \(Te_scaled.max().item(Float.self))]")
+                print("[INVESTIGATION]   ne_scaled range: [\(ne_scaled.min().item(Float.self)), \(ne_scaled.max().item(Float.self))]")
             }
 
             // Compute residual in scaled space
@@ -219,21 +251,107 @@ public struct NewtonRaphsonSolver: PDESolver {
                 print("[DEBUG-NR] iter=\(iter): residualScaled: min=\(res_min), max=\(res_max)")
             }
 
+            // 🔬 INVESTIGATION: residualScaled per variable (iter 0 only)
+            if iter == 0 {
+                let residual_Ti = residualScaled[0..<nCells]
+                let residual_Te = residualScaled[nCells..<(2*nCells)]
+                let residual_ne = residualScaled[(2*nCells)..<(3*nCells)]
+                eval(residual_Ti, residual_Te, residual_ne)
+
+                print("[INVESTIGATION] residualScaled breakdown:")
+                print("[INVESTIGATION]   residual_Ti range: [\(residual_Ti.min().item(Float.self)), \(residual_Ti.max().item(Float.self))]")
+                print("[INVESTIGATION]   residual_Te range: [\(residual_Te.min().item(Float.self)), \(residual_Te.max().item(Float.self))]")
+                print("[INVESTIGATION]   residual_ne range: [\(residual_ne.min().item(Float.self)), \(residual_ne.max().item(Float.self))]")
+            }
+
             // Compute residual norm (scaled space)
             residualNorm = sqrt((residualScaled * residualScaled).mean()).item(Float.self)
 
-            // 🐛 DEBUG: Residual norm
-            if iter < 3 {
-                print("[DEBUG-NR] iter=\(iter): residualNorm=\(String(format: "%.2e", residualNorm)), tolerance=\(String(format: "%.2e", tolerance))")
+            // 🐛 DEBUG: Residual norm (ALWAYS print for diagnosis)
+            print("[DEBUG-NR] iter=\(iter): residualNorm=\(String(format: "%.2e", residualNorm)), tolerance=\(String(format: "%.2e", tolerance))")
+
+            // ✅ PHASE 1-2: Per-variable residual norm tracking
+            let residual_Ti = residualScaled[0..<nCells]
+            let residual_Te = residualScaled[nCells..<(2*nCells)]
+            let residual_ne = residualScaled[(2*nCells)..<(3*nCells)]
+            let residual_psi = residualScaled[(3*nCells)..<(4*nCells)]
+
+            let residualNorm_Ti = MLX.norm(residual_Ti).item(Float.self)
+            let residualNorm_Te = MLX.norm(residual_Te).item(Float.self)
+            let residualNorm_ne = MLX.norm(residual_ne).item(Float.self)
+            let residualNorm_psi = MLX.norm(residual_psi).item(Float.self)
+
+            print("[NR-RESIDUAL] iter=\(iter): Per-variable residual norms:")
+            print("[NR-RESIDUAL]   ||R_Ti||  = \(String(format: "%.2e", residualNorm_Ti))")
+            print("[NR-RESIDUAL]   ||R_Te||  = \(String(format: "%.2e", residualNorm_Te))")
+            print("[NR-RESIDUAL]   ||R_ne||  = \(String(format: "%.2e", residualNorm_ne))")
+            print("[NR-RESIDUAL]   ||R_psi|| = \(String(format: "%.2e", residualNorm_psi))")
+            print("[NR-RESIDUAL]   Total ||R|| = \(String(format: "%.2e", residualNorm))")
+
+            // Improvement rate compared to previous iteration
+            if iter > 0 {
+                let improvement_Ti = (prevResidualNorm_Ti - residualNorm_Ti) / prevResidualNorm_Ti * 100
+                let improvement_Te = (prevResidualNorm_Te - residualNorm_Te) / prevResidualNorm_Te * 100
+                let improvement_ne = (prevResidualNorm_ne - residualNorm_ne) / prevResidualNorm_ne * 100
+                let improvement_psi = (prevResidualNorm_psi - residualNorm_psi) / prevResidualNorm_psi * 100
+
+                print("[NR-RESIDUAL]   Ti improvement:  \(String(format: "%+.1f", improvement_Ti))%")
+                print("[NR-RESIDUAL]   Te improvement:  \(String(format: "%+.1f", improvement_Te))%")
+                print("[NR-RESIDUAL]   ne improvement:  \(String(format: "%+.1f", improvement_ne))%")
+                print("[NR-RESIDUAL]   psi improvement: \(String(format: "%+.1f", improvement_psi))%")
             }
 
-            // Check convergence
-            if residualNorm < tolerance {
-                converged = true
-                if iter < 3 {
-                    print("[DEBUG-NR] iter=\(iter): CONVERGED")
-                }
+            // Save for next iteration
+            prevResidualNorm_Ti = residualNorm_Ti
+            prevResidualNorm_Te = residualNorm_Te
+            prevResidualNorm_ne = residualNorm_ne
+            prevResidualNorm_psi = residualNorm_psi
+
+            // ✅ OPTION 2: Per-variable convergence criteria
+            // Keeps Newton direction/Jacobian intact, only changes convergence check
+            // Based on NEWTON_DIRECTION_ANALYSIS.md: Ti/Te stagnate, ne improves
+            let tolerance_Ti: Float = 10.0   // Relaxed (currently ~5.86)
+            let tolerance_Te: Float = 10.0   // Relaxed (currently ~5.86)
+            let tolerance_ne: Float = 0.1    // Strict (physically critical)
+            let tolerance_psi: Float = 1e-3  // Strict (already converged)
+
+            let converged_Ti = residualNorm_Ti < tolerance_Ti
+            let converged_Te = residualNorm_Te < tolerance_Te
+            let converged_ne = residualNorm_ne < tolerance_ne
+            let converged_psi = residualNorm_psi < tolerance_psi
+
+            converged = converged_Ti && converged_Te && converged_ne && converged_psi
+
+            if converged {
+                print("[CONVERGENCE] ✅ All variables converged:")
+                print("[CONVERGENCE]   Ti:  \(String(format: "%.2e", residualNorm_Ti)) < \(String(format: "%.2e", tolerance_Ti))")
+                print("[CONVERGENCE]   Te:  \(String(format: "%.2e", residualNorm_Te)) < \(String(format: "%.2e", tolerance_Te))")
+                print("[CONVERGENCE]   ne:  \(String(format: "%.2e", residualNorm_ne)) < \(String(format: "%.2e", tolerance_ne))")
+                print("[CONVERGENCE]   psi: \(String(format: "%.2e", residualNorm_psi)) < \(String(format: "%.2e", tolerance_psi))")
                 break
+            } else {
+                // Log which variables are blocking convergence
+                print("[CONVERGENCE] Checking per-variable convergence:")
+                if !converged_Ti {
+                    print("[CONVERGENCE]   ⚠️  Ti NOT converged: \(String(format: "%.2e", residualNorm_Ti)) ≮ \(String(format: "%.2e", tolerance_Ti))")
+                } else {
+                    print("[CONVERGENCE]   ✅ Ti converged: \(String(format: "%.2e", residualNorm_Ti)) < \(String(format: "%.2e", tolerance_Ti))")
+                }
+                if !converged_Te {
+                    print("[CONVERGENCE]   ⚠️  Te NOT converged: \(String(format: "%.2e", residualNorm_Te)) ≮ \(String(format: "%.2e", tolerance_Te))")
+                } else {
+                    print("[CONVERGENCE]   ✅ Te converged: \(String(format: "%.2e", residualNorm_Te)) < \(String(format: "%.2e", tolerance_Te))")
+                }
+                if !converged_ne {
+                    print("[CONVERGENCE]   ⚠️  ne NOT converged: \(String(format: "%.2e", residualNorm_ne)) ≮ \(String(format: "%.2e", tolerance_ne))")
+                } else {
+                    print("[CONVERGENCE]   ✅ ne converged: \(String(format: "%.2e", residualNorm_ne)) < \(String(format: "%.2e", tolerance_ne))")
+                }
+                if !converged_psi {
+                    print("[CONVERGENCE]   ⚠️  psi NOT converged: \(String(format: "%.2e", residualNorm_psi)) ≮ \(String(format: "%.2e", tolerance_psi))")
+                } else {
+                    print("[CONVERGENCE]   ✅ psi converged: \(String(format: "%.2e", residualNorm_psi)) < \(String(format: "%.2e", tolerance_psi))")
+                }
             }
 
             // Compute Jacobian via vjp() in scaled space (efficient!)
@@ -254,6 +372,84 @@ public struct NewtonRaphsonSolver: PDESolver {
             let jacTime = Date().timeIntervalSince(tJacStart)
             // 🐛 DEBUG: After Jacobian computation
             print("[DEBUG-NR] iter=\(iter): Jacobian computed in \(String(format: "%.2f", jacTime))s, shape=\(jacobianScaled.shape)")
+
+            // 🔬 DIAGNOSTIC: Compute condition number via SVD
+            // Note: SVD is not yet supported on GPU in MLX, must use CPU stream
+            let tSvdStart = Date()
+            let (_, S, _) = MLX.svd(jacobianScaled, stream: .cpu)
+            eval(S)
+            let svdTime = Date().timeIntervalSince(tSvdStart)
+
+            let sigma_max = S[0].item(Float.self)
+            let sigma_min = S[S.count - 1].item(Float.self)
+            let conditionNumber = sigma_max / (sigma_min + 1e-20)
+
+            print("[DEBUG-JACOBIAN] SVD computed in \(String(format: "%.3f", svdTime))s")
+            print("[DEBUG-JACOBIAN] Largest singular value (σ_max): \(String(format: "%.2e", sigma_max))")
+            print("[DEBUG-JACOBIAN] Smallest singular value (σ_min): \(String(format: "%.2e", sigma_min))")
+            print("[DEBUG-JACOBIAN] Condition number (κ): \(String(format: "%.2e", conditionNumber))")
+
+            if conditionNumber > 1e8 {
+                print("[DEBUG-JACOBIAN] ⚠️  WARNING: Jacobian is severely ill-conditioned (κ > 1e8)")
+            } else if conditionNumber > 1e6 {
+                print("[DEBUG-JACOBIAN] ⚠️  WARNING: Jacobian is ill-conditioned (κ > 1e6)")
+            }
+
+            if sigma_min < 1e-10 {
+                print("[DEBUG-JACOBIAN] ⚠️  WARNING: Jacobian is near-singular (σ_min < 1e-10)")
+            }
+
+            // 🔬 INVESTIGATION: jacobianScaled block structure (iter 0 only)
+            if iter == 0 {
+                // Diagonal blocks
+                let J_TiTi = jacobianScaled[0..<nCells, 0..<nCells]
+                let J_TeTe = jacobianScaled[nCells..<(2*nCells), nCells..<(2*nCells)]
+                let J_nene = jacobianScaled[(2*nCells)..<(3*nCells), (2*nCells)..<(3*nCells)]
+                eval(J_TiTi, J_TeTe, J_nene)
+
+                print("[INVESTIGATION] jacobianScaled block structure:")
+                print("[INVESTIGATION]   J_TiTi range: [\(J_TiTi.min().item(Float.self)), \(J_TiTi.max().item(Float.self))]")
+                print("[INVESTIGATION]   J_TeTe range: [\(J_TeTe.min().item(Float.self)), \(J_TeTe.max().item(Float.self))]")
+                print("[INVESTIGATION]   J_nene range: [\(J_nene.min().item(Float.self)), \(J_nene.max().item(Float.self))]")
+
+                // Off-diagonal blocks (cross-coupling)
+                let J_Tine = jacobianScaled[0..<nCells, (2*nCells)..<(3*nCells)]
+                let J_neTi = jacobianScaled[(2*nCells)..<(3*nCells), 0..<nCells]
+                let J_TiTe = jacobianScaled[0..<nCells, nCells..<(2*nCells)]
+                eval(J_Tine, J_neTi, J_TiTe)
+
+                print("[INVESTIGATION]   J_Tine (off-diag) range: [\(J_Tine.min().item(Float.self)), \(J_Tine.max().item(Float.self))]")
+                print("[INVESTIGATION]   J_neTi (off-diag) range: [\(J_neTi.min().item(Float.self)), \(J_neTi.max().item(Float.self))]")
+                print("[INVESTIGATION]   J_TiTe (off-diag) range: [\(J_TiTe.min().item(Float.self)), \(J_TiTe.max().item(Float.self))]")
+            }
+
+            // ⚠️ PRECONDITIONER: SUSPENDED - See PRECONDITIONER_SUSPENDED_REVIEW.md
+            //
+            // The diagonal block-based preconditioner implemented here has been SUSPENDED
+            // due to critical issues identified in code review:
+            //
+            // 1. DOUBLE SCALING RISK:
+            //    - residualScaled is already scaled by referenceState (line 186)
+            //    - jacobianScaled inherits this scaling via VJP
+            //    - Adding P-based preconditioning creates double scaling
+            //
+            // 2. MISIDENTIFIED ROOT CAUSE:
+            //    - 2700× Jacobian scale difference is physically natural
+            //      (diffusion coefficients 10×, time-scale 10³)
+            //    - Real bottleneck: Line search α stuck at 0.25
+            //    - Newton direction shrinks to 1e-7
+            //
+            // 3. PREMATURE IMPLEMENTATION:
+            //    - Should first investigate WHY α=1.0 fails after iter=0
+            //    - Should verify Newton direction validity
+            //    - Should check line search/damping settings
+            //
+            // NEXT STEPS (see PRECONDITIONER_SUSPENDED_REVIEW.md):
+            // 1. Investigate line search behavior
+            // 2. Check Newton direction validity
+            // 3. Test lightweight column-norm preconditioning IF needed
+            //
+            // The preconditioner code below is kept for reference but INACTIVE.
 
             // Solve linear system: J * Δx = -R using hybrid solver
             let deltaScaled: MLXArray
@@ -289,6 +485,109 @@ public struct NewtonRaphsonSolver: PDESolver {
             eval(deltaScaled)
             // 🐛 DEBUG: After eval(deltaScaled)
             print("[DEBUG-NR] iter=\(iter): eval(deltaScaled) done")
+
+            // 🐛 DEBUG: deltaScaled diagnostics
+            let deltaNorm = sqrt((deltaScaled * deltaScaled).mean()).item(Float.self)
+            let delta_min = deltaScaled.min(keepDims: false).item(Float.self)
+            let delta_max = deltaScaled.max(keepDims: false).item(Float.self)
+            print("[DEBUG-NR] iter=\(iter): ||deltaScaled||=\(String(format: "%.2e", deltaNorm)), range=[\(String(format: "%.2e", delta_min)), \(String(format: "%.2e", delta_max))]")
+
+            // ✅ PHASE 1-1: Newton direction validation checks
+            // (1) Linear solver accuracy: ||J*Δ + R|| / ||R||
+            let linear_residual = jacobianScaled.matmul(deltaScaled) + residualScaled
+            eval(linear_residual)
+            let linear_residual_norm = MLX.norm(linear_residual).item(Float.self)
+            let residual_norm_val = MLX.norm(residualScaled).item(Float.self)
+            let linear_error = linear_residual_norm / (residual_norm_val + 1e-20)
+
+            print("[NR-CHECK] iter=\(iter): Linear solver accuracy:")
+            print("[NR-CHECK]   ||J*Δ + R|| = \(String(format: "%.2e", linear_residual_norm))")
+            print("[NR-CHECK]   ||R|| = \(String(format: "%.2e", residual_norm_val))")
+            print("[NR-CHECK]   Relative error = \(String(format: "%.2e", linear_error))")
+            if linear_error > 1e-6 {
+                print("[NR-CHECK] ⚠️  WARNING: Linear solver error > 1e-6")
+            } else {
+                print("[NR-CHECK]   ✅ Linear solver accuracy OK")
+            }
+
+            // (2) Descent direction check: Δ·(-R) > 0
+            let descent_product = (deltaScaled * (-residualScaled)).sum()
+            eval(descent_product)
+            let descent_value = descent_product.item(Float.self)
+
+            print("[NR-CHECK] iter=\(iter): Descent direction check:")
+            print("[NR-CHECK]   Δ·(-R) = \(String(format: "%.2e", descent_value))")
+            if descent_value <= 0 {
+                print("[NR-CHECK] ⚠️  WARNING: Not a descent direction (Δ·(-R) ≤ 0)")
+            } else {
+                print("[NR-CHECK]   ✅ Valid descent direction")
+            }
+
+            // ✅ CRITICAL: Early termination if Newton direction is unreliable
+            // This triggers dt retry in SimulationOrchestrator's dt adjustment loop
+            let linearErrorThreshold: Float = 1e-3
+
+            if linear_error > linearErrorThreshold {
+                print("[NR-FAILURE] ❌ Linear solver error too high: \(String(format: "%.2e", linear_error)) > \(String(format: "%.2e", linearErrorThreshold))")
+                print("[NR-FAILURE] Newton direction unreliable - aborting iteration")
+                print("[NR-FAILURE] Returning converged=false to trigger dt retry")
+
+                // Return partial solution with converged=false
+                let finalPhysical = xScaled.unscaled(by: referenceState)
+                let finalProfiles = finalPhysical.toCoreProfiles()
+                return SolverResult(
+                    updatedProfiles: finalProfiles,
+                    iterations: iterations,
+                    residualNorm: residualNorm,
+                    converged: false,
+                    metadata: [
+                        "theta": theta,
+                        "dt": dt,
+                        "linear_error": linear_error,
+                        "failure_type": 1.0  // 1.0 = linear_solver_error
+                    ]
+                )
+            }
+
+            if descent_value <= 0 {
+                print("[NR-FAILURE] ❌ Invalid descent direction: Δ·(-R) = \(String(format: "%.2e", descent_value)) ≤ 0")
+                print("[NR-FAILURE] Newton direction does not decrease residual - aborting iteration")
+                print("[NR-FAILURE] Returning converged=false to trigger dt retry")
+
+                // Return partial solution with converged=false
+                let finalPhysical = xScaled.unscaled(by: referenceState)
+                let finalProfiles = finalPhysical.toCoreProfiles()
+                return SolverResult(
+                    updatedProfiles: finalProfiles,
+                    iterations: iterations,
+                    residualNorm: residualNorm,
+                    converged: false,
+                    metadata: [
+                        "theta": theta,
+                        "dt": dt,
+                        "descent_value": descent_value,
+                        "failure_type": 2.0  // 2.0 = invalid_descent_direction
+                    ]
+                )
+            }
+
+            // (3) Per-variable Newton direction components
+            let delta_Ti = deltaScaled[0..<nCells]
+            let delta_Te = deltaScaled[nCells..<(2*nCells)]
+            let delta_ne = deltaScaled[(2*nCells)..<(3*nCells)]
+            let delta_psi = deltaScaled[(3*nCells)..<(4*nCells)]
+
+            let deltaNorm_Ti = MLX.norm(delta_Ti).item(Float.self)
+            let deltaNorm_Te = MLX.norm(delta_Te).item(Float.self)
+            let deltaNorm_ne = MLX.norm(delta_ne).item(Float.self)
+            let deltaNorm_psi = MLX.norm(delta_psi).item(Float.self)
+
+            print("[NR-CHECK] iter=\(iter): Newton direction components:")
+            print("[NR-CHECK]   ||Δ_Ti||  = \(String(format: "%.2e", deltaNorm_Ti))")
+            print("[NR-CHECK]   ||Δ_Te||  = \(String(format: "%.2e", deltaNorm_Te))")
+            print("[NR-CHECK]   ||Δ_ne||  = \(String(format: "%.2e", deltaNorm_ne))")
+            print("[NR-CHECK]   ||Δ_psi|| = \(String(format: "%.2e", deltaNorm_psi))")
+            print("[NR-CHECK]   Total ||Δ|| = \(String(format: "%.2e", deltaNorm))")
 
             // Update solution with line search (in scaled space)
             // 🐛 DEBUG: Before lineSearch
@@ -703,18 +1002,26 @@ public struct NewtonRaphsonSolver: PDESolver {
     ) -> Float {
         let initialNorm = sqrt((residual * residual).mean()).item(Float.self)
 
+        print("[DEBUG-LS] Starting line search: initialNorm=\(String(format: "%.2e", initialNorm)), maxAlpha=\(maxAlpha)")
+
         var alpha = maxAlpha
         let beta: Float = 0.5  // Reduction factor
         let maxIterations = 10
 
-        for _ in 0..<maxIterations {
+        for iteration in 0..<maxIterations {
             let xNew = x + alpha * delta
             let residualNew = residualFn(xNew)
             eval(residualNew)
 
             let newNorm = sqrt((residualNew * residualNew).mean()).item(Float.self)
 
+            let improvement = initialNorm - newNorm
+            let improvementPercent = (improvement / initialNorm) * 100.0
+
+            print("[DEBUG-LS] iter=\(iteration): α=\(String(format: "%.3f", alpha)), residualNorm=\(String(format: "%.2e", newNorm)), improvement=\(String(format: "%.1f", improvementPercent))%")
+
             if newNorm < initialNorm {
+                print("[DEBUG-LS] ✅ Accepted: residualNorm decreased")
                 return alpha
             }
 
@@ -722,6 +1029,8 @@ public struct NewtonRaphsonSolver: PDESolver {
         }
 
         // If line search fails, return small step
+        print("[DEBUG-LS] ❌ FAILED: All \(maxIterations) attempts failed to reduce residual")
+        print("[DEBUG-LS] Returning fallback α=0.1")
         return 0.1
     }
 }

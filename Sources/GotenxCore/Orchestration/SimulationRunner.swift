@@ -72,6 +72,9 @@ public actor SimulationRunner: SimulationRunnable {
             mhdModelsToUse = MHDModelFactory.createAllModels(config: config.runtime.dynamic.mhd)
         }
 
+        // Get adaptive config from time configuration (or use default if not specified)
+        let adaptiveConfig = config.time.adaptive ?? .default
+
         // Initialize orchestrator with provided models
         self.orchestrator = await SimulationOrchestrator(
             staticParams: staticParams,
@@ -79,7 +82,8 @@ public actor SimulationRunner: SimulationRunnable {
             transport: transportModel,
             sources: sourceModels,
             mhdModels: mhdModelsToUse,
-            samplingConfig: .realTimePlotting  // ✅ Enable live plotting for real-time chart updates
+            samplingConfig: .realTimePlotting,  // ✅ Enable live plotting for real-time chart updates
+            adaptiveConfig: adaptiveConfig  // ✅ CRITICAL: Pass adaptive config for dt control
         )
 
         print("✓ Simulation initialized")

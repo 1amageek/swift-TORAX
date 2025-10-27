@@ -35,6 +35,12 @@ public struct TimeStepCalculator {
         precondition(minTimestep > 0.0, "Minimum timestep must be positive")
         precondition(maxTimestep > minTimestep, "Maximum timestep must be larger than minimum")
 
+        // 🐛 DEBUG: TimeStepCalculator initialization
+        print("[DEBUG-TSCALC] TimeStepCalculator init:")
+        print("[DEBUG-TSCALC]   minTimestep: \(minTimestep)")
+        print("[DEBUG-TSCALC]   maxTimestep: \(maxTimestep)")
+        print("[DEBUG-TSCALC]   stabilityFactor: \(stabilityFactor)")
+
         self.stabilityFactor = stabilityFactor
         self.minTimestep = minTimestep
         self.maxTimestep = maxTimestep
